@@ -22,10 +22,12 @@ class InvoiceProvider with ChangeNotifier {
     try {
       final cleanedItems = items.map((item) {
         return {
+          'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           'weight': item['weight'] ?? 0.0,
           'description': item['description'] ?? '',
+          'total': item['total'],
         };
       }).toList();
 
@@ -72,10 +74,13 @@ class InvoiceProvider with ChangeNotifier {
     try {
       final cleanedItems = items.map((item) {
         return {
+          'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           'weight': item['weight'] ?? 0.0,
           'description': item['description'] ?? '',
+          'total': item['total'],
+
         };
       }).toList();
 
