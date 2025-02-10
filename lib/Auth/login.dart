@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   String _email = '';
   String _password = '';
   bool _isProcessing = false; // Flag to track if login is in progress
+  bool _isPasswordVisible = false; // Flag to toggle password visibility
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
@@ -91,14 +92,26 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Password',
-                        border: OutlineInputBorder(
+                        border: const OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(10)),
                           borderSide: BorderSide(color: Colors.grey),
                         ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                        ),
                       ),
-                      obscureText: true,
+                      obscureText: !_isPasswordVisible,
                       onSaved: (value) => _password = value!,
                       validator: (value) => value!.length < 6 ? 'Password must be at least 6 characters' : null,
                     ),

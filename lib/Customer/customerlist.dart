@@ -22,7 +22,6 @@ class _CustomerListState extends State<CustomerList> {
     super.initState();
     _loadCustomerBalances();
   }
-
   // Fetch balances for each customersfgfgf
   Future<void> _loadCustomerBalances() async {
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);

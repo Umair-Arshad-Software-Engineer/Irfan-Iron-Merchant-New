@@ -41,54 +41,54 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAQI1xfKBXQvssUuian8DzGaMrOCeIWBuQ',
-    appId: '1:391015804587:web:95ca613145299054b451ee',
-    messagingSenderId: '391015804587',
-    projectId: 'iron-project-new',
-    authDomain: 'iron-project-new.firebaseapp.com',
-    databaseURL: 'https://iron-project-new-default-rtdb.firebaseio.com',
-    storageBucket: 'iron-project-new.firebasestorage.app',
-    measurementId: 'G-8XL1308RQ7',
+    apiKey: 'AIzaSyBu2pFESW1N3A4gCTB3OWv5OlcTCSWNnx4',
+    appId: '1:143206628546:web:87f0cc2348a2e2300ecf5b',
+    messagingSenderId: '143206628546',
+    projectId: 'newp-7b77b',
+    authDomain: 'newp-7b77b.firebaseapp.com',
+    databaseURL: 'https://newp-7b77b-default-rtdb.firebaseio.com',
+    storageBucket: 'newp-7b77b.appspot.com',
+    measurementId: 'G-59187Y8EM0',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA0nsW29V_Uk_i9BYk8KnCR5eGWreaa66c',
-    appId: '1:391015804587:android:8b890b49d3b030cab451ee',
-    messagingSenderId: '391015804587',
-    projectId: 'iron-project-new',
-    databaseURL: 'https://iron-project-new-default-rtdb.firebaseio.com',
-    storageBucket: 'iron-project-new.firebasestorage.app',
+    apiKey: 'AIzaSyAAZkULTWeMHOr8PadmPkaWC2RiQGbIkgo',
+    appId: '1:143206628546:android:6e9bf254233f58cc0ecf5b',
+    messagingSenderId: '143206628546',
+    projectId: 'newp-7b77b',
+    databaseURL: 'https://newp-7b77b-default-rtdb.firebaseio.com',
+    storageBucket: 'newp-7b77b.appspot.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyC9bLe_ejqoJRKuWp3ViKliwH0sqirFJao',
-    appId: '1:391015804587:ios:d70ae2438b53d7a4b451ee',
-    messagingSenderId: '391015804587',
-    projectId: 'iron-project-new',
-    databaseURL: 'https://iron-project-new-default-rtdb.firebaseio.com',
-    storageBucket: 'iron-project-new.firebasestorage.app',
+    apiKey: 'AIzaSyCfZMuz1cRwvFTvSGYwE-GG-TGwy3plgks',
+    appId: '1:143206628546:ios:45d93a3750484b180ecf5b',
+    messagingSenderId: '143206628546',
+    projectId: 'newp-7b77b',
+    databaseURL: 'https://newp-7b77b-default-rtdb.firebaseio.com',
+    storageBucket: 'newp-7b77b.appspot.com',
     iosBundleId: 'com.example.ironProjectNew',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyC9bLe_ejqoJRKuWp3ViKliwH0sqirFJao',
-    appId: '1:391015804587:ios:d70ae2438b53d7a4b451ee',
-    messagingSenderId: '391015804587',
-    projectId: 'iron-project-new',
-    databaseURL: 'https://iron-project-new-default-rtdb.firebaseio.com',
-    storageBucket: 'iron-project-new.firebasestorage.app',
+    apiKey: 'AIzaSyCfZMuz1cRwvFTvSGYwE-GG-TGwy3plgks',
+    appId: '1:143206628546:ios:45d93a3750484b180ecf5b',
+    messagingSenderId: '143206628546',
+    projectId: 'newp-7b77b',
+    databaseURL: 'https://newp-7b77b-default-rtdb.firebaseio.com',
+    storageBucket: 'newp-7b77b.appspot.com',
     iosBundleId: 'com.example.ironProjectNew',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyAQI1xfKBXQvssUuian8DzGaMrOCeIWBuQ',
-    appId: '1:391015804587:web:ea178902ecd0666fb451ee',
-    messagingSenderId: '391015804587',
-    projectId: 'iron-project-new',
-    authDomain: 'iron-project-new.firebaseapp.com',
-    databaseURL: 'https://iron-project-new-default-rtdb.firebaseio.com',
-    storageBucket: 'iron-project-new.firebasestorage.app',
-    measurementId: 'G-7LTZKXGV2M',
+    apiKey: 'AIzaSyBu2pFESW1N3A4gCTB3OWv5OlcTCSWNnx4',
+    appId: '1:143206628546:web:8f09e82914cca5740ecf5b',
+    messagingSenderId: '143206628546',
+    projectId: 'newp-7b77b',
+    authDomain: 'newp-7b77b.firebaseapp.com',
+    databaseURL: 'https://newp-7b77b-default-rtdb.firebaseio.com',
+    storageBucket: 'newp-7b77b.appspot.com',
+    measurementId: 'G-LGJVCZYS3M',
   );
 
 }

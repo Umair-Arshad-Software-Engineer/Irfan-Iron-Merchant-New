@@ -13,6 +13,7 @@ import 'Invoice/invoiceslist.dart';
 import 'Provider/lanprovider.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
+import 'items/ItemslistPage.dart';
 
 
 class Dashboard extends StatelessWidget {
@@ -135,6 +136,16 @@ class Dashboard extends StatelessWidget {
             title: Text(languageProvider.isEnglish ? 'Home' : 'ہوم'),
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const Dashboard()));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: Text(languageProvider.isEnglish ? 'Items List' : 'ٹوٹم آتمز'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) =>  ItemsListPage()),
+              );
             },
           ),
           ListTile(
