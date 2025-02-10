@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../Models/itemModel.dart';
 import '../Provider/customerprovider.dart';
 import '../Provider/invoice provider.dart';
 import '../Provider/lanprovider.dart'; // Import your customer provider
@@ -29,7 +29,10 @@ class InvoicePage extends StatefulWidget {
 
 class _InvoicePageState extends State<InvoicePage> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
-
+  List<Item> _items = [];
+  String? _selectedItemName;
+  String? _selectedItemId;
+  double _selectedItemRate = 0.0;
   String? _selectedCustomerName; // This should hold the name of the selected customer
   String? _selectedCustomerId;
   double _discount = 0.0; // Discount amount or percentage
@@ -40,6 +43,8 @@ class _InvoicePageState extends State<InvoicePage> {
   String? _invoiceId; // For editing existing invoices
   late bool _isReadOnly;
   bool _isButtonPressed = false;
+  final TextEditingController _customerController = TextEditingController();
+  final TextEditingController _rateController = TextEditingController();
 
   String generateInvoiceNumber() {
     // Generate a timestamp as invoice number (in milliseconds)
@@ -54,6 +59,7 @@ class _InvoicePageState extends State<InvoicePage> {
         'qty': 0.0,
         'weight': 0.0,
         'description': '',
+        'itemName': '', // Add this field to store the item name
         'weightController': TextEditingController(),
         'rateController': TextEditingController(),
         'qtyController': TextEditingController(),
@@ -62,13 +68,26 @@ class _InvoicePageState extends State<InvoicePage> {
     });
   }
 
+  // void _updateRow(int index, String field, dynamic value) {
+  //   setState(() {
+  //     _invoiceRows[index][field] = value;
+  //
+  //     // If both Sarya Rate and Sarya Qty are filled, calculate the Totals
+  //     if (_invoiceRows[index]['rate'] != 0.0 && _invoiceRows[index]['qty'] != 0.0) {
+  //       _invoiceRows[index]['total'] = _invoiceRows[index]['rate'] * _invoiceRows[index]['weight'];
+  //     }
+  //   });
+  // }
+
   void _updateRow(int index, String field, dynamic value) {
     setState(() {
       _invoiceRows[index][field] = value;
 
-      // If both Sarya Rate and Sarya Qty are filled, calculate the Totals
-      if (_invoiceRows[index]['rate'] != 0.0 && _invoiceRows[index]['qty'] != 0.0) {
-        _invoiceRows[index]['total'] = _invoiceRows[index]['rate'] * _invoiceRows[index]['weight'];
+      // Recalculate the total whenever rate or weight is updated
+      if (field == 'rate' || field == 'weight') {
+        double rate = _invoiceRows[index]['rate'] ?? 0.0;
+        double weight = _invoiceRows[index]['weight'] ?? 0.0;
+        _invoiceRows[index]['total'] = rate * weight;
       }
     });
   }
@@ -79,9 +98,13 @@ class _InvoicePageState extends State<InvoicePage> {
     });
   }
 
+  // double _calculateSubtotal() {
+  //    // return _invoiceRows.fold(0.0, (sum, row) => sum + row['total']);
+  //      return _invoiceRows.fold(0.0, (sum, row) => sum + (row['total'] ?? 0.0));
+  // }
+
   double _calculateSubtotal() {
-     // return _invoiceRows.fold(0.0, (sum, row) => sum + row['total']);
-       return _invoiceRows.fold(0.0, (sum, row) => sum + (row['total'] ?? 0.0));
+    return _invoiceRows.fold(0.0, (sum, row) => sum + (row['total'] ?? 0.0));
   }
 
   double _calculateGrandTotal() {
@@ -120,6 +143,12 @@ class _InvoicePageState extends State<InvoicePage> {
     for (var row in _invoiceRows) {
       final image = await _createTextImage(row['description']);
       descriptionImages.add(image);
+    }
+    // Pre-generate images for all descriptions
+    List<pw.MemoryImage> itemnameImages = [];
+    for (var row in _invoiceRows) {
+      final image = await _createTextImage(row['itemName']);
+      itemnameImages.add(image);
     }
 
 
@@ -163,6 +192,7 @@ class _InvoicePageState extends State<InvoicePage> {
                 // Invoice Table with Urdu text converted to image
                 pw.Table.fromTextArray(
                   headers: [
+                    pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
                     pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
                     pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
                     pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
@@ -173,6 +203,8 @@ class _InvoicePageState extends State<InvoicePage> {
                     return MapEntry(
                       index,
                       [
+                        // row['itemName'], // Display the item name
+                        pw.Image(itemnameImages[index],dpi: 1000),
                         // Use the pre-generated image for the description field
                         pw.Image(descriptionImages[index],dpi: 1000),
 
@@ -342,8 +374,6 @@ class _InvoicePageState extends State<InvoicePage> {
     return pw.MemoryImage(buffer);
   }
 
-
-
   Future<double> _getRemainingBalance(String customerId) async {
     try {
       final customerLedgerRef = _db.child('ledger').child(customerId);
@@ -380,6 +410,26 @@ class _InvoicePageState extends State<InvoicePage> {
     }
   }
 
+  Future<List<Item>> fetchItems() async {
+    final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
+    final DatabaseEvent snapshot = await itemsRef.once();
+
+    if (snapshot.snapshot.exists) {
+      final Map<dynamic, dynamic> itemsMap = snapshot.snapshot.value as Map<dynamic, dynamic>;
+      return itemsMap.entries.map((entry) {
+        return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
+      }).toList();
+    } else {
+      return [];
+    }
+  }
+
+  Future<void> _fetchItems() async {
+    final items = await fetchItems();
+    setState(() {
+      _items = items;
+    });
+  }
 
   @override
   void dispose() {
@@ -390,13 +440,15 @@ class _InvoicePageState extends State<InvoicePage> {
       row['descriptionController']?.dispose();
     }
     _discountController.dispose(); // Dispose discount controller
-
+    _customerController.dispose();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+    _fetchItems();
+
     // Fetch the customers when the page is initialized
     Provider.of<CustomerProvider>(context, listen: false).fetchCustomers();
     _isReadOnly = widget.invoice != null; // Set read-only if invoice is passed
@@ -446,7 +498,6 @@ class _InvoicePageState extends State<InvoicePage> {
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
-    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
     final _formKey = GlobalKey<FormState>();
 
     return Scaffold(
@@ -482,7 +533,6 @@ class _InvoicePageState extends State<InvoicePage> {
             if (customerProvider.customers.isEmpty) {
               return const Center(child: CircularProgressIndicator()); // Shows loadings sindicator if customers are still being fetched
             }
-
             return Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -493,35 +543,67 @@ class _InvoicePageState extends State<InvoicePage> {
                     languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
                     style: TextStyle(color: Colors.teal.shade800, fontSize: 18), // Title text color
                   ),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _selectedCustomerId,
-                    hint: Text(languageProvider.isEnglish ? 'Choose a customer' : 'ایک کسٹمر منتخب کریں'),
-                    // onChanged: (String? newValue) {
-                    onChanged: _isReadOnly ? null : (String? newValue) {
-                      setState(() {
-                        _selectedCustomerId = newValue;
-                        _selectedCustomerName = customerProvider.customers
-                            .firstWhere((customer) => customer.id == newValue)
-                            .name; // Track the customer name
-                      });
-                    },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return languageProvider.isEnglish
-                            ? 'Please select a customer'
-                            : 'براہ کرم ایک کسٹمر منتخب کریں';
-                      }
-                      return null;
-                    },
-                    items: customerProvider.customers.map<DropdownMenuItem<String>>((Customer customer) {
-                      return DropdownMenuItem<String>(
-                        value: customer.id,
-                        child: Text(customer.name), // Display customer's name
-                      );
-                    }).toList(),
-                  ),
+                Autocomplete<Customer>(
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<Customer>.empty();
+                    }
+                    return customerProvider.customers.where((Customer customer) {
+                      return customer.name.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                    });
+                  },
+                  displayStringForOption: (Customer customer) => customer.name,
+                  fieldViewBuilder: (BuildContext context, TextEditingController textEditingController,
+                      FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                    _customerController.text = _selectedCustomerName ?? '';
 
+                    return TextField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Choose a customer' : 'ایک کسٹمر منتخب کریں',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedCustomerId = null; // Reset ID when manually changing text
+                          _selectedCustomerName = value;
+                        });
+                      },
+                    );
+                  },
+                  onSelected: (Customer selectedCustomer) {
+                    setState(() {
+                      _selectedCustomerId = selectedCustomer.id;
+                      _selectedCustomerName = selectedCustomer.name;
+                      _customerController.text = selectedCustomer.name; // Set text in field
+                    });
+                  },
+                  optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
+                      Iterable<Customer> options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.9,
+                          constraints: BoxConstraints(maxHeight: 200),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final Customer customer = options.elementAt(index);
+                              return ListTile(
+                                title: Text(customer.name),
+                                onTap: () => onSelected(customer),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
                   // Show selected customer name
                   if (_selectedCustomerId != null)
                     Text(
@@ -540,7 +622,7 @@ class _InvoicePageState extends State<InvoicePage> {
                   Card(
                     elevation: 5,
                     child: SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.4, // Adjust height as neededs
+                      height: MediaQuery.of(context).size.height * 0.6, // Adjust height as neededs
                       child: ListView.builder(
                         itemCount: _invoiceRows.length,
                         itemBuilder: (context, i) {
@@ -568,26 +650,99 @@ class _InvoicePageState extends State<InvoicePage> {
                                     ],
                                   ),
                                   SizedBox(height: 5,),
-                                  // Sarya Rates
+                                  Autocomplete<Item>(
+                                    optionsBuilder: (TextEditingValue textEditingValue) {
+                                      if (textEditingValue.text.isEmpty) {
+                                        return const Iterable<Item>.empty();
+                                      }
+                                      return _items.where((Item item) {
+                                        return item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                                      });
+                                    },
+                                    displayStringForOption: (Item item) => item.itemName,
+                                    fieldViewBuilder: (BuildContext context, TextEditingController textEditingController,
+                                        FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                                      return TextField(
+                                        controller: textEditingController,
+                                        focusNode: focusNode,
+                                        decoration: InputDecoration(
+                                          labelText: 'Select Item',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _selectedItemId = null;
+                                            _selectedItemName = value;
+                                          });
+                                        },
+                                      );
+                                    },
+                                    onSelected: (Item selectedItem) {
+                                      setState(() {
+                                        _selectedItemId = selectedItem.id;
+                                        _selectedItemName = selectedItem.itemName;
+                                        _selectedItemRate = selectedItem.costPrice;
+                                        _rateController.text = _selectedItemRate.toString();
+
+                                        // Update the current row with the selected item's name and rate
+                                        _invoiceRows[i]['itemName'] = selectedItem.itemName;
+                                        _invoiceRows[i]['rate'] = selectedItem.costPrice;
+                                        _invoiceRows[i]['rateController'].text = selectedItem.costPrice.toString();
+
+                                        print("Selected Item: $_selectedItemName, Rate: $_selectedItemRate");
+                                      });
+                                    },
+                                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Item> onSelected,
+                                        Iterable<Item> options) {
+                                      return Align(
+                                        alignment: Alignment.topLeft,
+                                        child: Material(
+                                          elevation: 4.0,
+                                          child: Container(
+                                            width: MediaQuery.of(context).size.width * 0.9,
+                                            constraints: BoxConstraints(maxHeight: 200),
+                                            child: ListView.builder(
+                                              padding: EdgeInsets.zero,
+                                              itemCount: options.length,
+                                              itemBuilder: (BuildContext context, int index) {
+                                                final Item item = options.elementAt(index);
+                                                return ListTile(
+                                                  title: Text(item.itemName),
+                                                  subtitle: Text('Rate: ${item.costPrice.toStringAsFixed(2)}'),
+                                                  onTap: () => onSelected(item),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  SizedBox(height: 5),
+                                  // TextField(
+                                  //   controller: _rateController,
+                                  //   decoration: InputDecoration(
+                                  //     labelText: 'Selected Item Rate',
+                                  //     border: OutlineInputBorder(),
+                                  //   ),
+                                  //   readOnly: true,
+                                  // ),
                                   TextField(
-                                    controller: _invoiceRows[i]['rateController'],
-                                    enabled: !_isReadOnly,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    controller: _rateController,
+                                    onChanged: (value) {
+                                      double newRate = double.tryParse(value) ?? 0.0;
+                                      _updateRow(i, 'rate', newRate);
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: 'Rate',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [
                                       FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
                                     ],
-                                    onChanged: (value) {
-                                      _updateRow(i, 'rate', double.tryParse(value) ?? 0.0);
-                                    },
-                                    decoration: InputDecoration(
-                                      labelText: languageProvider.isEnglish ? 'Sarya Rate' : 'سرئے کی قیمت',
-                                      hintStyle: TextStyle(color: Colors.teal.shade600),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(10)),
-                                        borderSide: BorderSide(color: Colors.grey),
-                                      ),
-                                    ),
                                   ),
+                                  // Sarya Rate TextField
                                   SizedBox(height: 5,),
                                   // Sarya Qty
                                   TextField(
@@ -647,8 +802,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                       ),
                                     ),
                                   ),
-                                  SizedBox(height: 5,),
-                                ],
+                                  SizedBox(height: 5,),],
                               ),
                             ),
                           );
@@ -669,7 +823,8 @@ class _InvoicePageState extends State<InvoicePage> {
                     ),
                   ),
                   // Subtotal row
-                  const SizedBox(height: 20),
+                  const SizedBox(height:
+                  20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
@@ -937,7 +1092,7 @@ class _InvoicePageState extends State<InvoicePage> {
                           } else {
                             // Save new invoice
                             await Provider.of<InvoiceProvider>(context, listen: false).saveInvoice(
-                              invoiceId: invoiceNumber, // Pass the invoice number (or generated ID)
+                              invoiceId: invoiceNumber,
                               invoiceNumber: invoiceNumber,
                               customerId: _selectedCustomerId!,
                               customerName: _selectedCustomerName!,
@@ -946,8 +1101,29 @@ class _InvoicePageState extends State<InvoicePage> {
                               grandTotal: grandTotal,
                               paymentType: _paymentType,
                               paymentMethod: _instantPaymentMethod,
-                              items: _invoiceRows,
+                              items: _invoiceRows.map((row) {
+                                return {
+                                  'itemName': row['itemName'], // Include the item name
+                                  'rate': row['rate'],
+                                  'weight': row['weight'],
+                                  'qty': row['qty'],
+                                  'description': row['description'],
+                                  'total': row['total'],
+                                };
+                              }).toList(),
                             );
+                            // await Provider.of<InvoiceProvider>(context, listen: false).saveInvoice(
+                            //   invoiceId: invoiceNumber, // Pass the invoice number (or generated ID)
+                            //   invoiceNumber: invoiceNumber,
+                            //   customerId: _selectedCustomerId!,
+                            //   customerName: _selectedCustomerName!,
+                            //   subtotal: subtotal,
+                            //   discount: _discount,
+                            //   grandTotal: grandTotal,
+                            //   paymentType: _paymentType,
+                            //   paymentMethod: _instantPaymentMethod,
+                            //   items: _invoiceRows,
+                            // );
 
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
