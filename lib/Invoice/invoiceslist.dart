@@ -13,6 +13,12 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:ui' as ui;
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+
 
 class InvoiceListPage extends StatefulWidget {
   @override
@@ -312,28 +318,35 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     return pw.MemoryImage(buffer);
   }
 
-  Uint8List? webImage;
-  File? mobileImage;
-  final ImagePicker _picker = ImagePicker();
 
-  Future<void> _pickImage()async {
-   final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
 
-   if(pickedFile != null){
-     if(kIsWeb){
-       final bytes = await pickedFile.readAsBytes();
-       setState(() {
-         webImage = bytes;
-       });
-     }else{
-       setState(() {
-         mobileImage = File(pickedFile.path);
-       });
-     }
-   }
 
+  Future<Uint8List?> _pickImage() async {
+    Uint8List? imageBytes;
+
+    if (kIsWeb) {
+      // For web, use file_picker
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        imageBytes = result.files.first.bytes;
+      }
+    } else {
+      // For mobile, use image_picker
+      final ImagePicker _picker = ImagePicker();
+      XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        imageBytes = await file.readAsBytes();
+      }
+    }
+
+    return imageBytes;
   }
-
   // Show payment dialog
   Future<void> _showInvoicePaymentDialog(
       Map<String, dynamic> invoice,
@@ -407,21 +420,27 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () async {
-                        _pickImage();
+                        Uint8List? imageBytes = await _pickImage();
+                        if (imageBytes != null && imageBytes.isNotEmpty) {
+                          print('Image selected with ${imageBytes.length} bytes'); // Debug log
+                          setState(() {
+                            _imageBytes = imageBytes;
+                          });
+                        } else {
+                          print('No image selected or empty bytes'); // Debug log
+                        }
                       },
-                      child: Text(languageProvider.isEnglish ? 'Upload Image' : 'تصویر اپ لوڈ کریں'),
+                      child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
                     ),
+                    // Display selected image
                     if (_imageBytes != null)
                       Container(
                         margin: const EdgeInsets.only(top: 16),
                         height: 100,
                         width: 100,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            image: MemoryImage(_imageBytes!),
-                          ),
-                        ),
+                        child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
                       ),
+
                   ],
                 ),
               ),
@@ -488,90 +507,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   }
 }
 
-// Reusable Widgets
 
-class SearchAndFilterSection extends StatelessWidget {
-  final TextEditingController searchController;
-  final DateTimeRange? selectedDateRange;
-  final Function(DateTimeRange?) onDateRangeSelected;
-  final VoidCallback onClearDateFilter;
-  final LanguageProvider languageProvider;
-
-  const SearchAndFilterSection({
-    required this.searchController,
-    required this.selectedDateRange,
-    required this.onDateRangeSelected,
-    required this.onClearDateFilter,
-    required this.languageProvider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: searchController,
-            decoration: InputDecoration(
-              labelText: languageProvider.isEnglish ? 'Search By Invoice ID' : 'انوائس آئی ڈی سے تالاش کریں',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: searchController.text.isNotEmpty
-                  ? IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () {
-                  searchController.clear();
-                },
-              )
-                  : null,
-              border: const OutlineInputBorder(),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: ElevatedButton.icon(
-            onPressed: () async {
-              DateTimeRange? pickedDateRange = await showDateRangePicker(
-                context: context,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2101),
-                initialDateRange: selectedDateRange,
-              );
-              if (pickedDateRange != null) {
-                onDateRangeSelected(pickedDateRange);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
-            ),
-            icon: const Icon(Icons.date_range, color: Colors.white),
-            label: Text(
-              selectedDateRange == null
-                  ? languageProvider.isEnglish ? 'Select Date' : 'ڈیٹ منتخب کریں'
-                  : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton(
-                onPressed: onClearDateFilter,
-                child: Text(languageProvider.isEnglish ? 'Clear Date Filter' : 'انوائس لسٹ کا فلٹر ختم کریں'),
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class InvoiceList extends StatelessWidget {
   final List<Map<String, dynamic>> filteredInvoices;
@@ -670,6 +606,90 @@ class InvoiceList extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+
+class SearchAndFilterSection extends StatelessWidget {
+  final TextEditingController searchController;
+  final DateTimeRange? selectedDateRange;
+  final Function(DateTimeRange?) onDateRangeSelected;
+  final VoidCallback onClearDateFilter;
+  final LanguageProvider languageProvider;
+
+  const SearchAndFilterSection({
+    required this.searchController,
+    required this.selectedDateRange,
+    required this.onDateRangeSelected,
+    required this.onClearDateFilter,
+    required this.languageProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              labelText: languageProvider.isEnglish ? 'Search By Invoice ID' : 'انوائس آئی ڈی سے تالاش کریں',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: searchController.text.isNotEmpty
+                  ? IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  searchController.clear();
+                },
+              )
+                  : null,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              DateTimeRange? pickedDateRange = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2101),
+                initialDateRange: selectedDateRange,
+              );
+              if (pickedDateRange != null) {
+                onDateRangeSelected(pickedDateRange);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+            ),
+            icon: const Icon(Icons.date_range, color: Colors.white),
+            label: Text(
+              selectedDateRange == null
+                  ? languageProvider.isEnglish ? 'Select Date' : 'ڈیٹ منتخب کریں'
+                  : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton(
+                onPressed: onClearDateFilter,
+                child: Text(languageProvider.isEnglish ? 'Clear Date Filter' : 'انوائس لسٹ کا فلٹر ختم کریں'),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

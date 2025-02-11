@@ -332,30 +332,29 @@ class InvoiceProvider with ChangeNotifier {
       double updatedOnlinePaid = currentOnlinePaid;
       double updatedCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
 
+      // Create a payment object to store in the database
+      final paymentData = {
+        'amount': paymentAmount,
+        'date': DateTime.now().toIso8601String(),
+        'paymentMethod': paymentMethod,
+        'description': description,
+      };
+
+      // If an image is provided, encode it to base64 and add it to the payment data
+      if (imageBytes != null) {
+        paymentData['image'] = base64Encode(imageBytes);
+      }
+
+      // Save the payment data in the appropriate child node based on the payment method
       if (paymentMethod == 'Cash') {
         updatedCashPaid += paymentAmount;
-        // Save the cash payment in a child node with date
-        await _db.child('invoices').child(invoiceId).child('cashPayments').push().set({
-          'amount': paymentAmount,
-          'date': DateTime.now().toIso8601String(),
-        });
+        await _db.child('invoices').child(invoiceId).child('cashPayments').push().set(paymentData);
       } else if (paymentMethod == 'Online') {
         updatedOnlinePaid += paymentAmount;
-        // Save the online payment in a child node with date
-        await _db.child('invoices').child(invoiceId).child('onlinePayments').push().set({
-          'amount': paymentAmount,
-          'date': DateTime.now().toIso8601String(),
-        });
+        await _db.child('invoices').child(invoiceId).child('onlinePayments').push().set(paymentData);
       } else if (paymentMethod == 'Check') {
         updatedCheckPaid += paymentAmount;
-        // Save the check payment in a child node with date, description, and image
-        final checkPaymentRef = _db.child('invoices').child(invoiceId).child('checkPayments').push();
-        await checkPaymentRef.set({
-          'amount': paymentAmount,
-          'date': DateTime.now().toIso8601String(),
-          'description': description,
-          'image': imageBytes != null ? base64Encode(imageBytes) : null,
-        });
+        await _db.child('invoices').child(invoiceId).child('checkPayments').push().set(paymentData);
       }
 
       // Retrieve and parse the current debit amount

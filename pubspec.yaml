@@ -49,6 +49,8 @@ dependencies:
   csv: ^6.0.0
   html: ^0.15.0
   image_picker: ^1.1.2
+  file_picker: any
+  firebase_storage: any
 
 dev_dependencies:
   flutter_test:
