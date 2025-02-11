@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../Provider/lanprovider.dart';
 import 'Invoicepage.dart';
@@ -308,6 +312,28 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     return pw.MemoryImage(buffer);
   }
 
+  Uint8List? webImage;
+  File? mobileImage;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImage()async {
+   final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+
+   if(pickedFile != null){
+     if(kIsWeb){
+       final bytes = await pickedFile.readAsBytes();
+       setState(() {
+         webImage = bytes;
+       });
+     }else{
+       setState(() {
+         mobileImage = File(pickedFile.path);
+       });
+     }
+   }
+
+  }
+
   // Show payment dialog
   Future<void> _showInvoicePaymentDialog(
       Map<String, dynamic> invoice,
@@ -317,6 +343,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     String? selectedPaymentMethod;
     _paymentController.clear();
     bool _isPaymentButtonPressed = false;
+    String? _description;
+    Uint8List? _imageBytes;
 
     await showDialog(
       context: context,
@@ -325,41 +353,77 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
           builder: (context, setState) {
             return AlertDialog(
               title: Text(languageProvider.isEnglish ? 'Pay Invoice' : 'انوائس کی رقم ادا کریں'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: selectedPaymentMethod,
-                    items: [
-                      DropdownMenuItem(
-                        value: 'Cash',
-                        child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: selectedPaymentMethod,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'Cash',
+                          child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Online',
+                          child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Check',
+                          child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedPaymentMethod = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
+                        border: const OutlineInputBorder(),
                       ),
-                      DropdownMenuItem(
-                        value: 'Online',
-                        child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _paymentController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
+                        border: const OutlineInputBorder(),
                       ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        selectedPaymentMethod = value;
-                      });
-                    },
-                    decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
-                      border: const OutlineInputBorder(),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _paymentController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
-                      border: const OutlineInputBorder(),
+                    const SizedBox(height: 16),
+                    TextField(
+                      onChanged: (value) {
+                        setState(() {
+                          _description = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        _pickImage();
+                      },
+                      child: Text(languageProvider.isEnglish ? 'Upload Image' : 'تصویر اپ لوڈ کریں'),
+                    ),
+                    if (_imageBytes != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        height: 100,
+                        width: 100,
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: MemoryImage(_imageBytes!),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -395,6 +459,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         invoice['id'],
                         amount,
                         selectedPaymentMethod!,
+                        description: _description,
+                        imageBytes: _imageBytes,
                       );
                       Navigator.of(context).pop();
                     } else {

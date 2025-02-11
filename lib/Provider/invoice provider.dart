@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
@@ -272,7 +275,13 @@ class InvoiceProvider with ChangeNotifier {
 
 
   Future<void> payInvoiceWithSeparateMethod(
-      BuildContext context, String invoiceId, double paymentAmount, String paymentMethod) async {
+      BuildContext context,
+      String invoiceId,
+      double paymentAmount,
+      String paymentMethod, {
+        String? description,
+        Uint8List? imageBytes,
+      }) async {
     try {
       // Fetch the current invoice data from the database
       final invoiceSnapshot = await _db.child('invoices').child(invoiceId).get();
@@ -321,6 +330,7 @@ class InvoiceProvider with ChangeNotifier {
       // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
+      double updatedCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
 
       if (paymentMethod == 'Cash') {
         updatedCashPaid += paymentAmount;
@@ -335,6 +345,16 @@ class InvoiceProvider with ChangeNotifier {
         await _db.child('invoices').child(invoiceId).child('onlinePayments').push().set({
           'amount': paymentAmount,
           'date': DateTime.now().toIso8601String(),
+        });
+      } else if (paymentMethod == 'Check') {
+        updatedCheckPaid += paymentAmount;
+        // Save the check payment in a child node with date, description, and image
+        final checkPaymentRef = _db.child('invoices').child(invoiceId).child('checkPayments').push();
+        await checkPaymentRef.set({
+          'amount': paymentAmount,
+          'date': DateTime.now().toIso8601String(),
+          'description': description,
+          'image': imageBytes != null ? base64Encode(imageBytes) : null,
         });
       }
 
@@ -356,6 +376,7 @@ class InvoiceProvider with ChangeNotifier {
       await _db.child('invoices').child(invoiceId).update({
         'cashPaidAmount': updatedCashPaid,
         'onlinePaidAmount': updatedOnlinePaid,
+        'checkPaidAmount': updatedCheckPaid,
         'debitAmount': updatedDebit, // Make sure this is updated correctly
         'debitAt': debitAt,
       });
