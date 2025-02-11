@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
@@ -349,7 +351,13 @@ class FilledProvider with ChangeNotifier {
   // }
 
   Future<void> payFilledWithSeparateMethod(
-      BuildContext context, String filledId, double paymentAmount, String paymentMethod) async {
+      BuildContext context,
+      String filledId,
+      double paymentAmount,
+      String paymentMethod, {
+        String? description,
+        Uint8List? imageBytes,
+      }) async {
     try {
       // Fetch the current filled data from the database
       final filledSnapshot = await _db.child('filled').child(filledId).get();
@@ -398,21 +406,31 @@ class FilledProvider with ChangeNotifier {
       // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
+      double updatedCheckPaid = _parseToDouble(filled['checkPaidAmount']);
 
+      // Create a payment object to store in the database
+      final paymentData = {
+        'amount': paymentAmount,
+        'date': DateTime.now().toIso8601String(),
+        'paymentMethod': paymentMethod,
+        'description': description,
+      };
+
+      // If an image is provided, encode it to base64 and add it to the payment data
+      if (imageBytes != null) {
+        paymentData['image'] = base64Encode(imageBytes);
+      }
+
+      // Save the payment data in the appropriate child node based on the payment method
       if (paymentMethod == 'Cash') {
         updatedCashPaid += paymentAmount;
-        // Save the cash payment in a child node with date
-        await _db.child('filled').child(filledId).child('cashPayments').push().set({
-          'amount': paymentAmount,
-          'date': DateTime.now().toIso8601String(),
-        });
+        await _db.child('filled').child(filledId).child('cashPayments').push().set(paymentData);
       } else if (paymentMethod == 'Online') {
         updatedOnlinePaid += paymentAmount;
-        // Save the online payment in a child node with date
-        await _db.child('filled').child(filledId).child('onlinePayments').push().set({
-          'amount': paymentAmount,
-          'date': DateTime.now().toIso8601String(),
-        });
+        await _db.child('filled').child(filledId).child('onlinePayments').push().set(paymentData);
+      } else if (paymentMethod == 'Check') {
+        updatedCheckPaid += paymentAmount;
+        await _db.child('filled').child(filledId).child('checkPayments').push().set(paymentData);
       }
 
       // Retrieve and parse the current debit amount
@@ -433,6 +451,7 @@ class FilledProvider with ChangeNotifier {
       await _db.child('filled').child(filledId).update({
         'cashPaidAmount': updatedCashPaid,
         'onlinePaidAmount': updatedOnlinePaid,
+        'checkPaidAmount': updatedCheckPaid,
         'debitAmount': updatedDebit, // Make sure this is updated correctly
         'debitAt': debitAt,
       });
@@ -457,6 +476,41 @@ class FilledProvider with ChangeNotifier {
         SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
       );
       throw Exception('Failed to save payment: $e');
+    }
+  }
+
+
+
+  Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
+    try {
+      List<Map<String, dynamic>> payments = [];
+      final filledRef = _db.child('filled').child(filledId);
+
+      // Helper function to fetch payments
+      Future<void> fetchPayments(String method) async {
+        DataSnapshot snapshot = await filledRef.child('${method}Payments').get();
+        if (snapshot.exists) {
+          Map<dynamic, dynamic> methodPayments = snapshot.value as Map<dynamic, dynamic>;
+          methodPayments.forEach((key, value) {
+            payments.add({
+              'method': method,
+              ...Map<String, dynamic>.from(value),
+              'date': DateTime.parse(value['date']),
+            });
+          });
+        }
+      }
+
+      await fetchPayments('cash');
+      await fetchPayments('online');
+      await fetchPayments('check');
+
+      // Sort by date descending
+      payments.sort((a, b) => b['date'].compareTo(a['date']));
+
+      return payments;
+    } catch (e) {
+      throw Exception('Failed to fetch payments: $e');
     }
   }
 

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
@@ -400,6 +399,41 @@ class InvoiceProvider with ChangeNotifier {
         SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
       );
       throw Exception('Failed to save payment: $e');
+    }
+  }
+
+
+  // Add to InvoiceProvider
+  Future<List<Map<String, dynamic>>> getInvoicePayments(String invoiceId) async {
+    try {
+      List<Map<String, dynamic>> payments = [];
+      final invoiceRef = _db.child('invoices').child(invoiceId);
+
+      // Helper function to fetch payments
+      Future<void> fetchPayments(String method) async {
+        DataSnapshot snapshot = await invoiceRef.child('${method}Payments').get();
+        if (snapshot.exists) {
+          Map<dynamic, dynamic> methodPayments = snapshot.value as Map<dynamic, dynamic>;
+          methodPayments.forEach((key, value) {
+            payments.add({
+              'method': method,
+              ...Map<String, dynamic>.from(value),
+              'date': DateTime.parse(value['date']),
+            });
+          });
+        }
+      }
+
+      await fetchPayments('cash');
+      await fetchPayments('online');
+      await fetchPayments('check');
+
+      // Sort by date descending
+      payments.sort((a, b) => b['date'].compareTo(a['date']));
+
+      return payments;
+    } catch (e) {
+      throw Exception('Failed to fetch payments: $e');
     }
   }
 }

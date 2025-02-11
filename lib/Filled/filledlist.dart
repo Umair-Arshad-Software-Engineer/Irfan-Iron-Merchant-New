@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../Provider/filled provider.dart';
@@ -9,6 +14,7 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:ui' as ui;
+import 'package:file_picker/file_picker.dart';
 
 class filledListpage extends StatefulWidget {
   @override
@@ -71,6 +77,8 @@ class _filledListpageState extends State<filledListpage> {
                     filledProvider,
                     languageProvider,
                   ),
+                  onViewPayments: (filled) => _showPaymentDetails(filled),
+
                 );
               },
             ),
@@ -132,6 +140,121 @@ class _filledListpageState extends State<filledListpage> {
       });
   }
 
+  Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    try {
+      final payments = await filledProvider.getFilledPayments(filled['id']);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
+          content: Container(
+              width: double.maxFinite,
+              child: payments.isEmpty
+                  ? Text(languageProvider.isEnglish
+                  ? 'No payments found'
+                  : 'کوئی ادائیگی نہیں ملی')
+                  : // Update the payment history builder in _showPaymentDetails
+              ListView.builder(
+                shrinkWrap: true,
+                itemCount: payments.length,
+                itemBuilder: (context, index) {
+                  final payment = payments[index];
+                  Uint8List? imageBytes;
+                  if (payment['image'] != null) {
+                    imageBytes = base64Decode(payment['image']);
+                  }
+
+                  return Card(
+                    child: ListTile(
+                      title: Text(
+                        '${payment['method']}: Rs ${payment['amount']}',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(DateFormat('yyyy-MM-dd – HH:mm')
+                              .format(payment['date'])),
+                          if (payment['description'] != null)
+                            Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(payment['description']),
+                            ),
+                          if (imageBytes != null)
+                            Column(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => _showFullScreenImage(imageBytes!),
+                                  child: Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: Hero(
+                                      tag: 'paymentImage$index',
+                                      child: Image.memory(
+                                        imageBytes,
+                                        width: 100,
+                                        height: 100,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _showFullScreenImage(imageBytes!),
+                                  child: Text(
+                                    Provider.of<LanguageProvider>(context, listen: false)
+                                        .isEnglish
+                                        ? 'View Full Image'
+                                        : 'مکمل تصویر دیکھیں',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                )
+                              ],
+                            )
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              )
+          ),
+          actions: [
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.memory(imageBytes, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
+
   Future<void> _showDeleteConfirmationDialog(
       BuildContext context,
       Map<String, dynamic> filled,
@@ -160,6 +283,32 @@ class _filledListpageState extends State<filledListpage> {
         ],
       ),
     );
+  }
+  Future<Uint8List?> _pickImage() async {
+    Uint8List? imageBytes;
+
+    if (kIsWeb) {
+      // For web, use file_picker
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        imageBytes = result.files.first.bytes;
+      }
+    } else {
+      // For mobile, use image_picker
+      final ImagePicker _picker = ImagePicker();
+      XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        imageBytes = await file.readAsBytes();
+      }
+    }
+
+    return imageBytes;
   }
 
   Future<void> _printFilled() async {
@@ -288,6 +437,8 @@ class _filledListpageState extends State<filledListpage> {
     String? selectedPaymentMethod;
     _paymentController.clear();
     bool _isPaymentButtonPressed = false;
+    String? _description;
+    Uint8List? _imageBytes;
 
     await showDialog(
       context: context,
@@ -295,38 +446,84 @@ class _filledListpageState extends State<filledListpage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'فلڈ کی رقم ادا کریں'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: selectedPaymentMethod,
-                    items: [
-                      DropdownMenuItem(
-                        value: 'Cash',
-                        child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+              title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'انوائس کی رقم ادا کریں'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: selectedPaymentMethod,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'Cash',
+                          child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Online',
+                          child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Check',
+                          child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedPaymentMethod = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
+                        border: const OutlineInputBorder(),
                       ),
-                      DropdownMenuItem(
-                        value: 'Online',
-                        child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _paymentController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
+                        border: const OutlineInputBorder(),
                       ),
-                    ],
-                    onChanged: (value) => setState(() => selectedPaymentMethod = value),
-                    decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
-                      border: OutlineInputBorder(),
                     ),
-                  ),
-                  SizedBox(height: 16),
-                  TextField(
-                    controller: _paymentController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 16),
+                    TextField(
+                      onChanged: (value) {
+                        setState(() {
+                          _description = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Uint8List? imageBytes = await _pickImage();
+                        if (imageBytes != null && imageBytes.isNotEmpty) {
+                          print('Image selected with ${imageBytes.length} bytes'); // Debug log
+                          setState(() {
+                            _imageBytes = imageBytes;
+                          });
+                        } else {
+                          print('No image selected or empty bytes'); // Debug log
+                        }
+                      },
+                      child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
+                    ),
+                    // Display selected image
+                    if (_imageBytes != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        height: 100,
+                        width: 100,
+                        child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
+                      ),
+
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -337,7 +534,10 @@ class _filledListpageState extends State<filledListpage> {
                   onPressed: _isPaymentButtonPressed
                       ? null
                       : () async {
-                    setState(() => _isPaymentButtonPressed = true);
+                    setState(() {
+                      _isPaymentButtonPressed = true;
+                    });
+
                     if (selectedPaymentMethod == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -346,9 +546,12 @@ class _filledListpageState extends State<filledListpage> {
                               : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
                         ),
                       );
-                      setState(() => _isPaymentButtonPressed = false);
+                      setState(() {
+                        _isPaymentButtonPressed = false;
+                      });
                       return;
                     }
+
                     final amount = double.tryParse(_paymentController.text);
                     if (amount != null && amount > 0) {
                       await filledProvider.payFilledWithSeparateMethod(
@@ -356,6 +559,8 @@ class _filledListpageState extends State<filledListpage> {
                         filled['id'],
                         amount,
                         selectedPaymentMethod!,
+                        description: _description,
+                        imageBytes: _imageBytes,
                       );
                       Navigator.of(context).pop();
                     } else {
@@ -367,7 +572,10 @@ class _filledListpageState extends State<filledListpage> {
                         ),
                       );
                     }
-                    setState(() => _isPaymentButtonPressed = false);
+
+                    setState(() {
+                      _isPaymentButtonPressed = false;
+                    });
                   },
                   child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
                 ),
@@ -472,6 +680,7 @@ class FilledList extends StatelessWidget {
   final Function(Map<String, dynamic>) onFilledTap;
   final Function(Map<String, dynamic>) onFilledLongPress;
   final Function(Map<String, dynamic>) onPaymentPressed;
+  final Function(Map<String, dynamic>) onViewPayments;
 
   const FilledList({
     required this.filteredFilled,
@@ -480,6 +689,8 @@ class FilledList extends StatelessWidget {
     required this.onFilledTap,
     required this.onFilledLongPress,
     required this.onPaymentPressed,
+    required this.onViewPayments,
+
   });
 
   @override
@@ -525,10 +736,18 @@ class FilledList extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
-                      onPressed: () => onPaymentPressed(filled),
-                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
+                          onPressed: () => onPaymentPressed(filled),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
+                          onPressed: () => onViewPayments(filled),
+                        ),
+                      ],
+                    )
                   ],
                 ),
                 trailing: Column(

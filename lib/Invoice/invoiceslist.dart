@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -95,14 +96,34 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                   onPaymentPressed: (invoice) {
                     _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
                   },
-                );              },
+                  onViewPayments: (invoice) => _showPaymentDetails(invoice),
+
+                );
+              },
             ),
           ),
         ],
       ),
     );
   }
-
+// Add to _InvoiceListPageState
+  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.memory(imageBytes, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
   // Build AppBar
   AppBar _buildAppBar(BuildContext context, LanguageProvider languageProvider, InvoiceProvider invoiceProvider) {
     return AppBar(
@@ -194,7 +215,102 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       },
     );
   }
+// Add to _InvoiceListPageState
+  Future<void> _showPaymentDetails(Map<String, dynamic> invoice) async {
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
+    try {
+      final payments = await invoiceProvider.getInvoicePayments(invoice['id']);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
+          content: Container(
+            width: double.maxFinite,
+            child: payments.isEmpty
+                ? Text(languageProvider.isEnglish
+                ? 'No payments found'
+                : 'کوئی ادائیگی نہیں ملی')
+                : // Update the payment history builder in _showPaymentDetails
+            ListView.builder(
+              shrinkWrap: true,
+              itemCount: payments.length,
+              itemBuilder: (context, index) {
+                final payment = payments[index];
+                Uint8List? imageBytes;
+                if (payment['image'] != null) {
+                  imageBytes = base64Decode(payment['image']);
+                }
+
+                return Card(
+                  child: ListTile(
+                    title: Text(
+                      '${payment['method']}: Rs ${payment['amount']}',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(DateFormat('yyyy-MM-dd – HH:mm')
+                            .format(payment['date'])),
+                        if (payment['description'] != null)
+                          Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: Text(payment['description']),
+                          ),
+                        if (imageBytes != null)
+                          Column(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _showFullScreenImage(imageBytes!),
+                                child: Padding(
+                                  padding: EdgeInsets.only(top: 8),
+                                  child: Hero(
+                                    tag: 'paymentImage$index',
+                                    child: Image.memory(
+                                      imageBytes,
+                                      width: 100,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => _showFullScreenImage(imageBytes!),
+                                child: Text(
+                                  Provider.of<LanguageProvider>(context, listen: false)
+                                      .isEnglish
+                                      ? 'View Full Image'
+                                      : 'مکمل تصویر دیکھیں',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              )
+                            ],
+                          )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            )
+          ),
+          actions: [
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
+      );
+    }
+  }
   // Print invoices
   Future<void> _printInvoices() async {
     final pdf = pw.Document();
@@ -516,6 +632,7 @@ class InvoiceList extends StatelessWidget {
   final Function(Map<String, dynamic>) onInvoiceTap;
   final Function(Map<String, dynamic>) onInvoiceLongPress;
   final Function(Map<String, dynamic>) onPaymentPressed;
+  final Function(Map<String, dynamic>) onViewPayments;
 
   const InvoiceList({
     required this.filteredInvoices,
@@ -524,6 +641,8 @@ class InvoiceList extends StatelessWidget {
     required this.onInvoiceTap,
     required this.onInvoiceLongPress,
     required this.onPaymentPressed,
+    required this.onViewPayments,
+
   });
 
   @override
@@ -572,9 +691,17 @@ class InvoiceList extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
-                      onPressed: () => onPaymentPressed(invoice),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
+                          onPressed: () => onPaymentPressed(invoice),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
+                          onPressed: () => onViewPayments(invoice),
+                        ),
+                      ],
                     ),
                   ],
                 ),
