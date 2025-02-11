@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../Models/itemModel.dart';
 import '../Provider/customerprovider.dart';
 import '../Provider/lanprovider.dart';
 import 'filledlist.dart'; // Import your customer provider
@@ -23,6 +24,7 @@ class filledpage extends StatefulWidget {
 
 class _filledpageState extends State<filledpage> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
+  List<Item> _items = [];
 
   String? _selectedCustomerName; // This should hold the name of the selected customer
   String? _selectedCustomerId;
@@ -34,6 +36,9 @@ class _filledpageState extends State<filledpage> {
   String? _filledId; // For editing existing filled
   late bool _isReadOnly;
   bool _isButtonPressed = false;
+  final TextEditingController _customerController = TextEditingController();
+  final TextEditingController _rateController = TextEditingController();
+
 
   String generateFilledNumber() {
     // Generate a timestamp as filled number (in millsiseconds)
@@ -262,7 +267,6 @@ class _filledpageState extends State<filledpage> {
     }
   }
 
-
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Use default text for empty input
     final String displayText = text.isEmpty ? "N/A" : text;
@@ -322,7 +326,6 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
-
   Future<double> _getRemainingBalance(String customerId) async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
@@ -358,7 +361,60 @@ class _filledpageState extends State<filledpage> {
       return 0.0; // Return 0 if there's an error
     }
   }
+  Future<List<Item>> fetchItems() async {
+    final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
+    final DatabaseEvent snapshot = await itemsRef.once();
 
+    if (snapshot.snapshot.exists) {
+      final Map<dynamic, dynamic> itemsMap = snapshot.snapshot.value as Map<dynamic, dynamic>;
+      return itemsMap.entries.map((entry) {
+        return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
+      }).toList();
+    } else {
+      return [];
+    }
+  }
+
+  Future<void> _fetchItems() async {
+    final items = await fetchItems();
+    setState(() {
+      _items = items;
+    });
+  }
+
+  void _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
+    try {
+      for (var item in validItems) {
+        final itemName = item['itemName'];
+        if (itemName == null || itemName.isEmpty) continue;
+
+        final dbItem = _items.firstWhere(
+              (i) => i.itemName == itemName,
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+        );
+
+        if (dbItem.id.isNotEmpty) {
+          final String itemId = dbItem.id;
+          final double currentQty = dbItem.qtyOnHand ?? 0.0;
+          final double itemQty = item['qty'] ?? 0.0; // Changed from weight to qty
+          double initialQty = item['initialQty'] ?? 0.0; // Changed from initialWeight
+
+          double updatedQty;
+          if (widget.filled != null) {
+            // For edits, adjust by the difference
+            updatedQty = currentQty + (initialQty - itemQty);
+          } else {
+            // For new entries, subtract the qty
+            updatedQty = currentQty - itemQty;
+          }
+
+          await _db.child('items/$itemId').update({'qtyOnHand': updatedQty});
+        }
+      }
+    } catch (e) {
+      print("Error updating qtyOnHand: $e");
+    }
+  }
   @override
   void dispose() {
     for (var row in _filledRows) {
@@ -375,44 +431,63 @@ class _filledpageState extends State<filledpage> {
   @override
   void initState() {
     super.initState();
-    // Fetch the customers when the page is initialized
-    Provider.of<CustomerProvider>(context, listen: false).fetchCustomers();
-    _isReadOnly = widget.filled != null; // Set read-only if filled is passed
+    _fetchItems();
+    // Initialize customer provider and fetch customers
+    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    customerProvider.fetchCustomers().then((_) {
+      if (widget.filled != null) {
+        final filled = widget.filled!;
+        _selectedCustomerId = filled['customerId'];
+        final customer = customerProvider.customers.firstWhere(
+              (c) => c.id == _selectedCustomerId,
+          orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+        );
+        setState(() {
+          _selectedCustomerName = customer.name;
+        });
+      }
+    });
 
+    _isReadOnly = widget.filled != null;
     if (widget.filled != null) {
-      // Populate fields for editing
       final filled = widget.filled!;
-      _discount = widget.filled!['discount'];
-      _discountController.text = _discount.toString(); // Initialize controller with discount value
-      _filledId = filled['filledNumber']; // Save the filled ID for updates
-      _selectedCustomerId = filled['customerId'];
-      _discount = filled['discount'];
+      _discount = (filled['discount'] as num).toDouble();
+      _discountController.text = _discount.toStringAsFixed(2);
+      _filledId = filled['filledNumber'];
       _paymentType = filled['paymentType'];
       _instantPaymentMethod = filled['paymentMethod'];
-      // _filledRows = List<Map<String, dynamic>>.from(filled['items']); // Populate table rows
+
+      // Initialize rows with calculated totals
       _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
+        double rate = (row['rate'] as num).toDouble();
+        // double weight = (row['weight'] as num).toDouble();
+        double qty = (row['qty'] as num).toDouble();
+        double total = rate * qty; // Calculate total here
+
         return {
-          ...row,
-          // 'weightController': TextEditingController(text: row['weight'].toString()),
-          'rateController': TextEditingController(text: row['rate'].toString()),
+          'itemName': row['itemName'],
+          'rate': rate,
+          // 'weight': weight,
+          'qty': (row['qty'] as num).toDouble(),
+          'description': row['description'],
+          'total': total, // Use calculated total
+          'itemNameController': TextEditingController(text: row['itemName']),
+          // 'weightController': TextEditingController(text: weight.toString()),
+          'rateController': TextEditingController(text: rate.toString()),
           'qtyController': TextEditingController(text: row['qty'].toString()),
           'descriptionController': TextEditingController(text: row['description']),
         };
       }).toList();
-      // Update each row's total
-      for (int i = 0; i < _filledRows.length; i++) {
-        _updateRow(i, 'total', null); // Pass null as value since the function uses row data for calculation
-      }
     } else {
-      // Default values for a new filled
       _filledRows = [
         {
           'total': 0.0,
           'rate': 0.0,
           'qty': 0.0,
-          // 'weight': 0.0,
+          'weight': 0.0,
           'description': '',
-          // 'weightController': TextEditingController(),
+          'itemNameController': TextEditingController(), // Add this
+          'weightController': TextEditingController(),
           'rateController': TextEditingController(),
           'qtyController': TextEditingController(),
           'descriptionController': TextEditingController(),
@@ -456,8 +531,12 @@ class _filledpageState extends State<filledpage> {
       body: SingleChildScrollView(
         child: Consumer<CustomerProvider>(
           builder: (context, customerProvider, child) {
-            if (customerProvider.customers.isEmpty) {
-              return const Center(child: CircularProgressIndicator()); // Show loading indicator if customers are still being fetched
+            if (widget.filled != null && _selectedCustomerId != null) {
+              final customer = customerProvider.customers.firstWhere(
+                    (c) => c.id == _selectedCustomerId,
+                orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+              );
+              _selectedCustomerName = customer.name; // Update name
             }
 
             return Padding(
@@ -470,47 +549,79 @@ class _filledpageState extends State<filledpage> {
                     languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
                     style: TextStyle(color: Colors.teal.shade800, fontSize: 18), // Title text color
                   ),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _selectedCustomerId,
-                    hint: Text(languageProvider.isEnglish ? 'Choose a customer' : 'ایک کسٹمر منتخب کریں'),
-                    onChanged:_isReadOnly ? null :  (String? newValue) {
-                      setState(() {
-                        _selectedCustomerId = newValue;
-                        _selectedCustomerName = customerProvider.customers
-                            .firstWhere((customer) => customer.id == newValue)
-                            .name; // Track the customer name
+                  Autocomplete<Customer>(
+                    initialValue: TextEditingValue(
+                        text: _selectedCustomerName ?? ''
+                    ),
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<Customer>.empty();
+                      }
+                      return customerProvider.customers.where((Customer customer) {
+                        return customer.name.toLowerCase().contains(textEditingValue.text.toLowerCase());
                       });
                     },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return languageProvider.isEnglish
-                            ? 'Please select a customer'
-                            : 'براہ کرم ایک کسٹمر منتخب کریں';
-                      }
-                      return null;
-                    },
-                    items: customerProvider.customers.map<DropdownMenuItem<String>>((Customer customer) {
-                      return DropdownMenuItem<String>(
-                        value: customer.id,
-                        child: Text(customer.name), // Display customer's name
-                      );
-                    }).toList(),
-                  ),
+                    displayStringForOption: (Customer customer) => customer.name,
+                    fieldViewBuilder: (BuildContext context, TextEditingController textEditingController,
+                        FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                      _customerController.text = _selectedCustomerName ?? '';
 
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish ? 'Choose a customer' : 'ایک کسٹمر منتخب کریں',
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCustomerId = null; // Reset ID when manually changing text
+                            _selectedCustomerName = value;
+                          });
+                        },
+                      );
+                    },
+                    // In the customer Autocomplete widget
+                    onSelected: (Customer selectedCustomer) {
+                      setState(() {
+                        _selectedCustomerId = selectedCustomer.id;
+                        _selectedCustomerName = selectedCustomer.name;
+                        _customerController.text = selectedCustomer.name;
+                      });
+                    },
+                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
+                        Iterable<Customer> options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          child: Container(
+                            width: MediaQuery.of(context).size.width * 0.9,
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final Customer customer = options.elementAt(index);
+                                return ListTile(
+                                  title: Text(customer.name),
+                                  onTap: () => onSelected(customer),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   // Show selected customer name
-                  if (_selectedCustomerId != null)
-                  // Text('${languageProvider.isEnglish ? 'Selected Customer:' : 'منتخب شدہ کسٹمر:'} ${customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId).name}',
-                  //   style: TextStyle(color: Colors.teal.shade600),
-                  // ),
+                  if (_selectedCustomerName != null)
                     Text(
-                      '${languageProvider.isEnglish ? 'Selected Customer:' : 'منتخب شدہ کسٹمر:'} $_selectedCustomerName',
+                      'Selected Customer: $_selectedCustomerName',
                       style: TextStyle(color: Colors.teal.shade600),
                     ),
-
                   // Space between sections
                   const SizedBox(height: 20),
-
                   // Display columns for the filled details
                   Text(
                     languageProvider.isEnglish ? 'Filled Details:' : 'فلڈ کی تفصیلات:',
@@ -547,29 +658,41 @@ class _filledpageState extends State<filledpage> {
                                       ),
                                     ],
                                   ),
-                                  SizedBox(height: 5,),
-                                  // Filled Rate
+                                  const SizedBox(height: 5,),
+                                  CustomAutocomplete(
+                                    items: _items,
+                                    controller: _filledRows[i]['itemNameController'],
+                                    onSelected: (Item selectedItem) {
+                                      setState(() {
+                                        _filledRows[i]['itemId'] = selectedItem.id; // Add itemId
+                                        _filledRows[i]['itemName'] = selectedItem.itemName;
+                                        _filledRows[i]['rate'] = selectedItem.costPrice;
+                                        _filledRows[i]['rateController'].text = selectedItem.costPrice.toString();
+                                        _filledRows[i]['itemNameController'].text = selectedItem.itemName;
+                                      });
+                                    },
+                                    readOnly: _isReadOnly,
+                                  ),
+                                  const SizedBox(height: 5),
+                                  // Sarya Rate TextField
                                   TextField(
                                     controller: _filledRows[i]['rateController'],
+                                    onChanged: (value) {
+                                      double newRate = double.tryParse(value) ?? 0.0;
+                                      _updateRow(i, 'rate', newRate);
+                                    },
                                     enabled: !_isReadOnly,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Rate',
+                                      border: OutlineInputBorder(),
+                                    ),
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [
                                       FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
                                     ],
-                                    onChanged: (value) {
-                                      _updateRow(i, 'rate', double.tryParse(value) ?? 0.0);
-                                    },
-                                    decoration: InputDecoration(
-                                      labelText: languageProvider.isEnglish ? 'Filled Rate' : 'فلڈ کی قیمت',
-                                      hintStyle: TextStyle(color: Colors.teal.shade600),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(10)),
-                                        borderSide: BorderSide(color: Colors.grey),
-                                      ),
-                                    ),
                                   ),
-                                  SizedBox(height: 5,),
-                                  // Filled Quantity
+                                  const SizedBox(height: 5,),
+                                  // Sarya Qty
                                   TextField(
                                     controller: _filledRows[i]['qtyController'],
                                     enabled: !_isReadOnly,
@@ -581,16 +704,16 @@ class _filledpageState extends State<filledpage> {
                                       _updateRow(i, 'qty', double.tryParse(value) ?? 0.0);
                                     },
                                     decoration: InputDecoration(
-                                      labelText: languageProvider.isEnglish ? 'Filled Qty' : 'فلڈ کی مقدار',
+                                      labelText: languageProvider.isEnglish ? 'Sarya Qty' : 'سرئے کی مقدار',
                                       hintStyle: TextStyle(color: Colors.teal.shade600),
-                                      border: OutlineInputBorder(
+                                      border: const OutlineInputBorder(
                                         borderRadius: BorderRadius.all(Radius.circular(10)),
                                         borderSide: BorderSide(color: Colors.grey),
                                       ),
                                     ),
                                   ),
-                                  SizedBox(height: 5,),
-                                  // Description
+                                  const SizedBox(height: 5,),
+                                  // Descriptions
                                   TextField(
                                     controller: _filledRows[i]['descriptionController'],
                                     enabled: !_isReadOnly,
@@ -600,13 +723,13 @@ class _filledpageState extends State<filledpage> {
                                     decoration: InputDecoration(
                                       labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
                                       hintStyle: TextStyle(color: Colors.teal.shade600),
-                                      border: OutlineInputBorder(
+                                      border: const OutlineInputBorder(
                                         borderRadius: BorderRadius.all(Radius.circular(10)),
                                         borderSide: BorderSide(color: Colors.grey),
                                       ),
                                     ),
                                   ),
-                                  SizedBox(height: 5,),
+                                  const SizedBox(height: 5,),
                                 ],
                               ),
                             ),
@@ -870,6 +993,75 @@ class _filledpageState extends State<filledpage> {
                             return; // Do not save or print if discount is invalid
                           }
 
+                          // Check for insufficient stock
+                          List<Map<String, dynamic>> insufficientItems = [];
+                          for (var row in _filledRows) {
+                            String itemName = row['itemName'];
+                            if (itemName.isEmpty) continue;
+
+                            Item? item = _items.firstWhere(
+                                  (i) => i.itemName == itemName,
+                              orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+                            );
+
+                            if (item.id.isEmpty) continue;
+
+                            double currentQty = item.qtyOnHand;
+                            double qty = row['qty'] ?? 0.0;
+                            double delta;
+
+                            if (widget.filled != null) {
+                              double initialQty = row['initialQty'] ?? 0.0;
+                              delta = initialQty - qty;
+                            } else {
+                              delta = -qty;
+                            }
+
+                            double newQty = currentQty + delta;
+
+                            if (newQty < 0) {
+                              insufficientItems.add({
+                                'item': item,
+                                'delta': delta,
+                              });
+                            }
+                          }
+
+                          if (insufficientItems.isNotEmpty) {
+                            bool proceed = await showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                    ? 'Insufficient Stock'
+                                    : 'اسٹاک ناکافی'),
+                                content: Text(
+                                  Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                      ? 'The following items will have negative stock. Do you want to proceed?'
+                                      : 'مندرجہ ذیل اشیاء کا اسٹاک منفی ہو جائے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                        ? 'Cancel'
+                                        : 'منسوخ کریں'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                        ? 'Proceed'
+                                        : 'آگے بڑھیں'),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (!proceed) {
+                              setState(() => _isButtonPressed = false);
+                              return;
+                            }
+                          }
+
                           final filledNumber = _filledId ?? generateFilledNumber();
                           final grandTotal = _calculateGrandTotal();
 
@@ -922,7 +1114,8 @@ class _filledpageState extends State<filledpage> {
                               ),
                             );
                           }
-
+// Update qtyOnHand after saving/updating the invoice
+                          _updateQtyOnHand(_filledRows);
                           // Navigate to the filled list page
                           Navigator.pushReplacement(
                             context,
@@ -956,186 +1149,91 @@ class _filledpageState extends State<filledpage> {
                         backgroundColor: Colors.teal.shade400, // Button background color
                       ),
                     )
-                  //   ElevatedButton  (
-                  //   onPressed: () async {
-                  //     // Validate customer selection
-                  //     if (_selectedCustomerId == null || _selectedCustomerName == null) {
-                  //       ScaffoldMessenger.of(context).showSnackBar(
-                  //         SnackBar(
-                  //           content: Text(
-                  //             languageProvider.isEnglish
-                  //                 ? 'Please select a customer'
-                  //                 : 'براہ کرم کسٹمر منتخب کریں',
-                  //           ),
-                  //         ),
-                  //       );
-                  //       return;
-                  //     }
-                  //
-                  //     // Validate payment type
-                  //     if (_paymentType == null) {
-                  //       ScaffoldMessenger.of(context).showSnackBar(
-                  //         SnackBar(
-                  //           content: Text(
-                  //             languageProvider.isEnglish
-                  //                 ? 'Please select a payment type'
-                  //                 : 'براہ کرم ادائیگی کی قسم منتخب کریں',
-                  //           ),
-                  //         ),
-                  //       );
-                  //       return;
-                  //     }
-                  //
-                  //     // Validate instant payment method if "Instant Payment" is selected
-                  //     if (_paymentType == 'instant' && _instantPaymentMethod == null) {
-                  //       ScaffoldMessenger.of(context).showSnackBar(
-                  //         SnackBar(
-                  //           content: Text(
-                  //             languageProvider.isEnglish
-                  //                 ? 'Please select an instant payment method'
-                  //                 : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
-                  //           ),
-                  //         ),
-                  //       );
-                  //       return;
-                  //     }
-                  //
-                  //     // Validate weight and rate fields
-                  //     for (var row in _filledRows) {
-                  //       // if (row['weight'] == null || row['weight'] <= 0) {
-                  //       //   ScaffoldMessenger.of(context).showSnackBar(
-                  //       //     SnackBar(
-                  //       //       content: Text(
-                  //       //         languageProvider.isEnglish
-                  //       //             ? 'Weight cannot be zero or less'
-                  //       //             : 'وزن صفر یا اس سے کم نہیں ہو سکتا',
-                  //       //       ),
-                  //       //     ),
-                  //       //   );
-                  //       //   return;
-                  //       // }
-                  //
-                  //       if (row['rate'] == null || row['rate'] <= 0) {
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           SnackBar(
-                  //             content: Text(
-                  //               languageProvider.isEnglish
-                  //                   ? 'Rate cannot be zero or less'
-                  //                   : 'ریٹ صفر یا اس سے کم نہیں ہو سکتا',
-                  //             ),
-                  //           ),
-                  //         );
-                  //         return;
-                  //       }
-                  //     }
-                  //
-                  //     // Validate discount amount
-                  //     final subtotal = _calculateSubtotal();
-                  //     if (_discount >= subtotal) {
-                  //       ScaffoldMessenger.of(context).showSnackBar(
-                  //         SnackBar(
-                  //           content: Text(
-                  //             languageProvider.isEnglish
-                  //                 ? 'Discount amount cannot be greater than or equal to the subtotal'
-                  //                 : 'ڈسکاؤنٹ کی رقم سب ٹوٹل سے زیادہ یا اس کے برابر نہیں ہو سکتی',
-                  //           ),
-                  //         ),
-                  //       );
-                  //       return; // Do not save or print if discount is invalid
-                  //     }
-                  //     final filledNumber = _filledId ?? generateFilledNumber();
-                  //     final grandTotal = _calculateGrandTotal();
-                  //     // Try saving the filled
-                  //     try {
-                  //       if (_filledId != null) {
-                  //         // Update existing filled
-                  //         await Provider.of<FilledProvider>(context, listen: false).updateFilled(
-                  //           filledId: _filledId!, // Pass the correct ID for updating
-                  //           filledNumber: filledNumber,
-                  //           customerId: _selectedCustomerId!,
-                  //           customerName: _selectedCustomerName!,
-                  //           subtotal: subtotal,
-                  //           discount: _discount,
-                  //           grandTotal: grandTotal,
-                  //           paymentType: _paymentType,
-                  //           paymentMethod: _instantPaymentMethod,
-                  //           items: _filledRows,
-                  //         );
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           SnackBar(
-                  //             content: Text(
-                  //               languageProvider.isEnglish
-                  //                   ? 'Filled updated successfully'
-                  //                   : 'فلڈ کامیابی سے تبدیل ہوگئی',
-                  //             ),
-                  //           ),
-                  //         );
-                  //       }
-                  //       else {
-                  //         // Save new filled
-                  //         await Provider.of<FilledProvider>(context, listen: false).saveFilled(
-                  //           filledId: filledNumber, // Pass the filled number (or generated ID)
-                  //           filledNumber: filledNumber,
-                  //           customerId: _selectedCustomerId!,
-                  //           customerName: _selectedCustomerName!,
-                  //           subtotal: subtotal,
-                  //           discount: _discount,
-                  //           grandTotal: grandTotal,
-                  //           paymentType: _paymentType,
-                  //           paymentMethod: _instantPaymentMethod,
-                  //           items: _filledRows,
-                  //         );
-                  //
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           SnackBar(
-                  //             content: Text(
-                  //               languageProvider.isEnglish
-                  //                   ? 'Filled saved successfully'
-                  //                   : 'فلڈ کامیابی سے محفوظ ہوگئی',
-                  //             ),
-                  //           ),
-                  //         );
-                  //
-                  //       }
-                  //       // Generate and print the PDF
-                  //       // await _generateAndPrintPDF(filledNumber);
-                  //
-                  //       // Navigate back
-                  //       // Navigator.pop(context);
-                  //       Navigator.pushReplacement(
-                  //         context,
-                  //         MaterialPageRoute(builder: (context) => filledListpage()),
-                  //       );
-                  //     } catch (e) {
-                  //       // Show error message
-                  //       print(e);
-                  //       ScaffoldMessenger.of(context).showSnackBar(
-                  //         SnackBar(
-                  //           content: Text(
-                  //             languageProvider.isEnglish
-                  //                 ? 'Failed to save filled'
-                  //                 : 'انوائس محفوظ کرنے میں ناکام',
-                  //           ),
-                  //         ),
-                  //       );
-                  //     }
-                  //   },
-                  //   child: Text(
-                  //     widget.filled == null
-                  //         ? (languageProvider.isEnglish ? 'Save Filled' : 'فلڈ محفوظ کریں')
-                  //         : (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
-                  //     style: TextStyle(color: Colors.white),
-                  //   ),
-                  //   style: ElevatedButton.styleFrom(
-                  //     backgroundColor: Colors.teal.shade400, // Button background color
-                  //   ),
-                  // )
                 ],
               ),
             );
           },
         ),
       ),
+    );
+  }
+}
+class CustomAutocomplete extends StatefulWidget {
+  final List<Item> items;
+  final Function(Item) onSelected;
+  final TextEditingController controller;
+  final bool readOnly; // Add this parameter
+
+  const CustomAutocomplete({
+    required this.items,
+    required this.onSelected,
+    required this.controller,
+    this.readOnly = false, // Default to false
+  });
+
+  @override
+  _CustomAutocompleteState createState() => _CustomAutocompleteState();
+}
+
+class _CustomAutocompleteState extends State<CustomAutocomplete> {
+  List<Item> _filteredItems = [];
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredItems = widget.items;
+    widget.controller.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    setState(() {
+      _filteredItems = widget.items
+          .where((item) => item.itemName
+          .toLowerCase()
+          .contains(widget.controller.text.toLowerCase()))
+          .toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChanged);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          controller: widget.controller,
+          focusNode: _focusNode,
+          enabled: !widget.readOnly, // Disable the field if readOnly is true
+          decoration: const InputDecoration(
+            labelText: 'Select Item',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        if (_focusNode.hasFocus && _filteredItems.isNotEmpty && !widget.readOnly) // Only show dropdown if not read-only
+          Container(
+            height: 200,
+            child: ListView.builder(
+              itemCount: _filteredItems.length,
+              itemBuilder: (context, index) {
+                final item = _filteredItems[index];
+                return ListTile(
+                  title: Text(item.itemName),
+                  onTap: () {
+                    widget.onSelected(item);
+                    _focusNode.unfocus();
+                  },
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

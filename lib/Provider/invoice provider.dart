@@ -156,6 +156,33 @@ class InvoiceProvider with ChangeNotifier {
       final customerId = invoice['customerId'] as String;
       final invoiceNumber = invoice['invoiceNumber'] as String;
 
+      // Get the items from the invoice
+      final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(invoice['items']);
+
+      // Reverse the qtyOnHand deduction for each item
+      for (var item in items) {
+        final itemName = item['itemName'] as String;
+        final weight = (item['weight'] as num).toDouble(); // Get the weight from the invoice
+
+        // Fetch the item from the database
+        final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
+
+        if (itemSnapshot.exists) {
+          final itemData = itemSnapshot.value as Map<dynamic, dynamic>;
+          final itemKey = itemData.keys.first;
+          final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
+
+          // Get the current qtyOnHand
+          double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
+
+          // Add back the weight to qtyOnHand
+          double updatedQtyOnHand = currentQtyOnHand + weight;
+
+          // Update the item in the database
+          await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
+        }
+      }
+
       // Delete the invoice from the database
       await _db.child('invoices').child(invoiceId).remove();
 
@@ -180,7 +207,6 @@ class InvoiceProvider with ChangeNotifier {
       throw Exception('Failed to delete invoice and ledger entries: $e');
     }
   }
-
 
   Future<void> _updateCustomerLedger(
       String customerId, {

@@ -22,10 +22,12 @@ class FilledProvider with ChangeNotifier {
     try {
       final cleanedItems = items.map((item) {
         return {
+          'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           // 'weight': item['weight'] ?? 0.0,
           'description': item['description'] ?? '',
+          'total': item['total'],
         };
       }).toList();
 
@@ -72,10 +74,12 @@ class FilledProvider with ChangeNotifier {
     try {
       final cleanedItems = items.map((item) {
         return {
+          'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           // 'weight': item['weight'] ?? 0.0,
           'description': item['description'] ?? '',
+          'total': item['total'],
         };
       }).toList();
 
@@ -109,25 +113,6 @@ class FilledProvider with ChangeNotifier {
         _filled = [];
         final data = snapshot.value as Map<dynamic, dynamic>;
         data.forEach((key, value) {
-          // _filled.add({
-          //   'id': key, // This is the unique ID for each filled
-          //   'filledNumber': value['filledNumber'],
-          //   'customerId': value['customerId'],
-          //   'customerName': value['customerName'],
-          //   'subtotal': value['subtotal'],
-          //   'discount': value['discount'],
-          //   'grandTotal': value['grandTotal'],
-          //   'paymentType': value['paymentType'],
-          //   'paymentMethod': value['paymentMethod'],
-          //   'debitAmount': value['debitAmount'] ?? 0.0, // **Added field for paid amsount**
-          //   'debitAt': value['debitAt'], // **Added field for last payment date**
-          //   'items': List<Map<String, dynamic>>.from(
-          //     (value['items'] as List).map((item) => Map<String, dynamic>.from(item)),
-          //   ),
-          //   'createdAt': value['createdAt'] is int
-          //       ? DateTime.fromMillisecondsSinceEpoch(value['createdAt']).toIso8601String()
-          //       : value['createdAt'],
-          // });
           _filled.add({
             'id': key, // This is the unique ID for each filled
             'filledNumber': value['filledNumber'],
@@ -169,6 +154,33 @@ class FilledProvider with ChangeNotifier {
       final customerId = filled['customerId'] as String;
       final filledNumber = filled['filledNumber'] as String;
 
+      // Get the items from the filled
+      final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(filled['items']);
+
+      // Reverse the qtyOnHand deduction for each item
+      for (var item in items) {
+        final itemName = item['itemName'] as String;
+        final weight = (item['qty'] as num?)?.toDouble() ?? 0.0; // Handle null weight
+
+        // Fetch the item from the database
+        final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
+
+        if (itemSnapshot.exists) {
+          final itemData = itemSnapshot.value as Map<dynamic, dynamic>;
+          final itemKey = itemData.keys.first;
+          final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
+
+          // Get the current qtyOnHand
+          double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
+
+          // Add back the weight to qtyOnHand
+          double updatedQtyOnHand = currentQtyOnHand + weight;
+
+          // Update the item in the database
+          await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
+        }
+      }
+
       // Delete the filled from the database
       await _db.child('filled').child(filledId).remove();
 
@@ -193,7 +205,6 @@ class FilledProvider with ChangeNotifier {
       throw Exception('Failed to delete filled and ledger entries: $e');
     }
   }
-
 
 
   // **Updated Method to Handle Customer Ledger**

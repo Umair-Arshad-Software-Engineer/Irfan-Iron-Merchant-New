@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:iron_project_new/items/stockreportpage.dart';
 import 'package:provider/provider.dart';
 import '../Provider/lanprovider.dart';
+import '../dashboard.dart';
 import 'AddItems.dart';
 import 'editphysicalqty.dart';
 import 'package:pdf/pdf.dart';
@@ -165,16 +166,24 @@ class _ItemsListPageState extends State<ItemsListPage> {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4, // Ensures multi-page support
+        pageFormat: PdfPageFormat.a4, // Set page format to A4
+        margin: pw.EdgeInsets.all(20), // Add margins to the page
         build: (pw.Context context) {
           return [
-            pw.Text(
-              'Items List',
-              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+            // Header Section
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Image(image, width: 100, height: 100), // Logo
+                pw.Text(
+                  'Items List',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                ),
+              ],
             ),
             pw.SizedBox(height: 10),
 
-            // Table spanning multiple pages
+            // Table Section
             pw.TableHelper.fromTextArray(
               border: pw.TableBorder.all(width: 1, color: PdfColors.black),
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -190,26 +199,28 @@ class _ItemsListPageState extends State<ItemsListPage> {
                 ];
               }).toList(),
             ),
+
             // Footer Section
-            pw.Spacer(), // Push footer to the bottom of the pages
+            pw.SizedBox(height: 20), // Add space before the footer
+            pw.Spacer(),
             pw.Divider(),
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Image(footerLogo, width: 20, height: 20), // Footer logo
                 pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
-                    children: [
-                      pw.Text(
-                        'Dev Valley Software House',
-                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                      ),
-                      pw.Text(
-                        'Contact: 0303-4889663',
-                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                      ),
-                    ]
-                )
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      'Dev Valley Software House',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      'Contact: 0303-4889663',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ],
+                ),
               ],
             ),
           ];
@@ -222,6 +233,7 @@ class _ItemsListPageState extends State<ItemsListPage> {
       return pdf.save();
     });
   }
+
   void _searchItems() {
     String query = _searchController.text.toLowerCase();
     setState(() {
@@ -240,11 +252,11 @@ class _ItemsListPageState extends State<ItemsListPage> {
     return Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          // leading: IconButton(onPressed: (){
-          //   Navigator.push(context, MaterialPageRoute(builder: (context)=>Dashboard()));
-          // }, icon: Icon(Icons.arrow_back)),
+          leading: IconButton(onPressed: (){
+            Navigator.push(context, MaterialPageRoute(builder: (context)=>Dashboard()));
+          }, icon: Icon(Icons.arrow_back)),
           title: Text(
-            languageProvider.isEnglish ? 'Items List:' : 'ٹوٹل آئٹم',
+            languageProvider.isEnglish ? 'Items List' : 'ٹوٹل آئٹم',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
 
 
