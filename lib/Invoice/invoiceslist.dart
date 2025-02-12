@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -233,8 +232,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                 ? Text(languageProvider.isEnglish
                 ? 'No payments found'
                 : 'کوئی ادائیگی نہیں ملی')
-                : // Update the payment history builder in _showPaymentDetails
-            ListView.builder(
+                : ListView.builder(
               shrinkWrap: true,
               itemCount: payments.length,
               itemBuilder: (context, index) {
@@ -287,15 +285,43 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                                       : 'مکمل تصویر دیکھیں',
                                   style: TextStyle(fontSize: 12),
                                 ),
-                              )
+                              ),
                             ],
-                          )
+                          ),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // IconButton(
+                        //   icon: Icon(Icons.edit),
+                        //   onPressed: () => _showEditPaymentDialog(
+                        //     context,
+                        //     invoice['id'],
+                        //     payment['key'], // Ensure the payment key is passed
+                        //     payment['method'],
+                        //     payment['amount'],
+                        //     payment['description'],
+                        //     imageBytes,
+                        //     _pickImage, // Pass the _pickImage function
+                        //   ),
+                        // ),
+                        IconButton(
+                          icon: Icon(Icons.delete),
+                          onPressed: () => _showDeletePaymentConfirmationDialog(
+                            context,
+                            invoice['id'],
+                            payment['key'], // Ensure the payment key is passed
+                            payment['method'],
+                            payment['amount'],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 );
               },
-            )
+            ),
           ),
           actions: [
             TextButton(
@@ -310,8 +336,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
         SnackBar(content: Text('Error loading payments: ${e.toString()}')),
       );
     }
-  }
-  // Print invoices
+  }  // Print invoices
   Future<void> _printInvoices() async {
     final pdf = pw.Document();
     final headers = ['Invoice Number', 'Customer Name', 'Date', 'Grand Total', 'Remaining Amount'];
@@ -391,7 +416,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       onLayout: (PdfPageFormat format) async => pdf.save(),
     );
   }
-
   // Create text image for PDF
   Future<pw.MemoryImage> _createTextImage(String text) async {
     const double scaleFactor = 1.5;
@@ -433,10 +457,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
     return pw.MemoryImage(buffer);
   }
-
-
-
-
   Future<Uint8List?> _pickImage() async {
     Uint8List? imageBytes;
 
@@ -623,6 +643,143 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   }
 }
 
+Future<void> _showDeletePaymentConfirmationDialog(
+    BuildContext context,
+    String invoiceId,
+    String paymentKey,
+    String paymentMethod,
+    double paymentAmount,
+    ) async {
+  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
+        content: Text(languageProvider.isEnglish
+            ? 'Are you sure you want to delete this payment?'
+            : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await Provider.of<InvoiceProvider>(context, listen: false).deletePaymentEntry(
+                  context: context, // Pass the context here
+                  invoiceId: invoiceId,
+                  paymentKey: paymentKey,
+                  paymentMethod: paymentMethod,
+                  paymentAmount: paymentAmount,
+                );
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Payment deleted successfully.')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+                );
+              }
+            },
+            child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+
+Future<void> _showEditPaymentDialog(
+    BuildContext context,
+    String invoiceId,
+    String paymentKey,
+    String paymentMethod,
+    double oldPaymentAmount,
+    String oldDescription,
+    Uint8List? oldImageBytes,
+    Future<Uint8List?> Function() pickImage, // Add this parameter
+    ) async {
+  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  final TextEditingController _amountController = TextEditingController(text: oldPaymentAmount.toString());
+  final TextEditingController _descriptionController = TextEditingController(text: oldDescription);
+  Uint8List? _imageBytes = oldImageBytes;
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
+                ),
+              ),
+              TextField(
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Uint8List? imageBytes = await pickImage(); // Use the passed function
+                  if (imageBytes != null) {
+                    _imageBytes = imageBytes;
+                  }
+                },
+                child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newAmount = double.tryParse(_amountController.text) ?? 0.0;
+              final newDescription = _descriptionController.text;
+
+              try {
+                await Provider.of<InvoiceProvider>(context, listen: false).editPaymentEntry(
+                  invoiceId: invoiceId,
+                  paymentKey: paymentKey,
+                  paymentMethod: paymentMethod,
+                  oldPaymentAmount: oldPaymentAmount,
+                  newPaymentAmount: newAmount,
+                  newDescription: newDescription,
+                  newImageBytes: _imageBytes,
+                );
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Payment updated successfully.')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to update payment: ${e.toString()}')),
+                );
+              }
+            },
+            child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
+          ),
+        ],
+      );
+    },
+  );
+}
 
 
 class InvoiceList extends StatelessWidget {

@@ -258,20 +258,20 @@ class InvoiceProvider with ChangeNotifier {
     }).toList();
   }
 
-  // Helper function declared at the top
+
   double _parseToDouble(dynamic value) {
-    if (value == null) {
-      return 0.0; // Default to 0.0 if null
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
     }
-
-    // Attempt to parse the value as a double
-    final parsedValue = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? 0.0;
-    return parsedValue;
+    return 0.0;
   }
-
-
-
-
 
   Future<void> payInvoiceWithSeparateMethod(
       BuildContext context,
@@ -345,16 +345,25 @@ class InvoiceProvider with ChangeNotifier {
       }
 
       // Save the payment data in the appropriate child node based on the payment method
+      DatabaseReference paymentRef;
       if (paymentMethod == 'Cash') {
         updatedCashPaid += paymentAmount;
-        await _db.child('invoices').child(invoiceId).child('cashPayments').push().set(paymentData);
+        paymentRef = _db.child('invoices').child(invoiceId).child('cashPayments').push();
       } else if (paymentMethod == 'Online') {
         updatedOnlinePaid += paymentAmount;
-        await _db.child('invoices').child(invoiceId).child('onlinePayments').push().set(paymentData);
+        paymentRef = _db.child('invoices').child(invoiceId).child('onlinePayments').push();
       } else if (paymentMethod == 'Check') {
         updatedCheckPaid += paymentAmount;
-        await _db.child('invoices').child(invoiceId).child('checkPayments').push().set(paymentData);
+        paymentRef = _db.child('invoices').child(invoiceId).child('checkPayments').push();
+      } else {
+        throw Exception("Invalid payment method.");
       }
+
+      // Add the payment key to the payment data
+      paymentData['key'] = paymentRef.key;
+
+      // Save the payment data
+      await paymentRef.set(paymentData);
 
       // Retrieve and parse the current debit amount
       final currentDebit = _parseToDouble(invoice['debitAmount']);
@@ -402,22 +411,22 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-
-  // Add to InvoiceProvider
   Future<List<Map<String, dynamic>>> getInvoicePayments(String invoiceId) async {
     try {
       List<Map<String, dynamic>> payments = [];
       final invoiceRef = _db.child('invoices').child(invoiceId);
 
-      // Helper function to fetch payments
       Future<void> fetchPayments(String method) async {
         DataSnapshot snapshot = await invoiceRef.child('${method}Payments').get();
         if (snapshot.exists) {
           Map<dynamic, dynamic> methodPayments = snapshot.value as Map<dynamic, dynamic>;
           methodPayments.forEach((key, value) {
+            final paymentData = Map<String, dynamic>.from(value);
+            // Convert 'amount' to double explicitly
+            paymentData['amount'] = (paymentData['amount'] as num).toDouble();
             payments.add({
               'method': method,
-              ...Map<String, dynamic>.from(value),
+              ...paymentData,
               'date': DateTime.parse(value['date']),
             });
           });
@@ -428,12 +437,266 @@ class InvoiceProvider with ChangeNotifier {
       await fetchPayments('online');
       await fetchPayments('check');
 
-      // Sort by date descending
       payments.sort((a, b) => b['date'].compareTo(a['date']));
-
       return payments;
     } catch (e) {
       throw Exception('Failed to fetch payments: $e');
+    }
+  }
+
+
+  // Future<void> deletePaymentEntry({
+  //   required BuildContext context,
+  //   required String invoiceId,
+  //   required String paymentKey,
+  //   required String paymentMethod,
+  //   required double paymentAmount,
+  // }) async {
+  //   try {
+  //     final invoiceRef = _db.child('invoices').child(invoiceId);
+  //
+  //     // Step 1: Remove the payment entry from the invoice
+  //     await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+  //
+  //     // Step 2: Fetch the invoice data
+  //     final invoiceSnapshot = await invoiceRef.get();
+  //     if (!invoiceSnapshot.exists) {
+  //       throw Exception("Invoice not found.");
+  //     }
+  //
+  //     final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
+  //     final customerId = invoice['customerId'] as String;
+  //     final invoiceNumber = invoice['invoiceNumber'] as String;
+  //
+  //     // Step 3: Update the payment method amount and debitAmount in the invoice
+  //     double currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
+  //     double currentOnlinePaid = _parseToDouble(invoice['onlinePaidAmount']);
+  //     double currentCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
+  //     double currentDebit = _parseToDouble(invoice['debitAmount']);
+  //
+  //     // Deduct the payment amount from the respective payment method
+  //     switch (paymentMethod.toLowerCase()) {
+  //       case 'cash':
+  //         currentCashPaid -= paymentAmount;
+  //         break;
+  //       case 'online':
+  //         currentOnlinePaid -= paymentAmount;
+  //         break;
+  //       case 'check':
+  //         currentCheckPaid -= paymentAmount;
+  //         break;
+  //       default:
+  //         throw Exception("Invalid payment method.");
+  //     }
+  //
+  //     // Deduct the payment amount from the debitAmount
+  //     final updatedDebit = currentDebit - paymentAmount;
+  //
+  //     // Update the invoice with the new payment method amounts and debitAmount
+  //     await invoiceRef.update({
+  //       'cashPaidAmount': currentCashPaid,
+  //       'onlinePaidAmount': currentOnlinePaid,
+  //       'checkPaidAmount': currentCheckPaid,
+  //       'debitAmount': updatedDebit,
+  //     });
+  //
+  //     // Step 4: Delete the corresponding ledger entry
+  //     final customerLedgerRef = _db.child('ledger').child(customerId);
+  //
+  //     // Find the ledger entry associated with this payment
+  //     final ledgerSnapshot = await customerLedgerRef
+  //         .orderByChild('invoiceNumber')
+  //         .equalTo(invoiceNumber)
+  //         .get();
+  //
+  //     if (ledgerSnapshot.exists) {
+  //       final ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>;
+  //       for (var entryKey in ledgerData.keys) {
+  //         final entry = Map<String, dynamic>.from(ledgerData[entryKey]);
+  //         // Ensure debitAmount is parsed as double
+  //         final entryDebit = _parseToDouble(entry['debitAmount']);
+  //         if (entryDebit == paymentAmount && entry['invoiceNumber'] == invoiceNumber) {
+  //           await customerLedgerRef.child(entryKey).remove();
+  //           break;
+  //         }
+  //       }
+  //     }
+  //
+  //     // Step 5: Refresh the invoices list
+  //     await fetchInvoices();
+  //
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Payment deleted successfully.')),
+  //     );
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+  //     );
+  //     throw Exception('Failed to delete payment entry: $e');
+  //   }
+  // }
+
+  Future<void> deletePaymentEntry({
+    required BuildContext context,
+    required String invoiceId,
+    required String paymentKey,
+    required String paymentMethod,
+    required double paymentAmount,
+  }) async {
+    try {
+      final invoiceRef = _db.child('invoices').child(invoiceId);
+
+      // Step 1: Remove the payment entry from the invoice
+      await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+
+      // Step 2: Fetch the invoice data
+      final invoiceSnapshot = await invoiceRef.get();
+      if (!invoiceSnapshot.exists) {
+        throw Exception("Invoice not found.");
+      }
+
+      final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
+      final customerId = invoice['customerId'] as String;
+      final invoiceNumber = invoice['invoiceNumber'] as String;
+
+      // Step 3: Update the payment method amount and debitAmount in the invoice
+      double currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
+      double currentOnlinePaid = _parseToDouble(invoice['onlinePaidAmount']);
+      double currentCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
+      double currentDebit = _parseToDouble(invoice['debitAmount']);
+
+      // Deduct the payment amount from the respective payment method
+      switch (paymentMethod.toLowerCase()) {
+        case 'cash':
+          currentCashPaid -= paymentAmount;
+          break;
+        case 'online':
+          currentOnlinePaid -= paymentAmount;
+          break;
+        case 'check':
+          currentCheckPaid -= paymentAmount;
+          break;
+        default:
+          throw Exception("Invalid payment method.");
+      }
+
+      // Deduct the payment amount from the debitAmount
+      final updatedDebit = currentDebit - paymentAmount;
+
+      // Update the invoice with the new payment method amounts and debitAmount
+      await invoiceRef.update({
+        'cashPaidAmount': currentCashPaid,
+        'onlinePaidAmount': currentOnlinePaid,
+        'checkPaidAmount': currentCheckPaid,
+        'debitAmount': updatedDebit,
+      });
+
+      // Step 4: Fetch the latest ledger entry for the customer
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+      final ledgerSnapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
+
+      if (ledgerSnapshot.exists) {
+        final ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>;
+        final latestEntryKey = ledgerData.keys.first;
+        final latestEntry = Map<String, dynamic>.from(ledgerData[latestEntryKey]);
+
+        // Deduct the payment amount from the remainingBalance in the latest ledger entry
+        double currentRemainingBalance = _parseToDouble(latestEntry['remainingBalance']);
+        double updatedRemainingBalance = currentRemainingBalance + paymentAmount; // Add back the payment amount
+
+        // Update the latest ledger entry with the new remainingBalance
+        await customerLedgerRef.child(latestEntryKey).update({
+          'remainingBalance': updatedRemainingBalance,
+        });
+      }
+
+      // Step 5: Delete the corresponding ledger entry for the payment
+      final paymentLedgerSnapshot = await customerLedgerRef
+          .orderByChild('invoiceNumber')
+          .equalTo(invoiceNumber)
+          .get();
+
+      if (paymentLedgerSnapshot.exists) {
+        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
+        for (var entryKey in paymentLedgerData.keys) {
+          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
+          final entryDebit = _parseToDouble(entry['debitAmount']);
+          if (entryDebit == paymentAmount && entry['invoiceNumber'] == invoiceNumber) {
+            await customerLedgerRef.child(entryKey).remove();
+            break;
+          }
+        }
+      }
+
+      // Step 6: Refresh the invoices list
+      await fetchInvoices();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment deleted successfully.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+      );
+      throw Exception('Failed to delete payment entry: $e');
+    }
+  }
+
+  Future<void> editPaymentEntry({
+    required String invoiceId,
+    required String paymentKey,
+    required String paymentMethod,
+    required double oldPaymentAmount,
+    required double newPaymentAmount,
+    required String newDescription,
+    required Uint8List? newImageBytes,
+  }) async {
+    try {
+      final invoiceRef = _db.child('invoices').child(invoiceId);
+
+      // Step 1: Update the payment entry in the invoice
+      final updatedPaymentData = {
+        'amount': newPaymentAmount,
+        'date': DateTime.now().toIso8601String(),
+        'paymentMethod': paymentMethod,
+        'description': newDescription,
+      };
+
+      if (newImageBytes != null) {
+        updatedPaymentData['image'] = base64Encode(newImageBytes);
+      }
+
+      await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).update(updatedPaymentData);
+
+      // Step 2: Update the debitAmount in the invoice
+      final invoiceSnapshot = await invoiceRef.get();
+      if (invoiceSnapshot.exists) {
+        final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
+        final currentDebit = _parseToDouble(invoice['debitAmount']);
+        final updatedDebit = currentDebit - oldPaymentAmount + newPaymentAmount;
+
+        await invoiceRef.update({
+          'debitAmount': updatedDebit,
+        });
+
+        // Step 3: Update the customer ledger
+        final customerId = invoice['customerId'];
+        final invoiceNumber = invoice['invoiceNumber'];
+        final grandTotal = _parseToDouble(invoice['grandTotal']);
+
+        await _updateCustomerLedger(
+          customerId,
+          creditAmount: 0.0,
+          debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
+          remainingBalance: grandTotal - updatedDebit,
+          invoiceNumber: invoiceNumber,
+        );
+      }
+
+      // Refresh the invoices list
+      await fetchInvoices();
+    } catch (e) {
+      throw Exception('Failed to edit payment entry: $e');
     }
   }
 }
