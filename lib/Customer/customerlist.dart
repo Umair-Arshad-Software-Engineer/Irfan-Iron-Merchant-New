@@ -22,18 +22,32 @@ class _CustomerListState extends State<CustomerList> {
     super.initState();
     _loadCustomerBalances();
   }
-  // Fetch balances for each customersfgfgf
   Future<void> _loadCustomerBalances() async {
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     final customers = customerProvider.customers;
 
-    for (var customer in customers) {
-      final balance = await _getTotalRemainingBalance(customer.id);
-      setState(() {
-        _customerBalances[customer.id] = balance;
-      });
+    // Fetch all balances in parallel
+    List<Future<double>> balanceFutures = customers.map((customer) => _getTotalRemainingBalance(customer.id)).toList();
+    List<double> balances = await Future.wait(balanceFutures);
+
+    setState(() {
+      for (int i = 0; i < customers.length; i++) {
+        _customerBalances[customers[i].id] = balances[i];
+      }
+    });
+  }
+
+  Future<double> _getTotalRemainingBalance(String customerId) async {
+    try {
+      final invoiceBalance = await _getRemainingInvoiceBalance(customerId);
+      final filledBalance = await _getRemainingFillesBalance(customerId);
+      return invoiceBalance + filledBalance;
+    } catch (e) {
+      print("Error fetching total remaining balance: $e");
+      return 0.0;
     }
   }
+
   Future<double> _getRemainingInvoiceBalance(String customerId) async {
     try {
       final customerLedgerRef = _db.child('ledger').child(customerId);
@@ -41,32 +55,26 @@ class _CustomerListState extends State<CustomerList> {
 
       if (snapshot.snapshot.exists) {
         final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-        // print('Ledger Entries: $ledgerEntries');  // Debugging line
-
         final lastEntryKey = ledgerEntries.keys.first;
         final lastEntry = ledgerEntries[lastEntryKey];
 
         if (lastEntry != null && lastEntry is Map) {
           final remainingBalanceValue = lastEntry['remainingBalance'];
-          // print('Remaining Balance Value: $remainingBalanceValue');  // Debugging line
-
           double remainingBalance = 0.0;
           if (remainingBalanceValue is int) {
             remainingBalance = remainingBalanceValue.toDouble();
           } else if (remainingBalanceValue is double) {
             remainingBalance = remainingBalanceValue;
           }
-
           return remainingBalance;
         }
       }
-
-      return 0.0; // If no data is found, return 0.0
+      return 0.0;
     } catch (e) {
-      // print("Error fetching remaining balance: $e");
-      return 0.0; // Return 0 if there's an error
+      return 0.0;
     }
   }
+
   Future<double> _getRemainingFillesBalance(String customerId) async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
@@ -74,45 +82,23 @@ class _CustomerListState extends State<CustomerList> {
 
       if (snapshot.snapshot.exists) {
         final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-        // print('Ledger Entries: $ledgerEntries');  // Debugging line
-
         final lastEntryKey = ledgerEntries.keys.first;
         final lastEntry = ledgerEntries[lastEntryKey];
 
         if (lastEntry != null && lastEntry is Map) {
           final remainingBalanceValue = lastEntry['remainingBalance'];
-          // print('Remaining Balance Value: $remainingBalanceValue');  // Debugging line
-
           double remainingBalance = 0.0;
           if (remainingBalanceValue is int) {
             remainingBalance = remainingBalanceValue.toDouble();
           } else if (remainingBalanceValue is double) {
             remainingBalance = remainingBalanceValue;
           }
-
           return remainingBalance;
         }
       }
-
-      return 0.0; // If no data is found, return 0.0
+      return 0.0;
     } catch (e) {
-      // print("Error fetching remaining balance: $e");
-      return 0.0; // Return 0 if there's an error
-    }
-  }
-  Future<double> _getTotalRemainingBalance(String customerId) async {
-    try {
-      // Get the remaining invoice balance
-      final invoiceBalance = await _getRemainingInvoiceBalance(customerId);
-
-      // Get the filled remaining balance
-      final filledBalance = await _getRemainingFillesBalance(customerId);
-
-      // Return the sum of both balances
-      return invoiceBalance + filledBalance;
-    } catch (e) {
-      print("Error fetching total remaining balance: $e");
-      return 0.0; // Return 0 if there's an error
+      return 0.0;
     }
   }
   @override
@@ -239,25 +225,23 @@ class _CustomerListState extends State<CustomerList> {
                                     DataCell(Text(customer.address)),
                                     DataCell(Text(customer.phone)),
                                     DataCell(
-                                        FutureBuilder<double>(
-                                          future: _getTotalRemainingBalance(customer.id),
-                                          builder: (context, snapshot) {
-                                            if (snapshot.connectionState == ConnectionState.active) {
-                                              return const Text('...');
-                                            }
-                                            if (snapshot.hasError) {
-                                              return const Text('Error');
-                                            }
-                                            if (snapshot.data == null) {
-                                              return const Text('Balance: 0.00', style: TextStyle(color: Colors.teal)); // Handle null
-                                            }
-                                            return Text(
-                                              'Balance: ${snapshot.data!.toStringAsFixed(2)}',
-                                              style: const TextStyle(color: Colors.teal),
-                                            );
-                                          },
-                                        )
-
+                                      FutureBuilder<double>(
+                                        future: _getTotalRemainingBalance(customer.id),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.connectionState == ConnectionState.active ||
+                                              snapshot.connectionState == ConnectionState.active) {
+                                            return const Text('Balance: ...', style: TextStyle(color: Colors.teal));
+                                          }
+                                          if (snapshot.hasError) {
+                                            return const Text('Balance: Error', style: TextStyle(color: Colors.red));
+                                          }
+                                          final balance = snapshot.data ?? 0.0; // Provide a default value
+                                          return Text(
+                                            'Balance: ${balance.toStringAsFixed(2)}',
+                                            style: const TextStyle(color: Colors.teal),
+                                          );
+                                        },
+                                      ),
                                     ),
                                     DataCell(Row(
                                       children: [
@@ -299,15 +283,16 @@ class _CustomerListState extends State<CustomerList> {
                                       FutureBuilder<double>(
                                         future: _getTotalRemainingBalance(customer.id),
                                         builder: (context, snapshot) {
-                                          if (snapshot.connectionState ==
-                                              ConnectionState.active) {
-                                            return const Text('Balance: ...');
+                                          if (snapshot.connectionState == ConnectionState.active ||
+                                              snapshot.connectionState == ConnectionState.active) {
+                                            return const Text('Balance: ...', style: TextStyle(color: Colors.teal));
                                           }
                                           if (snapshot.hasError) {
-                                            return const Text('Balance: Error');
+                                            return const Text('Balance: Error', style: TextStyle(color: Colors.red));
                                           }
+                                          final balance = snapshot.data ?? 0.0; // Provide a default value
                                           return Text(
-                                            'Balance: ${snapshot.data!.toStringAsFixed(2)}',
+                                            'Balance: ${balance.toStringAsFixed(2)}',
                                             style: const TextStyle(color: Colors.teal),
                                           );
                                         },
