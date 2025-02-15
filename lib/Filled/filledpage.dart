@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iron_project_new/Provider/filled%20provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import '../Models/itemModel.dart';
 import '../Provider/customerprovider.dart';
 import '../Provider/lanprovider.dart';
@@ -89,7 +93,184 @@ class _filledpageState extends State<filledpage> {
     return subtotal - discountAmount;
   }
 
-  Future<void> _generateAndPrintPDF(String filledNumber) async {
+  // Future<void> _generateAndPrintPDF(String filledNumber) async {
+  //   final pdf = pw.Document();
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  //   final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
+  //
+  //   // Get current date and time
+  //   final DateTime now = DateTime.now();
+  //   final String formattedDate = '${now.day}/${now.month}/${now.year}';
+  //   final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+  //
+  //   // Get the remaining balance from the ledger
+  //   double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+  //
+  //   // Load the image asset for the logo
+  //   final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+  //   final buffer = bytes.buffer.asUint8List();
+  //   final image = pw.MemoryImage(buffer);
+  //
+  //   // Load the footer logo if different
+  //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+  //   final footerBuffer = footerBytes.buffer.asUint8List();
+  //   final footerLogo = pw.MemoryImage(footerBuffer);
+  //
+  //   // Pre-generate images for all descriptionss
+  //   List<pw.MemoryImage> descriptionImages = [];
+  //   for (var row in _filledRows) {
+  //     final image = await _createTextImage(row['description']);
+  //     descriptionImages.add(image);
+  //   }
+  //   final customerDetailsImage = await _createTextImage(
+  //     'Customer Name: ${selectedCustomer.name}\n'
+  //         'Customer Address: ${selectedCustomer.address}',
+  //   );
+  //
+  //
+  //   pdf.addPage(
+  //     pw.Page(
+  //       pageFormat: PdfPageFormat.a5,
+  //       build: (context) {
+  //         return pw.Padding(
+  //           padding: const pw.EdgeInsets.symmetric(horizontal: 0, vertical: 2),  // Reduced side marginss
+  //           child: pw.Column(
+  //             crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //             children: [
+  //               // Company Logo and Filled Header
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //                 children: [
+  //                   pw.Image(image, width: 100, height: 100), // Adjust width and height as needed
+  //                   pw.Text(
+  //                     'Filled',
+  //                     style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+  //                   ),
+  //                 ],
+  //               ),
+  //               pw.Divider(),
+  //               // Customer Information
+  //               pw.Image(customerDetailsImage, width: 300,dpi: 1000), // Adjust width as neededs
+  //               // pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 14)),
+  //               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 14)),
+  //               // pw.Text('Customer Address ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 14)),
+  //               pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 8)),
+  //               pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 8)),
+  //               pw.Text('Filled Id: $_filledId', style: const pw.TextStyle(fontSize: 14)),
+  //
+  //               pw.SizedBox(height: 10),
+  //
+  //               // Filled Table with Urdu text converted to image
+  //               pw.Table.fromTextArray(
+  //                 headers: [
+  //                   pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
+  //                   // pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
+  //                   pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+  //                   pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
+  //                   pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+  //                 ],
+  //                 data: _filledRows.asMap().map((index, row) {
+  //                   return MapEntry(
+  //                     index,
+  //                     [
+  //                       // Use the pre-generated image for the description field
+  //                       pw.Image(descriptionImages[index]),
+  //                       // pw.Text(row['weight']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 8)),
+  //                       // pw.Text(row['qty']?.toStringAsFixed(0) ?? '0', style: const pw.TextStyle(fontSize: 12)),
+  //                       // pw.Text(row['rate']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 12)),
+  //                       // pw.Text(row['total']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 12)),
+  //                       pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+  //                       pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 12)),
+  //                       pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+  //                       pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+  //
+  //                     ],
+  //                   );
+  //                 }).values.toList(),
+  //               ),
+  //               pw.SizedBox(height: 10),
+  //
+  //               // Totals Section
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //                 children: [
+  //                   pw.Text('Sub Total:'),
+  //                   pw.Text(_calculateSubtotal().toStringAsFixed(2)),
+  //                 ],
+  //               ),
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //                 children: [
+  //                   pw.Text('Discount:'),
+  //                   pw.Text((_discount ?? 0.0).toStringAsFixed(2)),
+  //
+  //                 ],
+  //               ),
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //                 children: [
+  //                   pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+  //                   pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+  //                 ],
+  //               ),
+  //               pw.SizedBox(height: 20),
+  //
+  //               // Footer Section (Remaining Balance)
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //                 children: [
+  //                   pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 14)),
+  //                   pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+  //                 ],
+  //               ),
+  //               pw.SizedBox(height: 30),
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.end,
+  //                 children: [
+  //                   pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+  //                 ],
+  //               ),
+  //               // Footer Section
+  //               pw.Spacer(), // Push footer to the bottom of the page
+  //               pw.Divider(),
+  //               pw.Row(
+  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //                 children: [
+  //                   pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+  //                   pw.Column(
+  //                       crossAxisAlignment: pw.CrossAxisAlignment.center,
+  //                       children: [
+  //                         pw.Text(
+  //                           'Dev Valley Software House',
+  //                           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+  //                         ),
+  //                         pw.Text(
+  //                           'Contact: 0303-4889663',
+  //                           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+  //                         ),
+  //                       ]
+  //                   )
+  //                 ],
+  //               ),
+  //             ],
+  //           ),
+  //         );
+  //       },
+  //     ),
+  //   );
+  //
+  //   try {
+  //     await Printing.layoutPdf(
+  //       onLayout: (format) async {
+  //         return pdf.save();
+  //       },
+  //     );
+  //   } catch (e) {
+  //     print("Error printing: $e");
+  //   }
+  // }
+  Future<Uint8List> _generatePDFBytes(String filledNumber) async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
@@ -113,160 +294,183 @@ class _filledpageState extends State<filledpage> {
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
 
-    // Pre-generate images for all descriptionss
+    // Pre-generate images for all descriptions
     List<pw.MemoryImage> descriptionImages = [];
     for (var row in _filledRows) {
       final image = await _createTextImage(row['description']);
       descriptionImages.add(image);
     }
+
+    // Pre-generate images for all item names
+    List<pw.MemoryImage> itemnameImages = [];
+    for (var row in _filledRows) {
+      final image = await _createTextImage(row['itemName']);
+      itemnameImages.add(image);
+    }
+
+    // Generate customer details as an image
     final customerDetailsImage = await _createTextImage(
       'Customer Name: ${selectedCustomer.name}\n'
           'Customer Address: ${selectedCustomer.address}',
     );
 
-
+    // Add a page with A5 size
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a5,
+        pageFormat: PdfPageFormat.a5, // Set page size to A5
+        margin: const pw.EdgeInsets.all(10), // Add margins for better spacing
         build: (context) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 0, vertical: 2),  // Reduced side marginss
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                // Company Logo and Filled Header
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Image(image, width: 100, height: 100), // Adjust width and height as needed
-                    pw.Text(
-                      'Filled',
-                      style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                    ),
-                  ],
-                ),
-                pw.Divider(),
-                // Customer Information
-                pw.Image(customerDetailsImage, width: 300,dpi: 1000), // Adjust width as neededs
-                // pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 14)),
-                pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 14)),
-                // pw.Text('Customer Address ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 14)),
-                pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 8)),
-                pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 8)),
-                pw.Text('Filled Id: $_filledId', style: const pw.TextStyle(fontSize: 14)),
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Company Logo and Feilled Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Image(image, width: 80, height: 80), // Adjust logo size
+                  pw.Text(
+                    'Filled',
+                    style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
+              ),
+              pw.Divider(),
 
-                pw.SizedBox(height: 10),
+              // Customer Information
+              pw.Image(customerDetailsImage, width: 250, dpi: 1000), // Adjust width
+              pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
+              pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
+              pw.Text('FilledId: $_filledId', style: const pw.TextStyle(fontSize: 12)),
 
-                // Filled Table with Urdu text converted to image
-                pw.Table.fromTextArray(
-                  headers: [
-                    pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
-                    // pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
-                    pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
-                    pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
-                    pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
-                  ],
-                  data: _filledRows.asMap().map((index, row) {
-                    return MapEntry(
-                      index,
-                      [
-                        // Use the pre-generated image for the description field
-                        pw.Image(descriptionImages[index]),
-                        // pw.Text(row['weight']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 8)),
-                        // pw.Text(row['qty']?.toStringAsFixed(0) ?? '0', style: const pw.TextStyle(fontSize: 12)),
-                        // pw.Text(row['rate']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 12)),
-                        // pw.Text(row['total']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 12)),
-                        pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                        pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 12)),
-                        pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                        pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+              pw.SizedBox(height: 10),
 
-                      ],
-                    );
-                  }).values.toList(),
-                ),
-                pw.SizedBox(height: 10),
+              // Filled Table with Urdu text converted to image
+              pw.Table.fromTextArray(
+                headers: [
+                  pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+                ],
+                data: _filledRows.asMap().map((index, row) {
+                  return MapEntry(
+                    index,
+                    [
+                      pw.Image(itemnameImages[index], dpi: 1000),
+                      pw.Image(descriptionImages[index], dpi: 1000),
+                      pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  );
+                }).values.toList(),
+              ),
+              pw.SizedBox(height: 10),
 
-                // Totals Section
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Sub Total:'),
-                    pw.Text(_calculateSubtotal().toStringAsFixed(2)),
-                  ],
-                ),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Discount:'),
-                    pw.Text((_discount ?? 0.0).toStringAsFixed(2)),
+              // Totals Section
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.SizedBox(height: 20),
 
-                  ],
-                ),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.SizedBox(height: 20),
+              // Footer Section (Remaining Balance)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.SizedBox(height: 30),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
 
-                // Footer Section (Remaining Balance)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 14)),
-                    pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.SizedBox(height: 30),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.end,
-                  children: [
-                    pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                // Footer Section
-                pw.Spacer(), // Push footer to the bottom of the page
-                pw.Divider(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-                    pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.center,
-                        children: [
-                          pw.Text(
-                            'Dev Valley Software House',
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
-                          pw.Text(
-                            'Contact: 0303-4889663',
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
-                        ]
-                    )
-                  ],
-                ),
-              ],
-            ),
+              // Footer Section
+              pw.Spacer(), // Push footer to the bottom of the page
+              pw.Divider(),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Text(
+                        'Dev Valley Software House',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.Text(
+                        'Contact: 0303-4889663',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           );
         },
       ),
     );
+    return pdf.save();
+  }
 
+
+  Future<void> _sharePDFViaWhatsApp(String filledNumber) async {
     try {
-      await Printing.layoutPdf(
-        onLayout: (format) async {
-          return pdf.save();
-        },
+      final bytes = await _generatePDFBytes(filledNumber);
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/filled_$filledNumber.pdf');
+      await file.writeAsBytes(bytes);
+
+      print('PDF file created at: ${file.path}'); // Debug log
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Filled $filledNumber',
       );
+    } catch (e) {
+      print('Error sharing PDF: $e'); // Debug log
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to share PDF: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _generateAndPrintPDF(String filledNumber) async {
+    try {
+      final bytes = await _generatePDFBytes(filledNumber);
+      await Printing.layoutPdf(onLayout: (format) => bytes);
     } catch (e) {
       print("Error printing: $e");
     }
   }
-
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Use default text for empty input
     final String displayText = text.isEmpty ? "N/A" : text;
@@ -518,6 +722,13 @@ class _filledpageState extends State<filledpage> {
             final filledNumber = _filledId ?? generateFilledNumber();
             _generateAndPrintPDF(filledNumber);
           }, icon: Icon(Icons.print, color: Colors.white)),
+          IconButton(
+            onPressed: () async {
+              final filledNumber = _filledId ?? generateFilledNumber();
+              await _sharePDFViaWhatsApp(filledNumber);
+            },
+            icon: const Icon(Icons.share, color: Colors.white),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Text(
@@ -627,7 +838,6 @@ class _filledpageState extends State<filledpage> {
                     languageProvider.isEnglish ? 'Filled Details:' : 'فلڈ کی تفصیلات:',
                     style: TextStyle(color: Colors.teal.shade800, fontSize: 18),
                   ),
-
                   Card(
                     elevation: 5,
                     child: SizedBox(
@@ -738,7 +948,6 @@ class _filledpageState extends State<filledpage> {
                       ),
                     ),
                   ),
-
                   // Add Row Button
                   Center(
                     child: ElevatedButton.icon(
@@ -751,7 +960,6 @@ class _filledpageState extends State<filledpage> {
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                     ),
                   ),
-
                   // Subtotal row
                   const SizedBox(height: 20),
                   Row(
@@ -763,7 +971,8 @@ class _filledpageState extends State<filledpage> {
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.teal.shade800, // Subtotal text color
-                        ),                      ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -1114,7 +1323,7 @@ class _filledpageState extends State<filledpage> {
                               ),
                             );
                           }
-// Update qtyOnHand after saving/updating the invoice
+                          // Update qtyOnHand after saving/updating the filled
                           _updateQtyOnHand(_filledRows);
                           // Navigate to the filled list page
                           Navigator.pushReplacement(

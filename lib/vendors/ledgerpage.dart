@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class VendorLedgerPage extends StatefulWidget {
   final String vendorId;
@@ -153,17 +156,33 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2000),
-      // lastDate: DateTime.now(),
-      lastDate: DateTime(20001)
+      lastDate: DateTime.now(),
     );
 
     if (picked != null) {
       setState(() {
         _selectedDateRange = picked;
-        _filteredLedgerEntries = _ledgerEntries.where((entry) {
+
+        // Include the opening balance if it is before or equal to the selected start date
+        final List<Map<String, dynamic>> filtered = _ledgerEntries.where((entry) {
           final entryDate = DateTime.tryParse(entry['date']) ?? DateTime(1970);
-          return entryDate.isAfter(picked.start) && entryDate.isBefore(picked.end);
+          return entryDate.isAfter(picked.start.subtract(const Duration(days: 1))) &&
+              entryDate.isBefore(picked.end.add(const Duration(days: 1)));
         }).toList();
+
+        // Check if the opening balance is missing and add it if needed
+        final openingBalanceIndex = filtered.indexWhere((e) => e['description'] == 'Opening Balance');
+        if (openingBalanceIndex == -1) {
+          final openingBalanceEntry = _ledgerEntries.firstWhere(
+                (e) => e['description'] == 'Opening Balance',
+            orElse: () => {},
+          );
+          if (openingBalanceEntry.isNotEmpty) {
+            filtered.insert(0, openingBalanceEntry);
+          }
+        }
+
+        _filteredLedgerEntries = filtered;
       });
     }
   }
@@ -188,24 +207,29 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(20),
         build: (pw.Context context) => [
-          pw.Header(
-            level: 0,
-            child: pw.Column(
-              children: [
-                pw.Image(logo, width: 80, height: 80),
-                pw.Text('Alsaeed Sweets & Bakers',
-                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 5),
-                pw.Text('Vendor: ${widget.vendorName}',
-                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                if (_selectedDateRange != null)
-                  pw.Text(
-                    'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '
-                        '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}/${_selectedDateRange!.end.year}',
-                    style: const pw.TextStyle(fontSize: 12),
-                  ),
-              ],
-            ),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Header(
+                level: 0,
+                child: pw.Column(
+                  children: [
+                    pw.Image(logo, width: 80, height: 80),
+                    pw.Text('Alsaeed Sweets & Bakers',
+                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 5),
+                    pw.Text('Vendor: ${widget.vendorName}',
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    if (_selectedDateRange != null)
+                      pw.Text(
+                        'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '
+                            '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}/${_selectedDateRange!.end.year}',
+                        style: const pw.TextStyle(fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+            ]
           ),
 
           pw.Table.fromTextArray(
@@ -265,6 +289,115 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
 
     await Printing.layoutPdf(onLayout: (format) => pdf.save());
   }
+
+  Future<void> _shareLedger() async {
+    final pdf = pw.Document();
+
+    // Load the logo image
+    final logoImage = await rootBundle.load('assets/images/logo.png');
+    final logo = pw.MemoryImage(logoImage.buffer.asUint8List());
+
+    String _getFormattedDate(String dateString) {
+      final DateTime? parsedDate = DateTime.tryParse(dateString);
+      return parsedDate != null
+          ? "${parsedDate.month}/${parsedDate.day}/${parsedDate.year % 100}"
+          : "Unknown Date";
+    }
+
+    // Generate PDF
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) => [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Image(logo, width: 80, height: 80),
+              pw.SizedBox(height: 10),
+              pw.Text(
+                'Alsaeed Sweets & Bakers',
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 5),
+              pw.Text(
+                'Vendor: ${widget.vendorName}',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              if (_selectedDateRange != null)
+                pw.Text(
+                  'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '
+                      '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}/${_selectedDateRange!.end.year}',
+                  style: const pw.TextStyle(fontSize: 12),
+                ),
+              pw.SizedBox(height: 20),
+            ],
+          ),
+
+          pw.Table.fromTextArray(
+            context: context,
+            cellAlignment: pw.Alignment.centerLeft,
+            headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(1.2),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FlexColumnWidth(1.5),
+              3: const pw.FlexColumnWidth(1.5),
+              4: const pw.FlexColumnWidth(1.5),
+            },
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            cellPadding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            rowDecoration: pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey200)),
+            ),
+            headers: [
+              'Date',
+              'Transaction Details',
+              'Credit (Rs)',
+              'Debit (Rs)',
+              'Balance (Rs)',
+            ],
+            data: [
+              ..._filteredLedgerEntries.map((entry) => [
+                entry['description'] == 'Opening Balance'
+                    ? entry['date']
+                    : _getFormattedDate(entry['date']),
+                entry['description'],
+                entry['credit'].toStringAsFixed(2),
+                entry['debit'].toStringAsFixed(2),
+                entry['balance'].toStringAsFixed(2),
+              ]),
+              [
+                'Total',
+                '',
+                _totalCredit.toStringAsFixed(2),
+                _totalDebit.toStringAsFixed(2),
+                _currentBalance.toStringAsFixed(2),
+              ]
+            ],
+          ),
+
+          pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(top: 10),
+            child: pw.Text(
+              'Printed on: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Save PDF to temporary directory
+    final output = await getTemporaryDirectory();
+    final file = File('${output.path}/ledger_${widget.vendorName}.pdf');
+    await file.writeAsBytes(await pdf.save());
+
+    // Share the PDF
+    await Share.shareXFiles([XFile(file.path)], text: 'Vendor Ledger for ${widget.vendorName}');
+  }
+
   String _getFormattedDate(String dateString, bool isOpeningBalance) {
     if (isOpeningBalance) {
       return dateString; // Show formatted `openingBalanceDate`
@@ -277,21 +410,26 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     return "Unknown Date"; // Fallback for invalid date
   }
 
-
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.vendorName} Ledger'),
         backgroundColor: Colors.blueAccent,
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_today,color: Colors.white,),
+            icon: const Icon(Icons.calendar_today, color: Colors.white),
             onPressed: () => _selectDateRange(context),
           ),
           IconButton(
-            icon: const Icon(Icons.print,color: Colors.white,),
+            icon: const Icon(Icons.print, color: Colors.white),
             onPressed: _printLedger,
+          ),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white),
+            onPressed: _shareLedger, // New Share Button
           ),
         ],
       ),
@@ -301,91 +439,269 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
         children: [
           _buildSummaryCards(),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columnSpacing: 100,
-                columns: const [
-                  DataColumn(label: Text('Date')),
-                  DataColumn(label: Text('Description')),
-                  DataColumn(label: Text('Credit (Rs)'), numeric: true),
-                  DataColumn(label: Text('Debit (Rs)'), numeric: true),
-                  DataColumn(label: Text('Balance (Rs)'), numeric: true),
-                ],
-                rows: _filteredLedgerEntries.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final data = entry.value;
-                  final isOpeningBalance = data['description'] == 'Opening Balance';
-                 // Get the formatted date for the row
-                  final dateText = _getFormattedDate(data['date'], isOpeningBalance);
-
-                  return DataRow(
-                    color: MaterialStateProperty.resolveWith<Color?>(
-                          (states) => isOpeningBalance ? Colors.yellow[200] : null, // Highlight Opening Balance row
-                    ),
-                    cells: [
-                      DataCell(Text(dateText, style: isOpeningBalance ? const TextStyle(fontWeight: FontWeight.bold) : null)),
-                      DataCell(Text(data['description'], style: isOpeningBalance ? const TextStyle(fontWeight: FontWeight.bold) : null)),
-                      DataCell(Text(data['credit'].toStringAsFixed(2))),
-                      DataCell(Text(data['debit'].toStringAsFixed(2))),
-                      DataCell(Text(data['balance'].toStringAsFixed(2))),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
+            child: isMobile ? _buildMobileLedgerView() : _buildDesktopLedgerView(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryCards() {
-    return Padding(
+
+  Widget _buildMobileLedgerView() {
+    const double fontSize = 10.0;
+
+    return ListView(
       padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          _buildSummaryCard('Total Credit', _totalCredit, Colors.white),
-          _buildSummaryCard('Total Debit', _totalDebit, Colors.white),
-          _buildSummaryCard(
-            'Current Balance',
-            _currentBalance,
-            _currentBalance >= 0 ? Colors.blue : Colors.white,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard(String title, double value, Color color) {
-    return Expanded(
-      child: Card(
-        color: color.withOpacity(0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
+      children: [
+        // Table header with vertical borders
+        Container(
+          color: Colors.blue[100],
+          padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 4.0),
+          child: Row(
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 18,
-                  color: color,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: const Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize)),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Rs ${value.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: color,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize)),
                 ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: const Text('Credit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize), textAlign: TextAlign.right),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: const Text('Debit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize), textAlign: TextAlign.right),
+                ),
+              ),
+              const Expanded(
+                flex: 2,
+                child: Text('Balance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize), textAlign: TextAlign.right),
               ),
             ],
           ),
         ),
+
+        // Table rows with vertical borders
+        ..._filteredLedgerEntries.map((entry) {
+          final isOpeningBalance = entry['description'] == 'Opening Balance';
+          final dateText = _getFormattedDate(entry['date'], isOpeningBalance);
+
+          return Container(
+            color: isOpeningBalance ? Colors.yellow[100] : Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 4.0),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                    child: Text(dateText, style: TextStyle(fontWeight: isOpeningBalance ? FontWeight.bold : FontWeight.normal, fontSize: fontSize)),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                    child: Text(entry['description'], style: TextStyle(fontWeight: isOpeningBalance ? FontWeight.bold : FontWeight.normal, fontSize: fontSize)),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                    child: Text(entry['credit'].toStringAsFixed(2), textAlign: TextAlign.right, style: const TextStyle(fontSize: fontSize)),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                    child: Text(entry['debit'].toStringAsFixed(2), textAlign: TextAlign.right, style: const TextStyle(fontSize: fontSize)),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(entry['balance'].toStringAsFixed(2), textAlign: TextAlign.right, style: const TextStyle(fontSize: fontSize)),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+
+        // Total row with vertical borders
+        Container(
+          color: Colors.grey[300],
+          padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 4.0),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: const Text('', style: TextStyle(fontSize: fontSize)),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: const Text('Totals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize)),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: Text(_totalCredit.toStringAsFixed(2), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize)),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(right: BorderSide(color: Colors.black, width: 1))),
+                  child: Text(_totalDebit.toStringAsFixed(2), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize)),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(_currentBalance.toStringAsFixed(2), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopLedgerView() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 100,
+        columns: const [
+          DataColumn(label: Text('Date')),
+          DataColumn(label: Text('Description')),
+          DataColumn(label: Text('Credit (Rs)'), numeric: true),
+          DataColumn(label: Text('Debit (Rs)'), numeric: true),
+          DataColumn(label: Text('Balance (Rs)'), numeric: true),
+        ],
+        rows: _filteredLedgerEntries.map((data) {
+          final isOpeningBalance = data['description'] == 'Opening Balance';
+          final dateText = _getFormattedDate(data['date'], isOpeningBalance);
+
+          return DataRow(
+            color: MaterialStateProperty.resolveWith<Color?>(
+                  (states) => isOpeningBalance ? Colors.yellow[200] : null,
+            ),
+            cells: [
+              DataCell(Text(dateText, style: isOpeningBalance ? const TextStyle(fontWeight: FontWeight.bold) : null)),
+              DataCell(Text(data['description'], style: isOpeningBalance ? const TextStyle(fontWeight: FontWeight.bold) : null)),
+              DataCell(Text(data['credit'].toStringAsFixed(2))),
+              DataCell(Text(data['debit'].toStringAsFixed(2))),
+              DataCell(Text(data['balance'].toStringAsFixed(2))),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
+
+
+  Widget _buildSummaryCards() {
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Wrap(
+        spacing: 8.0,
+        runSpacing: 8.0,
+        alignment: WrapAlignment.center,
+        children: [
+          _buildSummaryCard(
+            title: 'Total Credit',
+            value: _totalCredit,
+            color: Colors.green,
+            icon: Icons.arrow_upward,
+            isMobile: isMobile,
+          ),
+          _buildSummaryCard(
+            title: 'Total Debit',
+            value: _totalDebit,
+            color: Colors.red,
+            icon: Icons.arrow_downward,
+            isMobile: isMobile,
+          ),
+          _buildSummaryCard(
+            title: 'Current Balance',
+            value: _currentBalance,
+            color: _currentBalance >= 0 ? Colors.blue : Colors.orange,
+            icon: Icons.account_balance_wallet,
+            isMobile: isMobile,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard({
+    required String title,
+    required double value,
+    required Color color,
+    required IconData icon,
+    required bool isMobile,
+  }) {
+    final double fontSize = isMobile ? 12.0 : 18.0;
+    final double valueSize = isMobile ? 14.0 : 20.0;
+    final double iconSize = isMobile ? 20.0 : 30.0;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      color: color.withOpacity(0.1),
+      child: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: iconSize, color: color),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: fontSize,
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Rs ${value.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: valueSize,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }

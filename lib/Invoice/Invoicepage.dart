@@ -479,6 +479,7 @@
         );
       }
     }
+
     Future<pw.MemoryImage> _createTextImage(String text) async {
       // Use default text for empty input
       final String displayText = text.isEmpty ? "N/A" : text;
