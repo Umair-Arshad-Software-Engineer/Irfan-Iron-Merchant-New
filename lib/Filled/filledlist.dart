@@ -154,43 +154,95 @@ class _filledListpageState extends State<filledListpage> {
 
   Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
     final pdf = pw.Document();
+    // Load the image asset for the logo
+    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    final buffer = bytes.buffer.asUint8List();
+    final image = pw.MemoryImage(buffer);
 
-    // Add a page to the PDF
+    // Load the footer logo if different
+    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    final footerBuffer = footerBytes.buffer.asUint8List();
+    final footerLogo = pw.MemoryImage(footerBuffer);
+    // Generate all description images asynchronously
+    final List<List<dynamic>> tableData = await Future.wait(
+      payments.map((payment) async {
+        final paymentAmount = _parseToDouble(payment['amount']);
+        final paymentDate = _parsePaymentDate(payment['date']);
+        final description = payment['description'] ?? 'N/A';
+
+        // Generate image from description text
+        final descriptionImage = await _createTextImage(description);
+
+        return [
+          payment['method'],
+          'Rs ${paymentAmount.toStringAsFixed(2)}',
+          DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
+          pw.Image(descriptionImage), // Use the generated image
+        ];
+      }),
+    );
+
+    // Add a multi-page layout to handle multiple payments
     pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) => [
+          // Header section
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              // Header for the PDF
-              pw.Header(
-                level: 0, // Header level (0 is the largest)
-                child: pw.Text(
-                  'Payment History',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-              // Table for payment history
-              pw.Table.fromTextArray(
-                headers: ['Method', 'Amount', 'Date', 'Description'],
-                data: payments.map((payment) {
-                  final paymentAmount = _parseToDouble(payment['amount']);
-                  final paymentDate = _parsePaymentDate(payment['date']); // Parse the date correctly
-                  return [
-                    payment['method'],
-                    'Rs $paymentAmount',
-                    DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate), // Format the parsed date
-                    payment['description'] ?? 'N/A',
-                  ];
-                }).toList(),
-                border: pw.TableBorder.all(),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                cellAlignment: pw.Alignment.centerLeft,
-                cellPadding: const pw.EdgeInsets.all(8),
+              pw.Image(image, width: 80, height: 80), // Adjust logo size
+              pw.Text('Payment History',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+
+          // Table with payment history
+          pw.Table.fromTextArray(
+            headers: ['Method', 'Amount', 'Date', 'Description'],
+            data: tableData,
+            border: pw.TableBorder.all(),
+            headerStyle: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 14, // Increased header font size
+            ),
+            cellStyle: pw.TextStyle(
+              fontSize: 12, // Increased cell font size from 10 to 12
+            ),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellPadding: const pw.EdgeInsets.all(6),
+          ),
+
+          pw.SizedBox(height: 20),
+          pw.Divider(),
+          pw.Spacer(),
+          // Footer section
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    'Dev Valley Software House',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(
+                    'Contact: 0303-4889663',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
               ),
             ],
-          );
-        },
+          ),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          ),
+        ],
       ),
     );
 

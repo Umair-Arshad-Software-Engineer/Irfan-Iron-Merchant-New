@@ -319,12 +319,12 @@ class InvoiceProvider with ChangeNotifier {
       final totalPaid = currentCashPaid + currentOnlinePaid;
 
       // Check if the new payment exceeds the remaining balance
-      if (paymentAmount > (grandTotal - totalPaid)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Payment exceeds the remaining invoice balance.")),
-        );
-        throw Exception("Payment exceeds the remaining invoice balance.");
-      }
+      // if (paymentAmount > (grandTotal - totalPaid)) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(content: Text("Payment exceeds the remaining invoice balance.")),
+      //   );
+      //   throw Exception("Payment exceeds the remaining invoice balance.");
+      // }
 
       // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
@@ -369,12 +369,12 @@ class InvoiceProvider with ChangeNotifier {
       final currentDebit = _parseToDouble(invoice['debitAmount']);
 
       // Check if the payment amount exceeds the remaining balance
-      if (paymentAmount > (grandTotal - currentDebit)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Payment exceeds the remaining invoice balance.")),
-        );
-        throw Exception("Payment exceeds the remaining invoice balance.");
-      }
+      // if (paymentAmount > (grandTotal - currentDebit)) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(content: Text("Payment exceeds the remaining invoice balance.")),
+      //   );
+      //   throw Exception("Payment exceeds the remaining invoice balance.");
+      // }
 
       // Update the invoice with the new payment data
       final updatedDebit = currentDebit + paymentAmount;

@@ -304,12 +304,12 @@ class FilledProvider with ChangeNotifier {
       final totalPaid = currentCashPaid + currentOnlinePaid;
 
       // Check if the new payment exceeds the remaining balance
-      if (paymentAmount > (grandTotal - totalPaid)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
-        );
-        throw Exception("Payment exceeds the remaining filled balance.");
-      }
+      // if (paymentAmount > (grandTotal - totalPaid)) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
+      //   );
+      //   throw Exception("Payment exceeds the remaining filled balance.");
+      // }
 
       // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
@@ -354,12 +354,12 @@ class FilledProvider with ChangeNotifier {
       final currentDebit = _parseToDouble(filled['debitAmount']);
 
       // Check if the payment amount exceeds the remaining balance
-      if (paymentAmount > (grandTotal - currentDebit)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
-        );
-        throw Exception("Payment exceeds the remaining filled balance.");
-      }
+      // if (paymentAmount > (grandTotal - currentDebit)) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
+      //   );
+      //   throw Exception("Payment exceeds the remaining filled balance.");
+      // }
 
       // Update the filled with the new payment data
       final updatedDebit = currentDebit + paymentAmount;

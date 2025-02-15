@@ -14,6 +14,7 @@ import 'Invoice/invoiceslist.dart';
 import 'Provider/lanprovider.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
+import 'bankmanagement/addbank.dart';
 import 'items/ItemslistPage.dart';
 import 'items/purchaselistpage.dart';
 
@@ -179,6 +180,16 @@ class Dashboard extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => const ledgerselection(),
                 ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: Text(languageProvider.isEnglish ? 'Bank Management' : 'بینک مینجمنٹ'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) =>  BankManagementPage()),
               );
             },
           ),

@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../Provider/lanprovider.dart';
@@ -8,6 +11,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:ui' as ui; // Keep this import only once
+import 'package:share_plus/share_plus.dart';
 
 class CustomerReportPage extends StatefulWidget {
   final String customerId;
@@ -45,21 +49,41 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
           actions: [
             Consumer<CustomerReportProvider>(
               builder: (context, provider, _) {
-                return IconButton(
-                  icon: Icon(Icons.picture_as_pdf, color: Colors.white),
-                  onPressed: () {
-                    if (provider.isLoading || provider.error.isNotEmpty) return;
+                return Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.picture_as_pdf, color: Colors.white),
+                      onPressed: () {
+                        if (provider.isLoading || provider.error.isNotEmpty) return;
 
-                    final transactions = selectedDateRange == null
-                        ? provider.transactions
-                        : provider.transactions.where((transaction) {
-                      final date = DateTime.parse(transaction['date']);
-                      return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
-                          date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
-                    }).toList();
+                        final transactions = selectedDateRange == null
+                            ? provider.transactions
+                            : provider.transactions.where((transaction) {
+                          final date = DateTime.parse(transaction['date']);
+                          return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
+                              date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
+                        }).toList();
 
-                    _generateAndPrintPDF(provider.report, transactions);
-                  },
+                        _generateAndPrintPDF(provider.report, transactions, false); // Save PDF
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.share, color: Colors.white),
+                      onPressed: () async {
+                        if (provider.isLoading || provider.error.isNotEmpty) return;
+
+                        final transactions = selectedDateRange == null
+                            ? provider.transactions
+                            : provider.transactions.where((transaction) {
+                          final date = DateTime.parse(transaction['date']);
+                          return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
+                              date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
+                        }).toList();
+
+                        await _generateAndPrintPDF(provider.report, transactions, true); // Share PDF
+                      },
+                    ),
+                  ],
                 );
               },
             ),
@@ -141,12 +165,16 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
     return pw.MemoryImage(buffer);  // Return the image as MemoryImage
   }
 
-  Future<void> _generateAndPrintPDF(Map<String, dynamic> report, List<Map<String, dynamic>> transactions) async {
+  Future<void> _generateAndPrintPDF(
+      Map<String, dynamic> report,
+      List<Map<String, dynamic>> transactions,
+      bool shouldShare,
+      ) async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final font = await PdfGoogleFonts.robotoRegular();
 
-    // Calculate total debit, total credit, and balance (balance = credit - debit)
+    // Calculate total debit, total credit, and balance
     double totalDebit = 0.0;
     double totalCredit = 0.0;
 
@@ -155,145 +183,129 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
       totalCredit += transaction['credit'] ?? 0.0;
     }
 
-    // Calculate total balance as credit - debit
     double totalBalance = totalCredit - totalDebit;
-
-    // Get the current date in a formatted string
     String printDate = DateFormat('dd MMM yyyy').format(DateTime.now());
 
-    // Split the transactions into chunks of 20
-    const int itemsPerPage = 20;
-    int pageCount = (transactions.length / itemsPerPage).ceil();
+    // Load images
+    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    final footerBuffer = footerBytes.buffer.asUint8List();
+    final footerLogo = pw.MemoryImage(footerBuffer);
 
-    for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-      final start = pageIndex * itemsPerPage;
-      final end = (start + itemsPerPage > transactions.length) ? transactions.length : start + itemsPerPage;
-      final pageTransactions = transactions.sublist(start, end);
+    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    final buffer = bytes.buffer.asUint8List();
+    final image = pw.MemoryImage(buffer);
 
-      // Load the footer logo if different
-      final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-      final footerBuffer = footerBytes.buffer.asUint8List();
-      final footerLogo = pw.MemoryImage(footerBuffer);
+    final customerDetailsImage = await _createTextImage('Customer Name: ${widget.customerName}');
 
-      // Load the image asset for the logo
-      final ByteData bytes = await rootBundle.load('assets/images/logo.png');
-      final buffer = bytes.buffer.asUint8List();
-      final image = pw.MemoryImage(buffer);
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(image, width: 80, height: 80, dpi: 1000),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Zulfiqar Ahmad',
+                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Contact: 03006316202',
+                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.Text('Customer Ledger for Sarya',
+              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 20),
+          pw.Image(customerDetailsImage, width: 300, dpi: 1000),
+          pw.Text('Phone Number:', style: pw.TextStyle(fontSize: 18)),
+          pw.SizedBox(height: 10),
+          pw.Text('Print Date: $printDate',
+              style: pw.TextStyle(fontSize: 16, color: PdfColors.grey)),
+          pw.SizedBox(height: 20),
+          pw.Text('Transactions:',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
 
+          // Transaction Table
+          pw.Table.fromTextArray(
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            cellStyle: pw.TextStyle(font: font),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+            context: context,
+            data: [
+              ['Date', 'Transaction #', 'T-Type', 'Debit(-)', 'Credit(+)', 'Balance'],
+              ...transactions.map((transaction) {
+                return [
+                  DateFormat('dd MMM yyyy, hh:mm a')
+                      .format(DateTime.parse(transaction['date'])),
+                  transaction['invoiceNumber'] ?? 'N/A',
+                  transaction['credit'] != 0.0
+                      ? 'Invoice'
+                      : (transaction['debit'] != 0.0 ? 'Bill' : '-'),
+                  transaction['debit'] != 0.0
+                      ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}'
+                      : '-',
+                  transaction['credit'] != 0.0
+                      ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}'
+                      : '-',
+                  'Rs ${transaction['balance']?.toStringAsFixed(2)}',
+                ];
+              }).toList(),
+              [
+                'Total', '', '', 'Rs ${totalDebit.toStringAsFixed(2)}',
+                'Rs ${totalCredit.toStringAsFixed(2)}',
+                'Rs ${totalBalance.toStringAsFixed(2)}'
+              ],
+            ],
+          ),
 
-      final customerDetailsImage = await _createTextImage(
-        'Customer Name: ${widget.customerName}',
+          pw.SizedBox(height: 20),
+          pw.Divider(),
+          pw.Spacer(),
+          // Footer
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(footerLogo, width: 30, height: 30),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text('Dev Valley Software House',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Contact: 0303-4889663',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    // Save the PDF to a temporary file
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/customer_report.pdf');
+    await file.writeAsBytes(await pdf.save());
+
+    if (shouldShare) {
+      // Share the PDF via WhatsApp
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Customer Ledger Report for ${widget.customerName}',
+        subject: 'Customer Ledger Report',
       );
-
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                // Logo and Contact Information at the Top
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Image(image, width: 50, height: 50), // Your logo
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          languageProvider.isEnglish ? 'Zulfiqar Ahmad' : 'زولفقار احمد',
-                          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-                        ),
-                        pw.Text(
-                          'Contact: 03006316202',
-                          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 20), // Spacer after the header
-                pw.Text(
-                  languageProvider.isEnglish ? 'Customer Ledger for Sarya' : 'سریا کے لیے کسٹمر لیجر',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 20),
-                pw.Image(customerDetailsImage, width: 300,dpi: 1000), // Adjust width as neededs
-                pw.Text(
-                  '${languageProvider.isEnglish ? 'Phone Number:' : 'فون نمبر:'} ${widget.customerPhone}',
-                  style: pw.TextStyle(fontSize: 18),
-                ),
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  '${languageProvider.isEnglish ? 'Print Date:' : 'پرنٹ کی تاریخ:'} $printDate',
-                  style: pw.TextStyle(fontSize: 16, color: PdfColors.grey),
-                ),
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  languageProvider.isEnglish ? 'Transactions:' : 'لین دین',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.Table.fromTextArray(
-                  context: context,
-                  data: [
-                    [
-                      languageProvider.isEnglish ? 'Date' : 'ڈیٹ',
-                      languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر',
-                      languageProvider.isEnglish ? 'Transaction Type' : 'لین دین کی قسم',
-                      languageProvider.isEnglish ? 'Debit (-)' : '(-) ڈیبٹ',
-                      languageProvider.isEnglish ? 'Credit (+)' : '(+) کریڈٹ',
-                      languageProvider.isEnglish ? 'Balance' : 'رقم',
-                    ],
-                    ...pageTransactions.map((transaction) {
-                      return [
-                        DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(transaction['date'])),
-                        transaction['invoiceNumber'] ?? 'N/A',
-                        transaction['credit'] != 0.0
-                            ? languageProvider.isEnglish ? 'Invoice' : 'انوائس'
-                            : (transaction['debit'] != 0.0 ? (languageProvider.isEnglish ? 'Bill' : 'بل') : '-'),
-                        transaction['debit'] != 0.0 ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}' : '-',
-                        transaction['credit'] != 0.0 ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}' : '-',
-                        'Rs ${transaction['balance']?.toStringAsFixed(2)}',
-                      ];
-                    }).toList(),
-                    // Add totals at the end of the table for each page
-                    [
-                      languageProvider.isEnglish ? 'Total' : 'کل',
-                      '', '',
-                      'Rs ${totalDebit.toStringAsFixed(2)}',
-                      'Rs ${totalCredit.toStringAsFixed(2)}',
-                      'Rs ${totalBalance.toStringAsFixed(2)}'
-                    ],
-                  ],
-                ),
-                pw.Spacer(), // Push footer to the bottom of the page
-                pw.Divider(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Image(footerLogo, width: 30, height: 30), // Footer logo
-                    pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.center,
-                        children: [
-                          pw.Text(
-                            'Dev Valley Software House',
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
-                          pw.Text(
-                            'Contact: 0303-4889663',
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
-                        ]
-                    )
-                  ],
-                ),              ],
-            );
-          },
-        ),
-      );
+    } else {
+      // Print the PDF
+      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
-
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
+
+
 
   Widget _buildCustomerInfo(BuildContext context, LanguageProvider languageProvider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
