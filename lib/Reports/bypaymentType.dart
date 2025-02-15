@@ -128,6 +128,25 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
             });
           }
         }
+
+        // Fetch and process check payments if the selected payment method includes 'check'
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'check') {
+          final checkPayments = invoice['checkPayments'] != null
+              ? Map<String, dynamic>.from(invoice['checkPayments'])
+              : {};
+          for (var payment in checkPayments.values) {
+            reportData.add({
+              'invoiceId': invoiceId,
+              'customerId': invoice['customerId'],
+              'customerName': invoice['customerName'],
+              'paymentType': invoice['paymentType'],
+              'paymentMethod': 'Check',
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': invoice['createdAt'],
+            });
+          }
+        }
       }
 
       // Update the report data with the fetched information
@@ -138,7 +157,6 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to fetch report: $e')));
     }
   }
-
   Future<void> _selectDateRange(BuildContext context) async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -251,95 +269,110 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
   Future<void> _generateAndPrintPDF() async {
     final pdf = pw.Document();
 
+    // Load the logo image
+    final ByteData logoBytes = await rootBundle.load('assets/images/logo.png');
+    final logoBuffer = logoBytes.buffer.asUint8List();
+    final logoImage = pw.MemoryImage(logoBuffer);
 
-// Load the footer logo if different
+    // Load the footer logo
     final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
-    const int rowsPerPage = 20;
-
 
     // Generate the customer name image
     final customerNameImage = await _createTextImage(_selectedCustomerName ?? 'All');
 
-
-    // Split _reportData into chunks of 20 rows
-    for (int i = 0; i < _reportData.length; i += rowsPerPage) {
-      final chunk = _reportData.sublist(i, i + rowsPerPage > _reportData.length ? _reportData.length : i + rowsPerPage);
-
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) {
-            return pw.Column(
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        header: (pw.Context context) {
+          return pw.Center(
+            child: pw.Column(
               children: [
+                // Add the logo at the top
+                pw.Image(logoImage, width: 100, height: 100, dpi: 1000), // Adjust width and height as needed
+                pw.SizedBox(height: 20), // Add some spacing
+                // Report title
                 pw.Text(
                   'Payment Type Report For Sarya',
                   style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.SizedBox(height: 20),
-                // pw.Text(
-                //   'Customer: ${_selectedCustomerName ?? 'All'}',
-                // ),
-                // Insert the customer name image
+                // Customer name image
                 pw.Image(customerNameImage),
-                // pw.Text('Phone: ${widget.customerPhone ?? 'All'}'),
                 pw.SizedBox(height: 20),
-                pw.Table.fromTextArray(
-                  context: context,
-                  data: [
-                    [
-                      'Customer',
-                      'Payment Type',
-                      'Payment Method',
-                      'Amount',
-                      'Date',
-                    ],
-                    // Add data for the current chunk of 20 rows
-                    ...chunk.map((invoice) {
-                      return [
-                        pw.Image(customerNameImage, width: 50, height: 20), // Add the customer name image to the table
-
-                        // invoice['customerName'] ?? 'N/A',
-                        invoice['paymentType'] ?? 'N/A',
-                        invoice['paymentMethod'] ?? 'N/A',
-                        'Rs ${invoice['amount']}',
-                        DateFormat.yMMMd().format(DateTime.parse(invoice['createdAt'])),
-                      ];
-                    }).toList(),
-                  ],
-                ),
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  'Total Amount: Rs ${_calculateTotalAmount().toStringAsFixed(2)}',
-                ),
-                // Footer Section
-                pw.Spacer(), // Push footer to the bottom of the page
-                pw.Divider(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Image(footerLogo, width: 30, height: 30), // Footer logo
-                    pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.center,
-                        children: [
-                          pw.Text(
-                            'Dev Valley Software House',
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
-                          pw.Text(
-                            'Contact: 0303-4889663',
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
-                        ]
-                    )
-                  ],
-                ),
               ],
-            );
-          },
-        ),
-      );
-    }
+            ),
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Column(
+            children: [
+              pw.Divider(),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Image(footerLogo, width: 30, height: 30), // Footer logo
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Text(
+                        'Dev Valley Software House',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.Text(
+                        'Contact: 0303-4889663',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+              ),
+            ],
+          );
+        },
+        build: (pw.Context context) {
+          return [
+            // Table with payment data
+            pw.Table.fromTextArray(
+              context: context,
+              data: [
+                [
+                  'Customer',
+                  'Payment Type',
+                  'Payment Method',
+                  'Amount',
+                  'Date',
+                ],
+                // Add data for all rows
+                ..._reportData.map((invoice) {
+                  return [
+                    pw.Image(customerNameImage, width: 50, height: 20), // Add the customer name image to the table
+                    invoice['paymentType'] ?? 'N/A',
+                    invoice['paymentMethod'] ?? 'N/A',
+                    'Rs ${invoice['amount']}',
+                    DateFormat.yMMMd().format(DateTime.parse(invoice['createdAt'])),
+                  ];
+                }).toList(),
+              ],
+            ),
+            pw.SizedBox(height: 20),
+
+            // Total amount
+            pw.Text(
+              'Total Amount: Rs ${_calculateTotalAmount().toStringAsFixed(2)}',
+            ),
+          ];
+        },
+      ),
+    );
 
     // Print PDF
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
@@ -466,6 +499,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                       spacing: 10,
                       runSpacing: 10,
                       children: [
+                        // In the build method, update the payment method dropdown
                         Container(
                           width: MediaQuery.of(context).size.width * 0.45,
                           decoration: BoxDecoration(
@@ -488,7 +522,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                               });
                               _fetchReportData();
                             },
-                            items: <String>['all', 'online', 'cash']
+                            items: <String>['all', 'online', 'cash', 'check'] // Add 'check' here
                                 .map<DropdownMenuItem<String>>((String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
@@ -496,7 +530,9 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                                     ? 'All Methods'
                                     : value == 'online'
                                     ? 'Online'
-                                    : 'Cash'),
+                                    : value == 'cash'
+                                    ? 'Cash'
+                                    : 'Check'), // Add 'Check' option
                               );
                             }).toList(),
                           ),
@@ -507,55 +543,6 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                 ],
               ),
             ),
-
-            // Expanded(
-            //   child: SingleChildScrollView(
-            //     child: Container(
-            //       width: double.infinity,  // Make the table take full width
-            //       decoration: BoxDecoration(
-            //         borderRadius: BorderRadius.circular(12),
-            //         boxShadow: [
-            //           BoxShadow(
-            //             color: Colors.teal.withOpacity(0.3),
-            //             spreadRadius: 2,
-            //             blurRadius: 5,
-            //           ),
-            //         ],
-            //       ),
-            //       child: Card(
-            //         color: Colors.teal.shade50,
-            //         elevation: 8,
-            //         shape: RoundedRectangleBorder(
-            //           borderRadius: BorderRadius.circular(12),
-            //         ),
-            //         child: DataTable(
-            //           columnSpacing: 25.0,  // Increase spacing between columns
-            //           dataRowHeight: 60,   // Increase row height
-            //           columns: [
-            //             DataColumn(label: Text('Customer', style: TextStyle(color: Colors.teal.shade800))),
-            //             DataColumn(label: Text('Payment Type', style: TextStyle(color: Colors.teal.shade800))),
-            //             DataColumn(label: Text('Invoice ID', style: TextStyle(color: Colors.teal.shade800))),
-            //             DataColumn(label: Text('Payment Method', style: TextStyle(color: Colors.teal.shade800))),
-            //             DataColumn(label: Text('Amount', style: TextStyle(color: Colors.teal.shade800))),
-            //             DataColumn(label: Text('Date', style: TextStyle(color: Colors.teal.shade800))),
-            //           ],
-            //           rows: _reportData.map((invoice) {
-            //             print(invoice);
-            //             return DataRow(cells: [
-            //               DataCell(Text(invoice['customerName'] ?? 'N/A')),
-            //               DataCell(Text(invoice['paymentType'] ?? 'N/A')),
-            //               DataCell(Text(invoice['invoiceId'] ?? 'N/A')),
-            //               DataCell(Text(invoice['paymentMethod'] ?? 'N/A')),
-            //               DataCell(Text(invoice['amount'].toString())),
-            //               DataCell(Text(DateFormat.yMMMd().format(DateTime.parse(invoice['date'])))),
-            //             ]);
-            //           }).toList(),
-            //         ),
-            //       ),
-            //     ),
-            //   ),
-            // ),
-
             Expanded(
               child: SingleChildScrollView(
                 child: Container(
@@ -605,7 +592,6 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                 ),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
@@ -628,7 +614,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
               child: Text(
                   // 'Generate and Print PDF'
                 languageProvider.isEnglish ? 'Generate and Print PDF' : 'پی ڈی ایف بنائیں اور پرنٹ کریں۔', // Dynamic text based on language
-
+                style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade400),
             ),

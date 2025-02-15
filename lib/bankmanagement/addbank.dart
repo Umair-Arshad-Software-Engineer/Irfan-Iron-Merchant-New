@@ -3,6 +3,9 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
+import 'banknames.dart';
+import 'banktransactionpage.dart';
+
 class BankManagementPage extends StatefulWidget {
   @override
   State<BankManagementPage> createState() => _BankManagementPageState();
@@ -13,57 +16,148 @@ class _BankManagementPageState extends State<BankManagementPage> {
   final TextEditingController _bankNameController = TextEditingController();
   final TextEditingController _initialBalanceController = TextEditingController();
   File? _selectedImage;
-
-  Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-      });
-    }
-  }
+  Bank? _selectedBank;
 
   void _addBank() {
-    if (_bankNameController.text.isNotEmpty && _initialBalanceController.text.isNotEmpty) {
+    if (_selectedBank != null && _initialBalanceController.text.isNotEmpty) {
       final newBank = {
-        'name': _bankNameController.text,
+        'name': _selectedBank!.name,
         'balance': double.parse(_initialBalanceController.text),
         'imagePath': _selectedImage?.path ?? '',
-        'transactions': {}
+        'transactions': {
+          'initial_deposit': {
+            'amount': double.parse(_initialBalanceController.text),
+            'description': 'Initial Deposit',
+            'type': 'initial_deposit',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          }
+        }
       };
       _dbRef.push().set(newBank);
       _bankNameController.clear();
       _initialBalanceController.clear();
-      setState(() => _selectedImage = null);
+      setState(() {
+        _selectedImage = null;
+        _selectedBank = null;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Bank Management')),
+      appBar: AppBar(
+        title: Text('Bank Management', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.blue.shade800,
+        elevation: 10,
+        centerTitle: true,
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                TextField(
-                  controller: _bankNameController,
-                  decoration: InputDecoration(labelText: 'Bank Name'),
+                Card(
+                  elevation: 5,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Autocomplete<Bank>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<Bank>.empty();
+                        }
+                        return pakistaniBanks.where((Bank bank) =>
+                            bank.name.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                      },
+                      displayStringForOption: (Bank option) => option.name,
+                      onSelected: (Bank selection) {
+                        _bankNameController.text = selection.name;
+                        setState(() {
+                          _selectedBank = selection;
+                        });
+                      },
+                      fieldViewBuilder: (BuildContext context,
+                          TextEditingController textEditingController,
+                          FocusNode focusNode,
+                          VoidCallback onFieldSubmitted) {
+                        return TextField(
+                          controller: textEditingController,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: 'Bank Name',
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          onChanged: (value) {
+                            setState(() {});
+                          },
+                        );
+                      },
+                      optionsViewBuilder: (BuildContext context,
+                          AutocompleteOnSelected<Bank> onSelected,
+                          Iterable<Bank> options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4.0,
+                            child: SizedBox(
+                              height: 200.0,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.all(8.0),
+                                itemCount: options.length,
+                                itemBuilder: (BuildContext context, int index) {
+                                  final Bank option = options.elementAt(index);
+                                  return ListTile(
+                                    leading: Image.asset(option.iconPath, height: 30, width: 30),
+                                    title: Text(option.name),
+                                    onTap: () {
+                                      onSelected(option);
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
-                TextField(
-                  controller: _initialBalanceController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Initial Balance'),
+                SizedBox(height: 20),
+                Card(
+                  elevation: 5,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: _initialBalanceController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Initial Balance',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 10),
-                _selectedImage != null
-                    ? Image.file(_selectedImage!, height: 100)
-                    : TextButton(
-                    onPressed: _pickImage, child: Text('Pick Bank Image')),
-                const SizedBox(height: 10),
-                ElevatedButton(onPressed: _addBank, child: Text('Add Bank')),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _addBank,
+                  child: Text('Add Bank', style: TextStyle(fontSize: 16,color: Colors.white,fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -89,16 +183,43 @@ class _BankManagementPageState extends State<BankManagementPage> {
                   itemCount: bankList.length,
                   itemBuilder: (context, index) {
                     final bank = bankList[index].value;
-                    return ListTile(
-                      leading: bank['imagePath'] != ''
-                          ? Image.file(File(bank['imagePath']), height: 50, width: 50)
-                          : Icon(Icons.account_balance),
-                      title: Text(bank['name']),
-                      subtitle: Text('Balance: \$${bank['balance']}'),
-                      trailing: Icon(Icons.arrow_forward_ios),
-                      onTap: () {
-                        // Open transactions page
-                      },
+                    final bankName = bank['name'];
+
+                    Bank? matchedBank = pakistaniBanks.firstWhere(
+                          (b) => b.name == bankName,
+                      orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
+                    );
+                    return Card(
+                      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      elevation: 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: ListTile(
+                        leading: Image.asset(
+                          matchedBank.iconPath,
+                          height: 50,
+                          width: 50,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(Icons.account_balance, size: 50);
+                          },
+                        ),
+                        title: Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Remaining Balance: ${bank['balance']} Rs',
+                            style: TextStyle(color: Colors.grey.shade700)),
+                        trailing: Icon(Icons.arrow_forward_ios, color: Colors.blue.shade800),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BankTransactionsPage(
+                                bankId: bankList[index].key,
+                                bankName: bank['name'],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     );
                   },
                 );

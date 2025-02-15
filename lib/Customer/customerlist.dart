@@ -16,43 +16,39 @@ class _CustomerListState extends State<CustomerList> {
   String _searchQuery = '';
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   Map<String, double> _customerBalances = {};
+  Map<String, Map<String, dynamic>> _ledgerCache = {}; // Cache for ledger data
 
   @override
   void initState() {
     super.initState();
     _loadCustomerBalances();
   }
+
   Future<void> _loadCustomerBalances() async {
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     final customers = customerProvider.customers;
 
-    // Fetch all balances in parallel
-    List<Future<double>> balanceFutures = customers.map((customer) => _getTotalRemainingBalance(customer.id)).toList();
-    List<double> balances = await Future.wait(balanceFutures);
+    // Fetch all ledger data in parallel
+    List<Future<void>> fetchFutures = customers.map((customer) async {
+      final invoiceBalance = await _getRemainingInvoiceBalance(customer.id);
+      final filledBalance = await _getRemainingFillesBalance(customer.id);
+      _customerBalances[customer.id] = invoiceBalance + filledBalance;
+    }).toList();
 
-    setState(() {
-      for (int i = 0; i < customers.length; i++) {
-        _customerBalances[customers[i].id] = balances[i];
-      }
-    });
-  }
-
-  Future<double> _getTotalRemainingBalance(String customerId) async {
-    try {
-      final invoiceBalance = await _getRemainingInvoiceBalance(customerId);
-      final filledBalance = await _getRemainingFillesBalance(customerId);
-      return invoiceBalance + filledBalance;
-    } catch (e) {
-      print("Error fetching total remaining balance: $e");
-      return 0.0;
-    }
+    await Future.wait(fetchFutures);
+    setState(() {}); // Update the UI after fetching balances
   }
 
   Future<double> _getRemainingInvoiceBalance(String customerId) async {
+    if (_ledgerCache.containsKey(customerId)) {
+      return _ledgerCache[customerId]!['invoiceBalance'] ?? 0.0;
+    }
+
     try {
       final customerLedgerRef = _db.child('ledger').child(customerId);
       final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
 
+      double remainingBalance = 0.0;
       if (snapshot.snapshot.exists) {
         final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
         final lastEntryKey = ledgerEntries.keys.first;
@@ -60,26 +56,31 @@ class _CustomerListState extends State<CustomerList> {
 
         if (lastEntry != null && lastEntry is Map) {
           final remainingBalanceValue = lastEntry['remainingBalance'];
-          double remainingBalance = 0.0;
           if (remainingBalanceValue is int) {
             remainingBalance = remainingBalanceValue.toDouble();
           } else if (remainingBalanceValue is double) {
             remainingBalance = remainingBalanceValue;
           }
-          return remainingBalance;
         }
       }
-      return 0.0;
+
+      _ledgerCache[customerId] = {'invoiceBalance': remainingBalance};
+      return remainingBalance;
     } catch (e) {
       return 0.0;
     }
   }
 
   Future<double> _getRemainingFillesBalance(String customerId) async {
+    if (_ledgerCache.containsKey(customerId)) {
+      return _ledgerCache[customerId]!['filledBalance'] ?? 0.0;
+    }
+
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
       final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
 
+      double remainingBalance = 0.0;
       if (snapshot.snapshot.exists) {
         final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
         final lastEntryKey = ledgerEntries.keys.first;
@@ -87,20 +88,21 @@ class _CustomerListState extends State<CustomerList> {
 
         if (lastEntry != null && lastEntry is Map) {
           final remainingBalanceValue = lastEntry['remainingBalance'];
-          double remainingBalance = 0.0;
           if (remainingBalanceValue is int) {
             remainingBalance = remainingBalanceValue.toDouble();
           } else if (remainingBalanceValue is double) {
             remainingBalance = remainingBalanceValue;
           }
-          return remainingBalance;
         }
       }
-      return 0.0;
+
+      _ledgerCache[customerId] = {'filledBalance': remainingBalance};
+      return remainingBalance;
     } catch (e) {
       return 0.0;
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -225,22 +227,9 @@ class _CustomerListState extends State<CustomerList> {
                                     DataCell(Text(customer.address)),
                                     DataCell(Text(customer.phone)),
                                     DataCell(
-                                      FutureBuilder<double>(
-                                        future: _getTotalRemainingBalance(customer.id),
-                                        builder: (context, snapshot) {
-                                          if (snapshot.connectionState == ConnectionState.active ||
-                                              snapshot.connectionState == ConnectionState.active) {
-                                            return const Text('Balance: ...', style: TextStyle(color: Colors.teal));
-                                          }
-                                          if (snapshot.hasError) {
-                                            return const Text('Balance: Error', style: TextStyle(color: Colors.red));
-                                          }
-                                          final balance = snapshot.data ?? 0.0; // Provide a default value
-                                          return Text(
-                                            'Balance: ${balance.toStringAsFixed(2)}',
-                                            style: const TextStyle(color: Colors.teal),
-                                          );
-                                        },
+                                      Text(
+                                        'Balance: ${_customerBalances[customer.id]?.toStringAsFixed(2) ?? "0.00"}',
+                                        style: const TextStyle(color: Colors.teal),
                                       ),
                                     ),
                                     DataCell(Row(
@@ -259,7 +248,7 @@ class _CustomerListState extends State<CustomerList> {
                             ),
                           );
                         } else {
-                          // Mobile layout (with remaining balance in the card)s
+                          // Mobile layout (with remaining balance in the card)
                           return ListView.builder(
                             itemCount: filteredCustomers.length,
                             itemBuilder: (context, index) {
@@ -280,22 +269,9 @@ class _CustomerListState extends State<CustomerList> {
                                       Text(customer.address, style: TextStyle(color: Colors.teal.shade600)),
                                       const SizedBox(height: 4),
                                       Text(customer.phone, style: TextStyle(color: Colors.teal.shade600)),
-                                      FutureBuilder<double>(
-                                        future: _getTotalRemainingBalance(customer.id),
-                                        builder: (context, snapshot) {
-                                          if (snapshot.connectionState == ConnectionState.active ||
-                                              snapshot.connectionState == ConnectionState.active) {
-                                            return const Text('Balance: ...', style: TextStyle(color: Colors.teal));
-                                          }
-                                          if (snapshot.hasError) {
-                                            return const Text('Balance: Error', style: TextStyle(color: Colors.red));
-                                          }
-                                          final balance = snapshot.data ?? 0.0; // Provide a default value
-                                          return Text(
-                                            'Balance: ${balance.toStringAsFixed(2)}',
-                                            style: const TextStyle(color: Colors.teal),
-                                          );
-                                        },
+                                      Text(
+                                        'Balance: ${_customerBalances[customer.id]?.toStringAsFixed(2) ?? "0.00"}',
+                                        style: const TextStyle(color: Colors.teal),
                                       ),
                                     ],
                                   ),

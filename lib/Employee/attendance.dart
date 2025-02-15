@@ -191,18 +191,20 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
     return pw.MemoryImage(buffer);  // Return the image as MemoryImage
   }
 
-
   Future<void> _generateAndPrintPdf(
       List<String> filteredEmployees,
       EmployeeProvider employeeProvider,
       Map<String, Map<String, String>> employees) async {
-
     final pdf = pw.Document();
 
-    // Load the footer logo if different
+    // Load the footer logo and header logo
     final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
+
+    final ByteData headerBytes = await rootBundle.load('assets/images/logo.png');
+    final headerBuffer = headerBytes.buffer.asUint8List();
+    final headerLogo = pw.MemoryImage(headerBuffer);
 
     final employeeAttendances = await Future.wait(
       filteredEmployees.map((employeeId) async {
@@ -234,48 +236,59 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
         tableRows.add(pw.TableRow(
           children: [
             pw.Text(date),
-            pw.Image(   employeeNameImage, dpi: 1000),  // Employee name as image
+            pw.Image(employeeNameImage, dpi: 1000), // Employee name as image
             pw.Text(attendance['status'] ?? 'N/A'),
-            pw.Image(descriptionImage, dpi: 1000),  // Description as image
+            pw.Image(descriptionImage, dpi: 1000), // Description as image
           ],
         ));
       }
     }
 
-    // Add the collected rows to the PDF table
+    // Get the first employee's name for the header (or use your own logic)
+    final firstEmployeeId = filteredEmployees.isNotEmpty ? filteredEmployees.first : null;
+    final firstEmployeeName = firstEmployeeId != null ? employees[firstEmployeeId]!['name']! : 'N/A';
+    final firstEmployeeNameImage = await _createTextImage(firstEmployeeName);
+
+    // Add the collected rows to the PDF table using MultiPage
     pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                'Attendance Report',
-                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 16),
-              pw.Table(
-                border: pw.TableBorder.all(width: 1, color: PdfColors.black),
-                children: [
-                  pw.TableRow(
-                    children: [
-                      pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Employee Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  ...tableRows,
-                ],
-              ),
-              // Footer Section
-              pw.Spacer(), // Push footer to the bottom of the page
-              pw.Divider(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Image(footerLogo, width: 30, height: 30,dpi: 2000), // Footer logo
-                  pw.Column(
+      pw.MultiPage(
+        // Header: Logo on the top-right corner, "Attendance Report" text, and employee name
+        header: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 20), // Add padding under the header
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Attendance Report',
+                      style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Image(firstEmployeeNameImage, width: 150, height: 50, dpi: 1000), // Employee name image
+                  ],
+                ),
+                pw.Image(headerLogo, width: 100, height: 100, dpi: 1000), // Display the logo at the top
+              ],
+            ),
+          );
+        },
+        // Footer: Footer content at the bottom of every page
+        footer: (pw.Context context) {
+          return pw.Container(
+            alignment: pw.Alignment.bottomCenter,
+            margin: const pw.EdgeInsets.only(top: 20),
+            child: pw.Column(
+              children: [
+                pw.Divider(),
+                pw.SizedBox(height: 10), // Add padding under the logo
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Image(footerLogo, width: 30, height: 30, dpi: 2000), // Footer logo
+                    pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.center,
                       children: [
                         pw.Text(
@@ -286,12 +299,49 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
                           'Contact: 0303-4889663',
                           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                         ),
-                      ]
-                  )
-                ],
-              ),
-            ],
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           );
+        },
+        build: (pw.Context context) {
+          return [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Table(
+                  border: pw.TableBorder.all(width: 1, color: PdfColors.black),
+                  children: [
+                    pw.TableRow(
+                      decoration: pw.BoxDecoration(color: PdfColors.grey300), // Add background color to header row
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text('Employee Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    ...tableRows,
+                  ],
+                ),
+              ],
+            ),
+          ];
         },
       ),
     );

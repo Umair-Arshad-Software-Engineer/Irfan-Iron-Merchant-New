@@ -88,6 +88,7 @@ flutter:
   assets:
     - assets/images/
     - assets/fonts/
+    - assets/bank_icons/
   fonts:
     - family: Lora
       fonts:

@@ -422,7 +422,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
               fontWeight: pw.FontWeight.bold,
               fontSize: 14, // Increased header font size
             ),
-            cellStyle: pw.TextStyle(
+            cellStyle: const pw.TextStyle(
               fontSize: 12, // Increased cell font size from 10 to 12
             ),
             cellAlignment: pw.Alignment.centerLeft,
@@ -455,7 +455,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
           pw.Align(
             alignment: pw.Alignment.centerRight,
             child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
           ),
         ],
       ),
@@ -482,63 +482,71 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       ]);
     }
 
-    const int rowsPerPage = 11;
-    final pageCount = (tableData.length / rowsPerPage).ceil();
+    // Load the image asset for the logo
+    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    final buffer = bytes.buffer.asUint8List();
+    final image = pw.MemoryImage(buffer);
 
-    for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-      final startIndex = pageIndex * rowsPerPage;
-      final endIndex = (startIndex + rowsPerPage) < tableData.length ? startIndex + rowsPerPage : tableData.length;
-      final pageData = tableData.sublist(startIndex, endIndex);
-      final ByteData footerBytes = await rootBundle.load('images/devlogo.png');
-      final footerBuffer = footerBytes.buffer.asUint8List();
-      final footerLogo = pw.MemoryImage(footerBuffer);
+    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    final footerBuffer = footerBytes.buffer.asUint8List();
+    final footerLogo = pw.MemoryImage(footerBuffer);
 
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.all(15), // Reduced margins for more content space
+        header: (pw.Context context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'Invoice List',
+              style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Column(
               children: [
-                pw.Text(
-                  'Invoice List',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 10),
-                pw.Table.fromTextArray(
-                  headers: headers,
-                  data: pageData,
-                  border: pw.TableBorder.all(),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  cellAlignment: pw.Alignment.centerLeft,
-                  cellPadding: const pw.EdgeInsets.all(8),
-                ),
-                pw.Spacer(),
-                pw.Divider(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                pw.Image(image, width: 70, height: 70, dpi: 1000), // Display the logo at the top
+                pw.SizedBox(height: 10)
+              ],
+            )
+          ],
+        ),
+        footer: (pw.Context context) => pw.Column(
+          children: [
+            pw.Divider(), // Adds a horizontal line above the footer content
+            pw.SizedBox(height: 5), // Adds spacing between divider and footer content
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Image(footerLogo, width: 30, height: 30),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Image(footerLogo, width: 30, height: 30),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.Text(
-                          'Dev Valley Software House',
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
-                        pw.Text(
-                          'Contact: 0303-4889663',
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
-                      ],
+                    pw.Text(
+                      'Dev Valley Software House',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      'Contact: 0303-4889663',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                     ),
                   ],
                 ),
               ],
-            );
-          },
+            ),
+          ],
         ),
-      );
-    }
+        build: (pw.Context context) => [
+          pw.Table.fromTextArray(
+            headers: headers,
+            data: tableData,
+            border: pw.TableBorder.all(),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellPadding: const pw.EdgeInsets.all(5), // Reduced cell padding
+          ),
+        ],
+      ),
+    );
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),

@@ -93,183 +93,6 @@ class _filledpageState extends State<filledpage> {
     return subtotal - discountAmount;
   }
 
-  // Future<void> _generateAndPrintPDF(String filledNumber) async {
-  //   final pdf = pw.Document();
-  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-  //   final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
-  //
-  //   // Get current date and time
-  //   final DateTime now = DateTime.now();
-  //   final String formattedDate = '${now.day}/${now.month}/${now.year}';
-  //   final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
-  //
-  //   // Get the remaining balance from the ledger
-  //   double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
-  //
-  //   // Load the image asset for the logo
-  //   final ByteData bytes = await rootBundle.load('assets/images/logo.png');
-  //   final buffer = bytes.buffer.asUint8List();
-  //   final image = pw.MemoryImage(buffer);
-  //
-  //   // Load the footer logo if different
-  //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-  //   final footerBuffer = footerBytes.buffer.asUint8List();
-  //   final footerLogo = pw.MemoryImage(footerBuffer);
-  //
-  //   // Pre-generate images for all descriptionss
-  //   List<pw.MemoryImage> descriptionImages = [];
-  //   for (var row in _filledRows) {
-  //     final image = await _createTextImage(row['description']);
-  //     descriptionImages.add(image);
-  //   }
-  //   final customerDetailsImage = await _createTextImage(
-  //     'Customer Name: ${selectedCustomer.name}\n'
-  //         'Customer Address: ${selectedCustomer.address}',
-  //   );
-  //
-  //
-  //   pdf.addPage(
-  //     pw.Page(
-  //       pageFormat: PdfPageFormat.a5,
-  //       build: (context) {
-  //         return pw.Padding(
-  //           padding: const pw.EdgeInsets.symmetric(horizontal: 0, vertical: 2),  // Reduced side marginss
-  //           child: pw.Column(
-  //             crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //             children: [
-  //               // Company Logo and Filled Header
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //                 children: [
-  //                   pw.Image(image, width: 100, height: 100), // Adjust width and height as needed
-  //                   pw.Text(
-  //                     'Filled',
-  //                     style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-  //                   ),
-  //                 ],
-  //               ),
-  //               pw.Divider(),
-  //               // Customer Information
-  //               pw.Image(customerDetailsImage, width: 300,dpi: 1000), // Adjust width as neededs
-  //               // pw.Text('Customer Name: ${selectedCustomer.name}', style: const pw.TextStyle(fontSize: 14)),
-  //               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 14)),
-  //               // pw.Text('Customer Address ${selectedCustomer.address}', style: const pw.TextStyle(fontSize: 14)),
-  //               pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 8)),
-  //               pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 8)),
-  //               pw.Text('Filled Id: $_filledId', style: const pw.TextStyle(fontSize: 14)),
-  //
-  //               pw.SizedBox(height: 10),
-  //
-  //               // Filled Table with Urdu text converted to image
-  //               pw.Table.fromTextArray(
-  //                 headers: [
-  //                   pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
-  //                   // pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
-  //                   pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
-  //                   pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
-  //                   pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
-  //                 ],
-  //                 data: _filledRows.asMap().map((index, row) {
-  //                   return MapEntry(
-  //                     index,
-  //                     [
-  //                       // Use the pre-generated image for the description field
-  //                       pw.Image(descriptionImages[index]),
-  //                       // pw.Text(row['weight']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 8)),
-  //                       // pw.Text(row['qty']?.toStringAsFixed(0) ?? '0', style: const pw.TextStyle(fontSize: 12)),
-  //                       // pw.Text(row['rate']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 12)),
-  //                       // pw.Text(row['total']?.toStringAsFixed(2) ?? '0.00', style: const pw.TextStyle(fontSize: 12)),
-  //                       pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-  //                       pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 12)),
-  //                       pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-  //                       pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-  //
-  //                     ],
-  //                   );
-  //                 }).values.toList(),
-  //               ),
-  //               pw.SizedBox(height: 10),
-  //
-  //               // Totals Section
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //                 children: [
-  //                   pw.Text('Sub Total:'),
-  //                   pw.Text(_calculateSubtotal().toStringAsFixed(2)),
-  //                 ],
-  //               ),
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //                 children: [
-  //                   pw.Text('Discount:'),
-  //                   pw.Text((_discount ?? 0.0).toStringAsFixed(2)),
-  //
-  //                 ],
-  //               ),
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //                 children: [
-  //                   pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-  //                   pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-  //                 ],
-  //               ),
-  //               pw.SizedBox(height: 20),
-  //
-  //               // Footer Section (Remaining Balance)
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //                 children: [
-  //                   pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 14)),
-  //                   pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-  //                 ],
-  //               ),
-  //               pw.SizedBox(height: 30),
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.end,
-  //                 children: [
-  //                   pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-  //                 ],
-  //               ),
-  //               // Footer Section
-  //               pw.Spacer(), // Push footer to the bottom of the page
-  //               pw.Divider(),
-  //               pw.Row(
-  //                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //                 children: [
-  //                   pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-  //                   pw.Column(
-  //                       crossAxisAlignment: pw.CrossAxisAlignment.center,
-  //                       children: [
-  //                         pw.Text(
-  //                           'Dev Valley Software House',
-  //                           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-  //                         ),
-  //                         pw.Text(
-  //                           'Contact: 0303-4889663',
-  //                           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-  //                         ),
-  //                       ]
-  //                   )
-  //                 ],
-  //               ),
-  //             ],
-  //           ),
-  //         );
-  //       },
-  //     ),
-  //   );
-  //
-  //   try {
-  //     await Printing.layoutPdf(
-  //       onLayout: (format) async {
-  //         return pdf.save();
-  //       },
-  //     );
-  //   } catch (e) {
-  //     print("Error printing: $e");
-  //   }
-  // }
   Future<Uint8List> _generatePDFBytes(String filledNumber) async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -441,28 +264,6 @@ class _filledpageState extends State<filledpage> {
     return pdf.save();
   }
 
-
-  Future<void> _sharePDFViaWhatsApp(String filledNumber) async {
-    try {
-      final bytes = await _generatePDFBytes(filledNumber);
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/filled_$filledNumber.pdf');
-      await file.writeAsBytes(bytes);
-
-      print('PDF file created at: ${file.path}'); // Debug log
-
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Filled $filledNumber',
-      );
-    } catch (e) {
-      print('Error sharing PDF: $e'); // Debug log
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to share PDF: ${e.toString()}')),
-      );
-    }
-  }
-
   Future<void> _generateAndPrintPDF(String filledNumber) async {
     try {
       final bytes = await _generatePDFBytes(filledNumber);
@@ -471,6 +272,7 @@ class _filledpageState extends State<filledpage> {
       print("Error printing: $e");
     }
   }
+
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Use default text for empty input
     final String displayText = text.isEmpty ? "N/A" : text;
@@ -619,6 +421,49 @@ class _filledpageState extends State<filledpage> {
       print("Error updating qtyOnHand: $e");
     }
   }
+
+  Future<void> _savePDF(String filledNumber) async {
+    try {
+      final bytes = await _generatePDFBytes(filledNumber);
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/filled_$filledNumber.pdf');
+      await file.writeAsBytes(bytes);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF saved to ${file.path}'),
+        ),
+      );
+    } catch (e) {
+      print("Error saving PDF: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save PDF: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _sharePDFViaWhatsApp(String filledNumber) async {
+    try {
+      final bytes = await _generatePDFBytes(filledNumber);
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/filled_$filledNumber.pdf');
+      await file.writeAsBytes(bytes);
+
+      print('PDF file created at: ${file.path}'); // Debug log
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Filled $filledNumber',
+      );
+    } catch (e) {
+      print('Error sharing PDF: $e'); // Debug log
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to share PDF: ${e.toString()}')),
+      );
+    }
+  }
+
+
   @override
   void dispose() {
     for (var row in _filledRows) {
@@ -718,16 +563,54 @@ class _filledpageState extends State<filledpage> {
         backgroundColor: Colors.teal,
         centerTitle: true,
         actions: [
-          IconButton(onPressed: (){
-            final filledNumber = _filledId ?? generateFilledNumber();
-            _generateAndPrintPDF(filledNumber);
-          }, icon: Icon(Icons.print, color: Colors.white)),
-          IconButton(
-            onPressed: () async {
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (String value) async {
               final filledNumber = _filledId ?? generateFilledNumber();
-              await _sharePDFViaWhatsApp(filledNumber);
+              switch (value) {
+                case 'print':
+                  _generateAndPrintPDF(filledNumber);
+                  break;
+                case 'save':
+                  await _savePDF(filledNumber);
+                  break;
+                case 'share':
+                  await _sharePDFViaWhatsApp(filledNumber);
+                  break;
+              }
             },
-            icon: const Icon(Icons.share, color: Colors.white),
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'print',
+                child: Row(
+                  children: [
+                    Icon(Icons.print, color: Colors.black),
+                    SizedBox(width: 8),
+                    Text('Print'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'save',
+                child: Row(
+                  children: [
+                    Icon(Icons.save, color: Colors.black),
+                    SizedBox(width: 8),
+                    Text('Save'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'share',
+                child: Row(
+                  children: [
+                    Icon(Icons.share, color: Colors.black),
+                    SizedBox(width: 8),
+                    Text('Share'),
+                  ],
+                ),
+              ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -735,10 +618,10 @@ class _filledpageState extends State<filledpage> {
               widget.filled == null
                   ? '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${generateFilledNumber()}'
                   : '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${widget.filled!['filledNumber']}',
-              style: TextStyle(color: Colors.white, fontSize: 14),            ),
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
           ),
-        ],
-      ),
+        ],      ),
       body: SingleChildScrollView(
         child: Consumer<CustomerProvider>(
           builder: (context, customerProvider, child) {

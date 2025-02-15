@@ -15,6 +15,7 @@ import 'Provider/lanprovider.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
 import 'bankmanagement/addbank.dart';
+import 'dailypage/listpageroznamcha.dart';
 import 'items/ItemslistPage.dart';
 import 'items/purchaselistpage.dart';
 
@@ -190,6 +191,16 @@ class Dashboard extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) =>  BankManagementPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: Text(languageProvider.isEnglish ? 'Roznamcha' : 'روزنامچہ'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) =>  RoznamchaListPage()),
               );
             },
           ),
