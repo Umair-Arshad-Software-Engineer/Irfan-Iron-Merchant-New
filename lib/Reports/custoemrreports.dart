@@ -145,90 +145,107 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                     // Summary Section
                     Card(
                       color: Colors.teal.shade50,  // Background color for summary card
-                      elevation: 5,
+                      elevation: 3,  // Reduced elevation
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       child: Padding(
-                        padding: const EdgeInsets.all(16.0),
+                        padding: const EdgeInsets.all(12.0),  // Reduced padding
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildSummaryItem(
-                                // 'Total Debit (-)',
-                                languageProvider.isEnglish ? 'Total Debit (-)' : '(-)کل ڈیبٹ ',
-                                'Rs ${report['debit']?.toStringAsFixed(2)}', context),
+                              languageProvider.isEnglish ? 'Total Debit (-)' : '(-)کل ڈیبٹ',
+                              'Rs ${report['debit']?.toStringAsFixed(2)}',
+                              context,
+                              fontSize: 14,  // Smaller font size
+                            ),
                             _buildSummaryItem(
-                                // 'Total Credit (+)',
-                                languageProvider.isEnglish ? 'Total Credit (-)' : '(-)کل کریڈٹ ',
-                                'Rs ${report['credit']?.toStringAsFixed(2)}', context),
+                              languageProvider.isEnglish ? 'Total Credit (+)' : '(+)کل کریڈٹ',
+                              'Rs ${report['credit']?.toStringAsFixed(2)}',
+                              context,
+                              fontSize: 14,  // Smaller font size
+                            ),
                             _buildSummaryItem(
-                              // 'Net Balance',
-                              languageProvider.isEnglish ? 'Net Balance' : 'کل رقم ',
+                              languageProvider.isEnglish ? 'Net Balance' : 'کل رقم',
                               'Rs ${report['balance']?.toStringAsFixed(2)}',
                               context,
                               isHighlight: true,
+                              fontSize: 14,  // Smaller font size
                             ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    // Transactions Table
+                    const SizedBox(height: 16),  // Reduced spacing
+// Transactions Table
                     Text(
                       'No. of Entries: ${transactions.length} (Filtered)',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.teal.shade700),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Colors.teal.shade700,
+                        fontSize: 12,  // Smaller font size
+                      ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),  // Reduced spacing
                     SizedBox(
-                      width: double.infinity,  // Make the table take full widths
+                      width: double.infinity,  // Make the table take full width
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
-                          headingRowHeight: 60,  // Increase heading row height
-                          dataRowHeight: 60,  // Increase data row heights
-                          columnSpacing: 20,  // Increase column spacing
+                          headingRowHeight: 40,  // Reduced heading row height
+                          dataRowHeight: 40,  // Reduced data row height
+                          columnSpacing: 12,  // Reduced column spacing
                           columns: [
                             DataColumn(label: Text(
-                                // 'Date'
                               languageProvider.isEnglish ? 'Date' : 'ڈیٹ',
-
+                              style: TextStyle(fontSize: 12),  // Smaller font size
                             )),
                             DataColumn(label: Text(
-                                // 'Invoice Number'
                               languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر',
-
+                              style: TextStyle(fontSize: 12),  // Smaller font size
                             )),
                             DataColumn(label: Text(
-                                // 'Transaction Type'
-                              languageProvider.isEnglish ? 'Transaction Type' : 'لین دین کی قسم ',
-
+                              languageProvider.isEnglish ? 'Transaction Type' : 'لین دین کی قسم',
+                              style: TextStyle(fontSize: 12),  // Smaller font size
                             )),
                             DataColumn(label: Text(
-                                // 'Debit (-)'
                               languageProvider.isEnglish ? 'Debit (-)' : '(-)ڈیبٹ',
+                              style: TextStyle(fontSize: 12),  // Smaller font size
                             )),
                             DataColumn(label: Text(
-                                // 'Credit (+)'
                               languageProvider.isEnglish ? 'Credit (+)' : '(+)کریڈٹ',
-
+                              style: TextStyle(fontSize: 12),  // Smaller font size
                             )),
                             DataColumn(label: Text(
-                                // 'Balance'
                               languageProvider.isEnglish ? 'Balance' : 'رقم',
-
+                              style: TextStyle(fontSize: 12),  // Smaller font size
                             )),
                           ],
                           rows: transactions.map((transaction) {
                             return DataRow(
                               cells: [
-                                // DataCell(Text(transaction['date'] ?? 'N/A')),
                                 DataCell(Text(
-                                    DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(transaction['date']))
+                                  DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(transaction['date'])),
+                                  style: TextStyle(fontSize: 12),  // Smaller font size
                                 )),
-                                DataCell(Text(transaction['invoiceNumber'] ?? 'N/A')),
-                                DataCell(Text(transaction['credit'] != 0.0 ? 'Invoice' : (transaction['debit'] != 0.0 ? 'Bill' : '-'))),
-                                DataCell(Text(transaction['debit'] != 0.0 ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}' : '-')),
-                                DataCell(Text(transaction['credit'] != 0.0 ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}' : '-')),
-                                DataCell(Text('Rs ${transaction['balance']?.toStringAsFixed(2)}')),
+                                DataCell(Text(
+                                  transaction['invoiceNumber'] ?? 'N/A',
+                                  style: TextStyle(fontSize: 12),  // Smaller font size
+                                )),
+                                DataCell(Text(
+                                  transaction['credit'] != 0.0 ? 'Invoice' : (transaction['debit'] != 0.0 ? 'Bill' : '-'),
+                                  style: TextStyle(fontSize: 12),  // Smaller font size
+                                )),
+                                DataCell(Text(
+                                  transaction['debit'] != 0.0 ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}' : '-',
+                                  style: TextStyle(fontSize: 12),  // Smaller font size
+                                )),
+                                DataCell(Text(
+                                  transaction['credit'] != 0.0 ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}' : '-',
+                                  style: TextStyle(fontSize: 12),  // Smaller font size
+                                )),
+                                DataCell(Text(
+                                  'Rs ${transaction['balance']?.toStringAsFixed(2)}',
+                                  style: TextStyle(fontSize: 12),  // Smaller font size
+                                )),
                               ],
                             );
                           }).toList(),
@@ -260,27 +277,29 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
     );
   }
 
-  Widget _buildSummaryItem(String title, String value, BuildContext context, {bool isHighlight = false}) {
+  Widget _buildSummaryItem(String title, String value, BuildContext context, {bool isHighlight = false, double fontSize = 14}) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.teal.shade600),
+          style: TextStyle(
+            fontSize: fontSize,  // Use the provided font size
+            color: Colors.teal.shade700,
+            fontWeight: isHighlight ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 4),
         Text(
           value,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: isHighlight ? Colors.red : Colors.black,
+          style: TextStyle(
+            fontSize: fontSize,  // Use the provided font size
+            color: isHighlight ? Colors.teal.shade900 : Colors.teal.shade800,
             fontWeight: isHighlight ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ],
     );
   }
-
-
 
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Create a custom painter with the Urdu text
@@ -364,7 +383,6 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                 //   style: pw.TextStyle(fontSize: 18),
                 // ),
                 pw.Image(customerDetailsImage, width: 300,dpi: 1000), // Adjust width as neededs
-
                 pw.Text(
                   '${languageProvider.isEnglish ? 'Phone Number:' : 'فون نمبر:'} ${widget.customerPhone}',
                   style: pw.TextStyle(fontSize: 18),

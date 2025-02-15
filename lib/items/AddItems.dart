@@ -425,7 +425,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                       ],
                     ),
                   SizedBox(height: 16),
-
                   ElevatedButton(
                     onPressed: saveOrUpdateItem,
                     style: ElevatedButton.styleFrom(

@@ -88,89 +88,154 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             const SizedBox(height: 16),
             // Employee data table
             Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: [
-                    DataColumn(
-                      label: Text(
-                        languageProvider.isEnglish ? 'Name' : 'نام',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        languageProvider.isEnglish ? 'Address' : 'ایڈریس',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        languageProvider.isEnglish ? 'Phone No' : 'فون نمبر',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        languageProvider.isEnglish ? 'Action' : 'ایکشن',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        languageProvider.isEnglish ? 'Attendance' : 'حاضری',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                    ),
-                  ],
-                  rows: filteredEmployees.map((entry) {
-                    final id = entry.key;
-                    final employee = entry.value;
-                    return DataRow(cells: [
-                      DataCell(Text(employee['name'] ?? '')),
-                      DataCell(Text(employee['address'] ?? '')),
-                      DataCell(Text(employee['phone'] ?? '')),
-                      DataCell(Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.teal),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => AddEmployeePage(employeeId: id),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth > 600) {
+                    // Web layout
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: [
+                          DataColumn(
+                            label: Text(
+                              languageProvider.isEnglish ? 'Name' : 'نام',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              languageProvider.isEnglish ? 'Address' : 'ایڈریس',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              languageProvider.isEnglish ? 'Phone No' : 'فون نمبر',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              languageProvider.isEnglish ? 'Action' : 'ایکشن',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              languageProvider.isEnglish ? 'Attendance' : 'حاضری',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                        ],
+                        rows: filteredEmployees.map((entry) {
+                          final id = entry.key;
+                          final employee = entry.value;
+                          return DataRow(cells: [
+                            DataCell(Text(employee['name'] ?? '')),
+                            DataCell(Text(employee['address'] ?? '')),
+                            DataCell(Text(employee['phone'] ?? '')),
+                            DataCell(Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.teal),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => AddEmployeePage(employeeId: id),
+                                      ),
+                                    );
+                                  },
                                 ),
-                              );
-                            },
+                              ],
+                            )),
+                            DataCell(Row(
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _markAttendance(context, id, 'present'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                  ),
+                                  child: Text(
+                                    languageProvider.isEnglish ? 'Present' : 'حاضر',
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () => _markAttendance(context, id, 'absent'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                  ),
+                                  child: Text(
+                                    languageProvider.isEnglish ? 'Absent' : 'غیرحاضر',
+                                  ),
+                                ),
+                              ],
+                            )),
+                          ]);
+                        }).toList(),
+                      ),
+                    );
+                  } else {
+                    // Mobile layout
+                    return ListView.builder(
+                      itemCount: filteredEmployees.length,
+                      itemBuilder: (context, index) {
+                        final entry = filteredEmployees[index];
+                        final id = entry.key;
+                        final employee = entry.value;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: ListTile(
+                            title: Text(employee['name'] ?? ''),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(employee['address'] ?? ''),
+                                Text(employee['phone'] ?? ''),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.teal),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => AddEmployeePage(employeeId: id),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => _markAttendance(context, id, 'present'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                  ),
+                                  child: Text(
+                                    languageProvider.isEnglish ? 'Present' : 'حاضر',
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () => _markAttendance(context, id, 'absent'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                  ),
+                                  child: Text(
+                                    languageProvider.isEnglish ? 'Absent' : 'غیرحاضر',
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      )),
-                      DataCell(Row(
-                        children: [
-                          ElevatedButton(
-                            onPressed: () => _markAttendance(context, id, 'present'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                            ),
-                            child: Text(
-                              languageProvider.isEnglish ? 'Present' : 'حاضر',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () => _markAttendance(context, id, 'absent'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                            ),
-                            child: Text(
-                              languageProvider.isEnglish ? 'Absent' : 'غیرحاضر',
-                            ),
-                          ),
-                        ],
-                      )),
-                    ]);
-                  }).toList(),
-                ),
+                        );
+                      },
+                    );
+                  }
+                },
               ),
             ),
           ],

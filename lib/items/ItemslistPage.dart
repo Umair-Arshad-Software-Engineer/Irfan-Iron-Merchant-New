@@ -14,6 +14,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
+
+import 'itemPurchasePage.dart';
 class ItemsListPage extends StatefulWidget {
   @override
   _ItemsListPageState createState() => _ItemsListPageState();
@@ -258,8 +260,6 @@ class _ItemsListPageState extends State<ItemsListPage> {
           title: Text(
             languageProvider.isEnglish ? 'Items List' : 'ٹوٹل آئٹم',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-
-
           ),
           centerTitle: true,
           backgroundColor: Colors.teal,
@@ -286,6 +286,7 @@ class _ItemsListPageState extends State<ItemsListPage> {
               },
               icon: Icon(Icons.history, color: Colors.white),
             ),
+
           ],
         ),
         body: Column(

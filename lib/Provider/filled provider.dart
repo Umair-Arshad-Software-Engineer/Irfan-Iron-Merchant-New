@@ -257,98 +257,6 @@ class FilledProvider with ChangeNotifier {
     }).toList();
   }
 
-  // Future<void> payFilledWithSeparateMethod(
-  //     BuildContext context, String filledId, double paymentAmount, String paymentMethod) async {
-  //   try {
-  //     // Fetch the current filled data from the database
-  //     final filledSnapshot = await _db.child('filled').child(filledId).get();
-  //     if (!filledSnapshot.exists) {
-  //       throw Exception("Filled not found.");
-  //     }
-  //
-  //     // Convert the retrieved data to Map<String, dynamic>
-  //     final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
-  //
-  //     // Get the current payment amounts (default to 0.0 if not set)
-  //     final currentCashPaid = (filled['cashPaidAmount'] ?? 0.0) as double;
-  //     final currentOnlinePaid = (filled['onlinePaidAmount'] ?? 0.0) as double;
-  //     final grandTotal = (filled['grandTotal'] ?? 0.0) as double;
-  //
-  //     // Calculate the total paid so far
-  //     final totalPaid = currentCashPaid + currentOnlinePaid;
-  //
-  //     // Check if the new payment exceeds the remaining balance
-  //     if (paymentAmount > (grandTotal - totalPaid)) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
-  //       );
-  //       throw Exception("Payment exceeds the remaining filled balance.");
-  //     }
-  //
-  //     // Add the new payment to the appropriate field
-  //     double updatedCashPaid = currentCashPaid;
-  //     double updatedOnlinePaid = currentOnlinePaid;
-  //
-  //     if (paymentMethod == 'Cash') {
-  //       updatedCashPaid += paymentAmount;
-  //       // Save the cash payment in a child node with date
-  //       await _db.child('filled').child(filledId).child('cashPayments').push().set({
-  //         'amount': paymentAmount,
-  //         'date': DateTime.now().toIso8601String(),
-  //       });
-  //     } else if (paymentMethod == 'Online') {
-  //       updatedOnlinePaid += paymentAmount;
-  //       // Save the online payment in a child node with date
-  //       await _db.child('filled').child(filledId).child('onlinePayments').push().set({
-  //         'amount': paymentAmount,
-  //         'date': DateTime.now().toIso8601String(),
-  //       });
-  //     }
-  //
-  //     // Get the current debit amount (default to 0.0 if not set)
-  //     final currentDebit = (filled['debitAmount'] ?? 0.0) as double;
-  //
-  //     // Check if the payment amount exceeds the remaining balance
-  //     if (paymentAmount > (grandTotal - currentDebit)) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
-  //       );
-  //       throw Exception("Payment exceeds the remaining filled balance.");
-  //     }
-  //
-  //     // Update the filled with the new payment data
-  //     final updatedDebit = currentDebit + paymentAmount;
-  //     final debitAt = DateTime.now().toIso8601String();
-  //
-  //     await _db.child('filled').child(filledId).update({
-  //       'cashPaidAmount': updatedCashPaid,
-  //       'onlinePaidAmount': updatedOnlinePaid,
-  //       'debitAmount': updatedDebit, // Make sure this is updated
-  //       'debitAt': debitAt,
-  //     });
-  //
-  //     // Update the ledger with the calculated remaining balance
-  //     await _updateCustomerLedger(
-  //       filled['customerId'],
-  //       creditAmount: 0.0,
-  //       debitAmount: paymentAmount,
-  //       remainingBalance: grandTotal - updatedDebit,
-  //       filledNumber: filled['filledNumber'],
-  //     );
-  //
-  //     // Refresh the filled list
-  //     await fetchFilled();
-  //
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('Payment of Rs. $paymentAmount recorded successfully as $paymentMethod.')),
-  //     );
-  //   } catch (e) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
-  //     );
-  //     throw Exception('Failed to save payment: $e');
-  //   }
-  // }
 
   Future<void> payFilledWithSeparateMethod(
       BuildContext context,
@@ -422,16 +330,25 @@ class FilledProvider with ChangeNotifier {
       }
 
       // Save the payment data in the appropriate child node based on the payment method
+      DatabaseReference paymentRef;
       if (paymentMethod == 'Cash') {
         updatedCashPaid += paymentAmount;
-        await _db.child('filled').child(filledId).child('cashPayments').push().set(paymentData);
+        paymentRef = _db.child('filled').child(filledId).child('cashPayments').push();
       } else if (paymentMethod == 'Online') {
         updatedOnlinePaid += paymentAmount;
-        await _db.child('filled').child(filledId).child('onlinePayments').push().set(paymentData);
+        paymentRef = _db.child('filled').child(filledId).child('onlinePayments').push();
       } else if (paymentMethod == 'Check') {
         updatedCheckPaid += paymentAmount;
-        await _db.child('filled').child(filledId).child('checkPayments').push().set(paymentData);
+        paymentRef = _db.child('filled').child(filledId).child('checkPayments').push();
+      } else {
+        throw Exception("Invalid payment method.");
       }
+
+      // Add the payment key to the payment data
+      paymentData['key'] = paymentRef.key;
+
+      // Save the payment data
+      await paymentRef.set(paymentData);
 
       // Retrieve and parse the current debit amount
       final currentDebit = _parseToDouble(filled['debitAmount']);
@@ -480,7 +397,6 @@ class FilledProvider with ChangeNotifier {
   }
 
 
-
   Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
     try {
       List<Map<String, dynamic>> payments = [];
@@ -511,6 +427,181 @@ class FilledProvider with ChangeNotifier {
       return payments;
     } catch (e) {
       throw Exception('Failed to fetch payments: $e');
+    }
+  }
+  Future<void> deletePaymentEntry({
+    required BuildContext context,
+    required String filledId,
+    required String paymentKey,
+    required String paymentMethod,
+    required double paymentAmount,
+  }) async {
+    try {
+      final filledRef = _db.child('filled').child(filledId);
+
+      // Step 1: Remove the payment entry from the filled
+      await filledRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+
+      // Step 2: Fetch the filled data
+      final filledSnapshot = await filledRef.get();
+      if (!filledSnapshot.exists) {
+        throw Exception("Filled not found.");
+      }
+
+      final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
+      final customerId = filled['customerId'] as String;
+      final filledNumber = filled['filledNumber'] as String;
+
+      // Step 3: Update the payment method amount and debitAmount in the filled
+      double currentCashPaid = _parseToDouble(filled['cashPaidAmount']);
+      double currentOnlinePaid = _parseToDouble(filled['onlinePaidAmount']);
+      double currentCheckPaid = _parseToDouble(filled['checkPaidAmount']);
+      double currentDebit = _parseToDouble(filled['debitAmount']);
+
+      // Deduct the payment amount from the respective payment method
+      switch (paymentMethod.toLowerCase()) {
+        case 'cash':
+          currentCashPaid -= paymentAmount;
+          break;
+        case 'online':
+          currentOnlinePaid -= paymentAmount;
+          break;
+        case 'check':
+          currentCheckPaid -= paymentAmount;
+          break;
+        default:
+          throw Exception("Invalid payment method.");
+      }
+
+      // Deduct the payment amount from the debitAmount
+      final updatedDebit = currentDebit - paymentAmount;
+
+      // Update the filled with the new payment method amounts and debitAmount
+      await filledRef.update({
+        'cashPaidAmount': currentCashPaid,
+        'onlinePaidAmount': currentOnlinePaid,
+        'checkPaidAmount': currentCheckPaid,
+        'debitAmount': updatedDebit,
+      });
+
+      // Step 4: Fetch the latest ledger entry for the customer
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final ledgerSnapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
+
+      if (ledgerSnapshot.exists) {
+        final ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>;
+        final latestEntryKey = ledgerData.keys.first;
+        final latestEntry = Map<String, dynamic>.from(ledgerData[latestEntryKey]);
+
+        // Deduct the payment amount from the remainingBalance in the latest ledger entry
+        double currentRemainingBalance = _parseToDouble(latestEntry['remainingBalance']);
+        double updatedRemainingBalance = currentRemainingBalance + paymentAmount; // Add back the payment amount
+
+        // Update the latest ledger entry with the new remainingBalance
+        await customerLedgerRef.child(latestEntryKey).update({
+          'remainingBalance': updatedRemainingBalance,
+        });
+      }
+
+      // Step 5: Delete the corresponding ledger entry for the payment
+      final paymentLedgerSnapshot = await customerLedgerRef
+          .orderByChild('filledNumber')
+          .equalTo(filledNumber)
+          .get();
+
+      if (paymentLedgerSnapshot.exists) {
+        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
+        for (var entryKey in paymentLedgerData.keys) {
+          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
+          final entryDebit = _parseToDouble(entry['debitAmount']);
+          if (entryDebit == paymentAmount && entry['filledNumber'] == filledNumber) {
+            await customerLedgerRef.child(entryKey).remove();
+            break;
+          }
+        }
+      }
+
+      // Step 6: Refresh the filled list
+      await fetchFilled();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment deleted successfully.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+      );
+      throw Exception('Failed to delete payment entry: $e');
+    }
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value is int) {
+      return value.toDouble();
+    } else if (value is double) {
+      return value;
+    } else if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    } else {
+      return 0.0;
+    }
+  }
+
+  Future<void> editPaymentEntry({
+    required String filledId,
+    required String paymentKey,
+    required String paymentMethod,
+    required double oldPaymentAmount,
+    required double newPaymentAmount,
+    required String newDescription,
+    required Uint8List? newImageBytes,
+  }) async {
+    try {
+      final filledRef = _db.child('filled').child(filledId);
+
+      // Step 1: Update the payment entry in the filled
+      final updatedPaymentData = {
+        'amount': newPaymentAmount,
+        'date': DateTime.now().toIso8601String(),
+        'paymentMethod': paymentMethod,
+        'description': newDescription,
+      };
+
+      if (newImageBytes != null) {
+        updatedPaymentData['image'] = base64Encode(newImageBytes);
+      }
+
+      await filledRef.child('${paymentMethod}Payments').child(paymentKey).update(updatedPaymentData);
+
+      // Step 2: Update the debitAmount in the filled
+      final filledSnapshot = await filledRef.get();
+      if (filledSnapshot.exists) {
+        final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
+        final currentDebit = _parseToDouble(filled['debitAmount']);
+        final updatedDebit = currentDebit - oldPaymentAmount + newPaymentAmount;
+
+        await filledRef.update({
+          'debitAmount': updatedDebit,
+        });
+
+        // Step 3: Update the customer ledger
+        final customerId = filled['customerId'];
+        final filledNumber = filled['filledNumber'];
+        final grandTotal = _parseToDouble(filled['grandTotal']);
+
+        await _updateCustomerLedger(
+          customerId,
+          creditAmount: 0.0,
+          debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
+          remainingBalance: grandTotal - updatedDebit,
+          filledNumber: filledNumber,
+        );
+      }
+
+      // Refresh the filled list
+      await fetchFilled();
+    } catch (e) {
+      throw Exception('Failed to edit payment entry: $e');
     }
   }
 

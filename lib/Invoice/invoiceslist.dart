@@ -13,10 +13,7 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:ui' as ui;
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 
 
@@ -128,7 +125,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     return AppBar(
       title: Text(
         languageProvider.isEnglish ? 'Invoice List' : 'انوائس لسٹ',
-        style: TextStyle(color: Colors.white),
+        style: const TextStyle(color: Colors.white),
       ),
       centerTitle: true,
       backgroundColor: Colors.teal,
@@ -214,7 +211,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       },
     );
   }
-// Add to _InvoiceListPageState
+
+  // Add to _InvoiceListPageState
   Future<void> _showPaymentDetails(Map<String, dynamic> invoice) async {
     final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -246,7 +244,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                   child: ListTile(
                     title: Text(
                       '${payment['method']}: Rs ${payment['amount']}',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,7 +253,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                             .format(payment['date'])),
                         if (payment['description'] != null)
                           Padding(
-                            padding: EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.only(top: 4),
                             child: Text(payment['description']),
                           ),
                         if (imageBytes != null)
@@ -264,7 +262,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                               GestureDetector(
                                 onTap: () => _showFullScreenImage(imageBytes!),
                                 child: Padding(
-                                  padding: EdgeInsets.only(top: 8),
+                                  padding: const EdgeInsets.only(top: 8),
                                   child: Hero(
                                     tag: 'paymentImage$index',
                                     child: Image.memory(
@@ -283,7 +281,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                                       .isEnglish
                                       ? 'View Full Image'
                                       : 'مکمل تصویر دیکھیں',
-                                  style: TextStyle(fontSize: 12),
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                               ),
                             ],
@@ -307,7 +305,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         //   ),
                         // ),
                         IconButton(
-                          icon: Icon(Icons.delete),
+                          icon: const Icon(Icons.delete),
                           onPressed: () => _showDeletePaymentConfirmationDialog(
                             context,
                             invoice['id'],
@@ -337,6 +335,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       );
     }
   }  // Print invoices
+
   Future<void> _printInvoices() async {
     final pdf = pw.Document();
     final headers = ['Invoice Number', 'Customer Name', 'Date', 'Grand Total', 'Remaining Amount'];
@@ -382,7 +381,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                   border: pw.TableBorder.all(),
                   headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   cellAlignment: pw.Alignment.centerLeft,
-                  cellPadding: pw.EdgeInsets.all(8),
+                  cellPadding: const pw.EdgeInsets.all(8),
                 ),
                 pw.Spacer(),
                 pw.Divider(),
@@ -423,13 +422,13 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     final canvas = Canvas(
       recorder,
       Rect.fromPoints(
-        Offset(0, 0),
-        Offset(500 * scaleFactor, 50 * scaleFactor),
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
       ),
     );
 
     final paint = Paint()..color = Colors.black;
-    final textStyle = TextStyle(
+    final textStyle = const TextStyle(
       fontSize: 13 * scaleFactor,
       fontFamily: 'JameelNoori',
       color: Colors.black,
@@ -444,7 +443,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     );
 
     textPainter.layout();
-    textPainter.paint(canvas, Offset(0, 0));
+    textPainter.paint(canvas, const Offset(0, 0));
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(
@@ -677,7 +676,7 @@ Future<void> _showDeletePaymentConfirmationDialog(
                 );
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Payment deleted successfully.')),
+                  const SnackBar(content: Text('Payment deleted successfully.')),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -765,7 +764,7 @@ Future<void> _showEditPaymentDialog(
                 );
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Payment updated successfully.')),
+                  const SnackBar(content: Text('Payment updated successfully.')),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(

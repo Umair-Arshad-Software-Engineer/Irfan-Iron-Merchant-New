@@ -14,7 +14,7 @@
   import '../Provider/lanprovider.dart'; // Import your customer provider
   import 'package:flutter/rendering.dart';
   import 'dart:ui' as ui;
-  
+  import 'package:share_plus/share_plus.dart';
   
   
   
@@ -99,50 +99,230 @@
       return subtotal - discountAmount;
     }
   
-    Future<void> _generateAndPrintPDF(String invoiceNumber) async {
+    // Future<void> _generateAndPrintPDF(String invoiceNumber) async {
+    //   final pdf = pw.Document();
+    //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    //   final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
+    //
+    //   // Get current date and time
+    //   final DateTime now = DateTime.now();
+    //   final String formattedDate = '${now.day}/${now.month}/${now.year}';
+    //   final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+    //
+    //   // Get the remaining balance from the ledger
+    //   double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+    //
+    //   // Load the image asset for the logo
+    //   final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    //   final buffer = bytes.buffer.asUint8List();
+    //   final image = pw.MemoryImage(buffer);
+    //
+    //   // Load the footer logo if different
+    //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    //   final footerBuffer = footerBytes.buffer.asUint8List();
+    //   final footerLogo = pw.MemoryImage(footerBuffer);
+    //
+    //   // Pre-generate images for all descriptions
+    //   List<pw.MemoryImage> descriptionImages = [];
+    //   for (var row in _invoiceRows) {
+    //     final image = await _createTextImage(row['description']);
+    //     descriptionImages.add(image);
+    //   }
+    //
+    //   // Pre-generate images for all item names
+    //   List<pw.MemoryImage> itemnameImages = [];
+    //   for (var row in _invoiceRows) {
+    //     final image = await _createTextImage(row['itemName']);
+    //     itemnameImages.add(image);
+    //   }
+    //
+    //   // Generate customer details as an image
+    //   final customerDetailsImage = await _createTextImage(
+    //     'Customer Name: ${selectedCustomer.name}\n'
+    //         'Customer Address: ${selectedCustomer.address}',
+    //   );
+    //
+    //   // Add a page with A5 size
+    //   pdf.addPage(
+    //     pw.Page(
+    //       pageFormat: PdfPageFormat.a5, // Set page size to A5
+    //       margin: const pw.EdgeInsets.all(10), // Add margins for better spacing
+    //       build: (context) {
+    //         return pw.Column(
+    //           crossAxisAlignment: pw.CrossAxisAlignment.start,
+    //           children: [
+    //             // Company Logo and Invoice Header
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //               children: [
+    //                 pw.Image(image, width: 80, height: 80), // Adjust logo size
+    //                 pw.Text(
+    //                   'Invoice',
+    //                   style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+    //                 ),
+    //               ],
+    //             ),
+    //             pw.Divider(),
+    //
+    //             // Customer Information
+    //             pw.Image(customerDetailsImage, width: 250, dpi: 1000), // Adjust width
+    //             pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
+    //             pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
+    //             pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
+    //             pw.Text('InvoiceId: $_invoiceId', style: const pw.TextStyle(fontSize: 12)),
+    //
+    //             pw.SizedBox(height: 10),
+    //
+    //             // Invoice Table with Urdu text converted to image
+    //             pw.Table.fromTextArray(
+    //               headers: [
+    //                 pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
+    //                 pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
+    //                 pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
+    //                 pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+    //                 pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
+    //                 pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+    //               ],
+    //               data: _invoiceRows.asMap().map((index, row) {
+    //                 return MapEntry(
+    //                   index,
+    //                   [
+    //                     pw.Image(itemnameImages[index], dpi: 1000),
+    //                     pw.Image(descriptionImages[index], dpi: 1000),
+    //                     pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+    //                     pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
+    //                     pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+    //                     pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+    //                   ],
+    //                 );
+    //               }).values.toList(),
+    //             ),
+    //             pw.SizedBox(height: 10),
+    //
+    //             // Totals Section
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //               children: [
+    //                 pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
+    //                 pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+    //               ],
+    //             ),
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //               children: [
+    //                 pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+    //                 pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+    //               ],
+    //             ),
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //               children: [
+    //                 pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+    //                 pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+    //               ],
+    //             ),
+    //             pw.SizedBox(height: 20),
+    //
+    //             // Footer Section (Remaining Balance)
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //               children: [
+    //                 pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+    //                 pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+    //               ],
+    //             ),
+    //             pw.SizedBox(height: 30),
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.end,
+    //               children: [
+    //                 pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+    //               ],
+    //             ),
+    //
+    //             // Footer Section
+    //             pw.Spacer(), // Push footer to the bottom of the page
+    //             pw.Divider(),
+    //             pw.Row(
+    //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //               children: [
+    //                 pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+    //                 pw.Column(
+    //                   crossAxisAlignment: pw.CrossAxisAlignment.center,
+    //                   children: [
+    //                     pw.Text(
+    //                       'Dev Valley Software House',
+    //                       style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+    //                     ),
+    //                     pw.Text(
+    //                       'Contact: 0303-4889663',
+    //                       style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+    //                     ),
+    //                   ],
+    //                 ),
+    //               ],
+    //             ),
+    //           ],
+    //         );
+    //       },
+    //     ),
+    //   );
+    //
+    //   try {
+    //     await Printing.layoutPdf(
+    //       onLayout: (format) async {
+    //         return pdf.save();
+    //       },
+    //     );
+    //   } catch (e) {
+    //     print("Error printing: $e");
+    //   }
+    // }
+
+    Future<Uint8List> _generatePDFBytes(String invoiceNumber) async {
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
       final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
-  
+
       // Get current date and time
       final DateTime now = DateTime.now();
       final String formattedDate = '${now.day}/${now.month}/${now.year}';
       final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
-  
+
       // Get the remaining balance from the ledger
       double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
-  
+
       // Load the image asset for the logo
       final ByteData bytes = await rootBundle.load('assets/images/logo.png');
       final buffer = bytes.buffer.asUint8List();
       final image = pw.MemoryImage(buffer);
-  
+
       // Load the footer logo if different
       final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
       final footerBuffer = footerBytes.buffer.asUint8List();
       final footerLogo = pw.MemoryImage(footerBuffer);
-  
+
       // Pre-generate images for all descriptions
       List<pw.MemoryImage> descriptionImages = [];
       for (var row in _invoiceRows) {
         final image = await _createTextImage(row['description']);
         descriptionImages.add(image);
       }
-  
+
       // Pre-generate images for all item names
       List<pw.MemoryImage> itemnameImages = [];
       for (var row in _invoiceRows) {
         final image = await _createTextImage(row['itemName']);
         itemnameImages.add(image);
       }
-  
+
       // Generate customer details as an image
       final customerDetailsImage = await _createTextImage(
         'Customer Name: ${selectedCustomer.name}\n'
             'Customer Address: ${selectedCustomer.address}',
       );
-  
+
       // Add a page with A5 size
       pdf.addPage(
         pw.Page(
@@ -164,16 +344,16 @@
                   ],
                 ),
                 pw.Divider(),
-  
+
                 // Customer Information
                 pw.Image(customerDetailsImage, width: 250, dpi: 1000), // Adjust width
                 pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
                 pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
                 pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
                 pw.Text('InvoiceId: $_invoiceId', style: const pw.TextStyle(fontSize: 12)),
-  
+
                 pw.SizedBox(height: 10),
-  
+
                 // Invoice Table with Urdu text converted to image
                 pw.Table.fromTextArray(
                   headers: [
@@ -199,7 +379,7 @@
                   }).values.toList(),
                 ),
                 pw.SizedBox(height: 10),
-  
+
                 // Totals Section
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -223,7 +403,7 @@
                   ],
                 ),
                 pw.SizedBox(height: 20),
-  
+
                 // Footer Section (Remaining Balance)
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -239,7 +419,7 @@
                     pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-  
+
                 // Footer Section
                 pw.Spacer(), // Push footer to the bottom of the page
                 pw.Divider(),
@@ -267,15 +447,36 @@
           },
         ),
       );
-  
+      return pdf.save();
+    }
+
+    Future<void> _generateAndPrintPDF(String invoiceNumber) async {
       try {
-        await Printing.layoutPdf(
-          onLayout: (format) async {
-            return pdf.save();
-          },
-        );
+        final bytes = await _generatePDFBytes(invoiceNumber);
+        await Printing.layoutPdf(onLayout: (format) => bytes);
       } catch (e) {
         print("Error printing: $e");
+      }
+    }
+
+    Future<void> _sharePDFViaWhatsApp(String invoiceNumber) async {
+      try {
+        final bytes = await _generatePDFBytes(invoiceNumber);
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/invoice_$invoiceNumber.pdf');
+        await file.writeAsBytes(bytes);
+
+        print('PDF file created at: ${file.path}'); // Debug log
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Invoice $invoiceNumber',
+        );
+      } catch (e) {
+        print('Error sharing PDF: $e'); // Debug log
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share PDF: ${e.toString()}')),
+        );
       }
     }
     Future<pw.MemoryImage> _createTextImage(String text) async {
@@ -537,6 +738,14 @@
                   final invoiceNumber = _invoiceId ?? generateInvoiceNumber();
                   _generateAndPrintPDF(invoiceNumber);
                 }, icon: const Icon(Icons.print, color: Colors.white)),
+                // Share Button
+                IconButton(
+                  onPressed: () async {
+                    final invoiceNumber = _invoiceId ?? generateInvoiceNumber();
+                    await _sharePDFViaWhatsApp(invoiceNumber);
+                  },
+                  icon: const Icon(Icons.share, color: Colors.white),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
                   child: Text(

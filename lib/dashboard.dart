@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iron_project_new/Auth/login.dart';
 import 'package:iron_project_new/userspage.dart';
+import 'package:iron_project_new/vendors/viewvendors.dart';
 import 'package:provider/provider.dart';
 import 'Customer/customerlist.dart';
 import 'DailyExpensesPages/viewexpensepage.dart';
@@ -14,6 +15,7 @@ import 'Provider/lanprovider.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
 import 'items/ItemslistPage.dart';
+import 'items/purchaselistpage.dart';
 
 
 class Dashboard extends StatelessWidget {
@@ -145,6 +147,26 @@ class Dashboard extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) =>  ItemsListPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: Text(languageProvider.isEnglish ? 'Purchase Page' : 'خریداری'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) =>  PurchaseListPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.home),
+            title: Text(languageProvider.isEnglish ? 'Vendors' : 'بیچنے والا'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) =>  ViewVendorsPage()),
               );
             },
           ),
