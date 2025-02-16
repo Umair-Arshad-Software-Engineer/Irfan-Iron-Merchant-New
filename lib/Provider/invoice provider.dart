@@ -613,7 +613,7 @@ class InvoiceProvider with ChangeNotifier {
   List<Map<String, dynamic>> getTodaysInvoices() {
     final today = DateTime.now();
     // final startOfDay = DateTime(today.year, today.month, today.day - 1); // Include yesterday
-    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterday
+    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterdays
 
     final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
