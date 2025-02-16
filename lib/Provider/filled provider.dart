@@ -605,4 +605,27 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+  List<Map<String, dynamic>> getTodaysFilled() {
+    final today = DateTime.now();
+    // final startOfDay = DateTime(today.year, today.month, today.day - 1); // Include yesterday
+    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterday
+
+    final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+    return _filled.where((filled) {
+      final filledDate = DateTime.tryParse(filled['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(filled['createdAt']));
+      return filledDate.isAfter(startOfDay) && filledDate.isBefore(endOfDay);
+    }).toList();
+  }
+
+  double getTotalAmountfilled(List<Map<String, dynamic>> filled) {
+    return filled.fold(0.0, (sum, filled) => sum + (filled['grandTotal'] ?? 0.0));
+  }
+
+  double getTotalPaidAmountfilled(List<Map<String, dynamic>> filled) {
+    return filled.fold(0.0, (sum, filled) => sum + (filled['debitAmount'] ?? 0.0));
+  }
+
+
+
 }

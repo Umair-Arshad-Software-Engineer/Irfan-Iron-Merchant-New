@@ -609,4 +609,26 @@ class InvoiceProvider with ChangeNotifier {
       throw Exception('Failed to edit payment entry: $e');
     }
   }
+
+  List<Map<String, dynamic>> getTodaysInvoices() {
+    final today = DateTime.now();
+    // final startOfDay = DateTime(today.year, today.month, today.day - 1); // Include yesterday
+    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterday
+
+    final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+    return _invoices.where((invoice) {
+      final invoiceDate = DateTime.tryParse(invoice['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(invoice['createdAt']));
+      return invoiceDate.isAfter(startOfDay) && invoiceDate.isBefore(endOfDay);
+    }).toList();
+  }
+
+  double getTotalAmount(List<Map<String, dynamic>> invoices) {
+    return invoices.fold(0.0, (sum, invoice) => sum + (invoice['grandTotal'] ?? 0.0));
+  }
+
+  double getTotalPaidAmount(List<Map<String, dynamic>> invoices) {
+    return invoices.fold(0.0, (sum, invoice) => sum + (invoice['debitAmount'] ?? 0.0));
+  }
+
 }

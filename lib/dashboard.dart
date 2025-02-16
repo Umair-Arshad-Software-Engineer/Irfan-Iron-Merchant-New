@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iron_project_new/Auth/login.dart';
+import 'package:iron_project_new/roznamchaPage.dart';
 import 'package:iron_project_new/userspage.dart';
 import 'package:iron_project_new/vendors/viewvendors.dart';
 import 'package:provider/provider.dart';
@@ -200,7 +201,7 @@ class Dashboard extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) =>  RoznamchaListPage()),
+                MaterialPageRoute(builder: (context) => Roznamchapage()),
               );
             },
           ),//s
