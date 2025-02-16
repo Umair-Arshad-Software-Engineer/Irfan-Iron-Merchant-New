@@ -151,10 +151,22 @@ class _filledpageState extends State<filledpage> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Image(image, width: 80, height: 80), // Adjust logo size
-                  pw.Text(
-                    'Filled',
-                    style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                  ),
+                  pw.Column(
+                      children: [
+                        pw.Text(
+                          'Filled',
+                          style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(
+                          'Zulfiqar Ahmad: 0300-6316202',
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(
+                          'Muhammad Irfan: 0300-8167446',
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                        ),
+                      ]
+                  )
                 ],
               ),
               pw.Divider(),

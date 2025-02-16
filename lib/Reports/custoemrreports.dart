@@ -214,6 +214,10 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                       style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                   pw.Text('Contact: 03006316202',
                       style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Muhammad Irfan',
+                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Contact: 03008167446',
+                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                 ],
               ),
             ],
@@ -230,7 +234,6 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
           pw.SizedBox(height: 20),
           pw.Text('Transactions:',
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-
           // Transaction Table
           pw.Table.fromTextArray(
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),

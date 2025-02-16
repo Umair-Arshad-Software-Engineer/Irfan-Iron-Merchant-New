@@ -157,7 +157,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(languageProvider.isEnglish ? 'Purchase Item' : 'آئٹم خریداری'),
+        title: Text(languageProvider.isEnglish ? 'Purchase Item' : 'آئٹم خریداری',style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),),
         backgroundColor: Colors.teal,
         centerTitle: true,
       ),
@@ -256,7 +256,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   backgroundColor: Colors.teal,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: Text(languageProvider.isEnglish ? 'Record Purchase' : 'خریداری ریکارڈ کریں'),
+                child: Text(languageProvider.isEnglish ? 'Record Purchase' : 'خریداری ریکارڈ کریں',style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold,fontSize: 16),),
               ),
             ],
           ),

@@ -143,8 +143,8 @@ class Dashboard extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.home),
-            title: Text(languageProvider.isEnglish ? 'Items List' : 'ٹوٹم آتمز'),
+            leading: const Icon(Icons.list),
+            title: Text(languageProvider.isEnglish ? 'Items List' : 'ٹوٹل آئٹمز'),
             onTap: () {
               Navigator.push(
                 context,
@@ -153,7 +153,7 @@ class Dashboard extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.home),
+            leading: const Icon(Icons.shopping_cart),
             title: Text(languageProvider.isEnglish ? 'Purchase Page' : 'خریداری'),
             onTap: () {
               Navigator.push(
@@ -163,7 +163,7 @@ class Dashboard extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.home),
+            leading: const Icon(Icons.store),
             title: Text(languageProvider.isEnglish ? 'Vendors' : 'بیچنے والا'),
             onTap: () {
               Navigator.push(
@@ -185,7 +185,7 @@ class Dashboard extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.home),
+            leading: const Icon(Icons.account_balance),
             title: Text(languageProvider.isEnglish ? 'Bank Management' : 'بینک مینجمنٹ'),
             onTap: () {
               Navigator.push(
@@ -195,7 +195,7 @@ class Dashboard extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.home),
+            leading: const Icon(Icons.assignment),
             title: Text(languageProvider.isEnglish ? 'Roznamcha' : 'روزنامچہ'),
             onTap: () {
               Navigator.push(
@@ -203,7 +203,7 @@ class Dashboard extends StatelessWidget {
                 MaterialPageRoute(builder: (context) =>  RoznamchaListPage()),
               );
             },
-          ),
+          ),//s
           ListTile(
             leading: const Icon(Icons.settings),
             title: Text(languageProvider.isEnglish ? 'Settings' : 'ترتیبات'),

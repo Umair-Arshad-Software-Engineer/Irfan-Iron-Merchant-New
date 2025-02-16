@@ -194,6 +194,11 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     final logoImage = await rootBundle.load('assets/images/logo.png');
     final logo = pw.MemoryImage(logoImage.buffer.asUint8List());
 
+    // Load the footer logo if different
+    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    final footerBuffer = footerBytes.buffer.asUint8List();
+    final footerLogo = pw.MemoryImage(footerBuffer);
+
     // Helper method to format the date
     String _getFormattedDate(String dateString) {
       final DateTime? parsedDate = DateTime.tryParse(dateString);
@@ -215,8 +220,14 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                 child: pw.Column(
                   children: [
                     pw.Image(logo, width: 80, height: 80),
-                    pw.Text('Alsaeed Sweets & Bakers',
-                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(
+                      'Zulfiqar Ahmad: 0300-6316202',
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      'Muhammad Irfan: 0300-8167446',
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    ),
                     pw.SizedBox(height: 5),
                     pw.Text('Vendor: ${widget.vendorName}',
                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
@@ -282,6 +293,28 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
               'Printed on: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
               style: const pw.TextStyle(fontSize: 10),
             ),
+          ),
+          // Footer Section
+          pw.Spacer(), // Push footer to the bottom of the page
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    'Dev Valley Software House',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(
+                    'Contact: 0303-4889663',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

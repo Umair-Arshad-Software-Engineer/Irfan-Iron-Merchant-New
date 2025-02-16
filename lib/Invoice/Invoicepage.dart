@@ -11,7 +11,7 @@
   import '../Models/itemModel.dart';
   import '../Provider/customerprovider.dart';
   import '../Provider/invoice provider.dart';
-  import '../Provider/lanprovider.dart'; // Import your customer provider
+  import '../Provider/lanprovider.dart';
   import 'package:flutter/rendering.dart';
   import 'dart:ui' as ui;
   import 'package:share_plus/share_plus.dart';
@@ -99,7 +99,6 @@
       return subtotal - discountAmount;
     }
 
-
     Future<Uint8List> _generatePDFBytes(String invoiceNumber) async {
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -170,10 +169,22 @@
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Image(image, width: 80, height: 80), // Adjust logo size
-                    pw.Text(
-                      'Invoice',
-                      style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                    ),
+                   pw.Column(
+                     children: [
+                       pw.Text(
+                         'Invoice',
+                         style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                       ),
+                       pw.Text(
+                         'Zulfiqar Ahmad: 0300-6316202',
+                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                       ),
+                       pw.Text(
+                         'Muhammad Irfan: 0300-8167446',
+                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                       ),
+                     ]
+                   )
                   ],
                 ),
                 pw.Divider(),
@@ -482,7 +493,6 @@
       }
     }
 
-
     @override
     void initState() {
       super.initState();
@@ -566,6 +576,7 @@
       _customerController.dispose();
       super.dispose();
     }
+
     @override
     Widget build(BuildContext context) {
       final languageProvider = Provider.of<LanguageProvider>(context);
@@ -1355,6 +1366,7 @@
       );
     }
   }
+
   class CustomAutocomplete extends StatefulWidget {
     final List<Item> items;
     final Function(Item) onSelected;

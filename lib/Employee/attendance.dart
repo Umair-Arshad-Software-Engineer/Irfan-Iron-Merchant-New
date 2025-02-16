@@ -252,10 +252,17 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
     // Add the collected rows to the PDF table using MultiPage
     pdf.addPage(
       pw.MultiPage(
+        // Set minimal margins for A4 paper
+        pageFormat: PdfPageFormat.a4.copyWith(
+          marginTop: 10,    // ~3.5mm (10 points)
+          marginBottom: 10,
+          marginLeft: 10,
+          marginRight: 10,
+        ),
         // Header: Logo on the top-right corner, "Attendance Report" text, and employee name
         header: (pw.Context context) {
           return pw.Container(
-            margin: const pw.EdgeInsets.only(bottom: 20), // Add padding under the header
+            margin: const pw.EdgeInsets.only(bottom: 10), // Add padding under the header
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -268,6 +275,10 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
                     ),
                     pw.SizedBox(height: 10),
                     pw.Image(firstEmployeeNameImage, width: 150, height: 50, dpi: 1000), // Employee name image
+                    pw.Text('Zulfiqar Ahmad: 03006316202',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Muhammad Irfan: 03008167446',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
                 pw.Image(headerLogo, width: 100, height: 100, dpi: 1000), // Display the logo at the top
@@ -279,7 +290,7 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
         footer: (pw.Context context) {
           return pw.Container(
             alignment: pw.Alignment.bottomCenter,
-            margin: const pw.EdgeInsets.only(top: 20),
+            margin: const pw.EdgeInsets.only(top: 10),
             child: pw.Column(
               children: [
                 pw.Divider(),
@@ -316,7 +327,7 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
                   border: pw.TableBorder.all(width: 1, color: PdfColors.black),
                   children: [
                     pw.TableRow(
-                      decoration: pw.BoxDecoration(color: PdfColors.grey300), // Add background color to header row
+                      decoration: pw.BoxDecoration(color: PdfColors.grey300), // Add background color to header rowss
                       children: [
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(8),

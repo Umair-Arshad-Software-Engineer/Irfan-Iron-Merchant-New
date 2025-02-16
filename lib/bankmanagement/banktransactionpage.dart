@@ -220,7 +220,12 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: PdfPageFormat.a4.copyWith(
+          marginLeft: 10,
+          marginRight: 10,
+          marginBottom: 15,
+          marginTop: 15
+        ),
         build: (pw.Context context) {
           return [
             pw.Header(
@@ -252,11 +257,22 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                 ],
               ),
             ),
+
             pw.Table.fromTextArray(
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(1),
+                2: const pw.FlexColumnWidth(2),
+                3: const pw.FlexColumnWidth(1.5),
+              },
               border: null,
-              cellAlignment: pw.Alignment.centerLeft,
+              cellAlignment: pw.Alignment.centerLeft, // Aligns content to the left within cells
               headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black, // Optional: Set header text color
+                fontSize: 10, // Optional: Set header font size
+              ),
               headers: ['Type', 'Amount (Rs)', 'Description', 'Date & Time'],
               data: [
                 // Initial Deposit Row
@@ -279,8 +295,9 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                 color: PdfColors.black,
                 fontSize: 10,
               ),
-              headerPadding: pw.EdgeInsets.all(8),
-              cellPadding: pw.EdgeInsets.all(8),
+              headerPadding: pw.EdgeInsets.all(4),
+              cellPadding: pw.EdgeInsets.all(4),
+              headerAlignment: pw.Alignment.centerLeft, // Aligns header text to the left
             ),
             pw.SizedBox(height: 20),
             pw.Column(

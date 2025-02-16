@@ -112,7 +112,9 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Purchase List'),
+        title: const Text('Purchase List',
+        style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.teal,
         actions: [
           IconButton(
@@ -122,7 +124,7 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
                 MaterialPageRoute(builder: (context) => ItemPurchasePage()),
               );
             },
-            icon: Icon(Icons.history, color: Colors.white),
+            icon: Icon(Icons.add, color: Colors.white),
           ),
         ],
       ),
