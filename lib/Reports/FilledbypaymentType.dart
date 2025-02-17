@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart'; // For formatting dates
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../Provider/customerprovider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -265,7 +270,38 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
     return pw.MemoryImage(buffer);  // Return the image as MemoryImage
   }
 
+  Future<void> _sharePdf() async {
+    try {
+      final pdfBytes = await _generatePdfBytes();
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/payment_report.pdf');
+      await file.writeAsBytes(pdfBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Payment Report - Sarya',
+        subject: 'Payment Report',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to share PDF: $e')),
+      );
+    }
+  }
+
+
   Future<void> _generateAndPrintPDF() async {
+    try {
+      final pdfBytes = await _generatePdfBytes();
+      await Printing.layoutPdf(onLayout: (PdfPageFormat format) => pdfBytes);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate PDF: $e')),
+      );
+    }
+  }
+
+  Future<Uint8List> _generatePdfBytes() async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
@@ -375,9 +411,9 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
         },
       ),
     );
-
+    return pdf.save();
     // Print PDF
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+    // await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 
   @override
@@ -391,6 +427,14 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
           languageProvider.isEnglish ? 'Payment Type Report For Filled' : 'فلڈ کے لیے ادائیگی کی قسم کی رپورٹ', // Dynamic text based on language
             style: const TextStyle(color: Colors.white)
         ),
+        actions: [
+          IconButton(onPressed: (){
+            _generateAndPrintPDF();
+          }, icon: Icon(Icons.picture_as_pdf,color: Colors.white,)),
+          IconButton(onPressed: (){
+            _sharePdf();
+          }, icon: Icon(Icons.share,color: Colors.white,))
+        ],
         backgroundColor: Colors.teal,
       ),
       body: Padding(
@@ -458,7 +502,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                         ),
                         child: Text(
                           _selectedCustomerName == null
-                              ? 'Select Customer'
+                              ? languageProvider.isEnglish ? 'Select Customer' : 'کسٹمر چوز کریں' // Dynamic text based on language
                               : 'Selected: $_selectedCustomerName',
                           style: const TextStyle(color: Colors.white),
                         ),
@@ -474,7 +518,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                         ),
                         child: Text(
                           _selectedDateRange == null
-                              ? 'Select Date Range'
+                              ? languageProvider.isEnglish ? 'Select Date Range' : 'تاریخ چوز کریں'
                               : 'Date Range Selected',
                           style: const TextStyle(color: Colors.white),
                         ),
@@ -633,31 +677,32 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     // 'Total: ${_calculateTotalAmount().toStringAsFixed(2)}rs',
                     languageProvider.isEnglish ? 'Total: ${_calculateTotalAmount().toStringAsFixed(2)}rs' : 'کل رقم:${_calculateTotalAmount().toStringAsFixed(2)}روپے', // Dynamic text based on language
 
                     style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 25,
                         fontWeight: FontWeight.bold,
                         color: Colors.teal.shade800
                     ),)
                 ],
               ),
             ),
-            ElevatedButton(
-              onPressed: _generateAndPrintPDF,
-              child: Text(
-                  // 'Generate and Print PDF'
-                languageProvider.isEnglish ? 'Generate and Print PDF' : 'پی ڈی ایف بنائیں اور پرنٹ کریں۔', // Dynamic text based on language
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold
-                  ),
-              ),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade400),
-            ),
+            // ElevatedButton(
+            //   onPressed: _generateAndPrintPDF,
+            //   child: Text(
+            //       // 'Generate and Print PDF'
+            //     languageProvider.isEnglish ? 'Generate and Print PDF' : 'پی ڈی ایف بنائیں اور پرنٹ کریں۔', // Dynamic text based on language
+            //       style: TextStyle(
+            //         color: Colors.white,
+            //         fontWeight: FontWeight.bold
+            //       ),
+            //   ),
+            //   style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade400),
+            // ),
           ],
         ),
       ),

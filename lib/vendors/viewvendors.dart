@@ -107,6 +107,8 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
   }
 
   void _editVendor(String id, String name) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     // Implement your edit vendor functionality here
     // This would navigate to the edit vendor page or pop-up dialog to edit the name
     showDialog(
@@ -114,11 +116,13 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
       builder: (context) {
         TextEditingController _editController = TextEditingController(text: name);
         return AlertDialog(
-          title: const Text('Edit Vendor'),
+          title:  Text(
+            languageProvider.isEnglish ? 'Edit Vendor' : 'وینڈر میں ترمیم کریں',
+          ),
           content: TextField(
             controller: _editController,
-            decoration: const InputDecoration(
-              hintText: 'Enter new vendor name',
+            decoration:  InputDecoration(
+              hintText: languageProvider.isEnglish ? 'Enter a new vendor name' : 'ایک نیا وینڈر کا نام درج کریں',
             ),
           ),
           actions: [
@@ -129,15 +133,21 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                   _databaseRef.child(id).update({'name': newName});
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Vendor updated successfully!')),
+                     SnackBar(content: Text(
+                      languageProvider.isEnglish ? 'Vendor updated successfully!' : 'وینڈر کامیابی کے ساتھ اپ ڈیٹ ہو گیا!',
+                    )),
                   );
                 }
               },
-              child: const Text('Save'),
+              child:  Text(
+                languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔',
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child:  Text(
+                languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔',
+              ),
             ),
           ],
         );
@@ -260,6 +270,7 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
 
     return imageBytes;
   }
+
   void _payVendor(String vendorId) {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final FirebaseStorage storage = FirebaseStorage.instance; // Firebase Storage instance
@@ -275,31 +286,33 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Pay Vendor'),
+              title:  Text(
+                languageProvider.isEnglish ? 'Pay Vendor' : 'وینڈر کو ادائیگی کریں',
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
                                 controller: amountController,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Amount',
+                                decoration:  InputDecoration(
+                                  labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
                                   prefixIcon: Icon(Icons.attach_money),
                                 ),
                               ),
                   const SizedBox(height: 10),
                   TextField(
                                 controller: descriptionController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Description',
+                                decoration:  InputDecoration(
+                                  labelText:  languageProvider.isEnglish ? 'Description' : 'تفصیل',
                                   prefixIcon: Icon(Icons.description),
                                 ),
                               ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                                 value: selectedPaymentMethod,
-                                decoration: const InputDecoration(
-                                  labelText: 'Payment Method',
+                                decoration:  InputDecoration(
+                                  labelText: languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ',
                                   prefixIcon: Icon(Icons.payment),
                                 ),
                                 items: ["Cash", "Online", "Check"].map((method) {
@@ -340,7 +353,9 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
 
                     if (amount <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Enter valid amount')));
+                           SnackBar(content: Text(
+                            languageProvider.isEnglish ? 'Enter valid amount' : 'درست رقم درج کریں'
+                          )));
                       return;
                     }
 
@@ -378,13 +393,19 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
 
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Payment saved successfully!')));
+                         SnackBar(content: Text(
+                             languageProvider.isEnglish ? 'Payment saved successfully!' : 'ادائیگی کامیابی کے ساتھ محفوظ ہو گئی!'
+                        )));
                   },
-                  child: const Text('Save'),
+                  child:  Text(
+                      languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔'
+                  ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child:  Text(
+                      languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔'
+                  ),
                 ),
               ],
             );
@@ -438,17 +459,21 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
 
   void _editOpeningBalance(String vendorId, double currentBalance) {
     TextEditingController _balanceController = TextEditingController(text: currentBalance.toString());
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Edit Opening Balance'),
+          title:  Text(
+              languageProvider.isEnglish ? 'Edit Opening Balance' : 'اوپننگ بیلنس میں ترمیم کریں۔'
+          ),
           content: TextField(
             controller: _balanceController,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'New Opening Balance',
+            decoration:  InputDecoration(
+              labelText: languageProvider.isEnglish ? 'New Opening Balance' : 'نیا اوپننگ بیلنس'
+              ,
               prefixIcon: Icon(Icons.account_balance),
             ),
           ),
@@ -465,19 +490,27 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                   });
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening balance updated successfully!')),
+                     SnackBar(content: Text(
+                         languageProvider.isEnglish ? 'Opening balance updated successfully!' : 'اوپننگ بیلنس کامیابی کے ساتھ اپ ڈیٹ ہو گیا!'
+                    )),
                   );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a valid balance.')),
+                     SnackBar(content: Text(
+                         languageProvider.isEnglish ? 'Please enter a valid balance.' : 'براہ کرم ایک درست بیلنس درج کریں۔'
+                    )),
                   );
                 }
               },
-              child: const Text('Save'),
+              child:  Text(
+                  languageProvider.isEnglish ? 'Save' : 'محفوظ کریں۔'
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child:  Text(
+                  languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔'
+              ),
             ),
           ],
         );
@@ -495,10 +528,13 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Vendors',
+        title:  Text(
+            languageProvider.isEnglish ? 'Vendors' : 'فروش',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -528,8 +564,8 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
           children: [
             TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Search Vendor',
+              decoration:  InputDecoration(
+                labelText: languageProvider.isEnglish ? 'Search Vendors' : 'دکانداروں کو تلاش کریں',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),
@@ -540,10 +576,10 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
               child: CircularProgressIndicator(),
             )
                 : _filteredVendors.isEmpty
-                ? const Center(
+                ? Center(
               child: Text(
-                'No vendors added yet.',
-                style: TextStyle(fontSize: 16, color: Colors.white),
+                languageProvider.isEnglish ? 'No vendors added yet' : 'ابھی تک کوئی وینڈر شامل نہیں کیا گیا۔',
+                style: const TextStyle(fontSize: 16, color: Colors.white),
               ),
             )
                 : Expanded(
@@ -570,22 +606,21 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Vendor #${index + 1}',
+                            '${languageProvider.isEnglish ? 'Vendor' : 'وینڈر'} #${index + 1}',
                             style: const TextStyle(fontSize: 14, color: Colors.grey),
                           ),
                           Text(
-                            'Opening Balance: ${vendor["openingBalance"].toStringAsFixed(2)} Rs',
+                            '${languageProvider.isEnglish ? 'Opening Balance' : 'اوپننگ بیلنس'}: ${vendor["openingBalance"].toStringAsFixed(2)} Rs',
                             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                           ),
                           Text(
-                            'Paid: ${vendor["paidAmount"].toStringAsFixed(2)} Rs',
+                            '${languageProvider.isEnglish ? 'Paid' : 'ادائیگی'}: ${vendor["paidAmount"].toStringAsFixed(2)} Rs',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.orange),
                             onPressed: () => _editOpeningBalance(vendor["id"], vendor["openingBalance"]),
                           ),
-
                         ],
                       ),
                       onTap: () => _editVendor(vendor["id"], vendor["name"]),
@@ -655,25 +690,30 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     _fetchPaymentHistory();
   }
   void _deletePayment(String paymentId, double amount) async {
+
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     // Show confirmation dialog
     bool confirmDelete = await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Confirm Delete'),
-          content: const Text('Are you sure you want to delete this payment?'),
-          actions: [
+          title: Text(languageProvider.isEnglish ? 'Confirm Delete' : 'حذف کی تصدیق کریں'),
+          content: Text(languageProvider.isEnglish
+              ? 'Are you sure you want to delete this payment?'
+              : 'کیا آپ واقعی اس ادائیگی کو حذف کرنا چاہتے ہیں؟'),
+           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(context, false); // Return false if "No" is pressed
               },
-              child: const Text('No'),
+              child: Text(languageProvider.isEnglish ? 'No' : 'نہیں'),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(context, true); // Return true if "Yes" is pressed
               },
-              child: const Text('Yes'),
+              child: Text(languageProvider.isEnglish ? 'Yes' : 'ہاں'),
             ),
           ],
         );
@@ -697,11 +737,11 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
         _fetchPaymentHistory();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment deleted successfully!')),
+           SnackBar(content:Text(languageProvider.isEnglish ? 'Payment deleted successfully!' : 'ادائیگی کامیابی سے حذف ہو گئی!')),
         );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting payment: $e')),
+          SnackBar(content: Text(languageProvider.isEnglish ? 'Error deleting payment: $e' : 'ادائیگی حذف کرنے میں خرابی: $e')),
         );
       }
     }
@@ -734,12 +774,13 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     TextEditingController amountController = TextEditingController(text: existingAmount.toString());
     TextEditingController descriptionController = TextEditingController(text: existingDescription);
     String selectedPaymentMethod = existingMethod;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Edit Payment'),
+          title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -747,27 +788,31 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                 TextField(
                   controller: amountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Amount',
+                  decoration:  InputDecoration(
+                    labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
                     prefixIcon: Icon(Icons.attach_money),
                   ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
+                  decoration:  InputDecoration(
+                    labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
                     prefixIcon: Icon(Icons.description),
                   ),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: selectedPaymentMethod,
-                  decoration: const InputDecoration(
-                    labelText: 'Payment Method',
+                  decoration:  InputDecoration(
+                    labelText: languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ',
                     prefixIcon: Icon(Icons.payment),
                   ),
-                  items: ["Cash", "Online","Check"].map((method) {
+                  items: [
+                    languageProvider.isEnglish ? "Cash" : "نقد",
+                    languageProvider.isEnglish ? "Online" : "آن لائن",
+                    languageProvider.isEnglish ? "Check" : "چیک"
+                  ].map((method) {
                     return DropdownMenuItem(
                       value: method,
                       child: Text(method),
@@ -801,19 +846,19 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   Navigator.pop(context);
                   _fetchPaymentHistory(); // Refresh the payment list
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payment updated successfully!')),
+                     SnackBar(content: Text(languageProvider.isEnglish ? 'Payment updated successfully!' : 'ادائیگی کامیابی سے اپ ڈیٹ ہو گئی!')),
                   );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a valid amount.')),
+                     SnackBar(content: Text(languageProvider.isEnglish ? 'Please enter a valid amount.' : 'براہ کرم درست رقم درج کریں۔')),
                   );
                 }
               },
-              child: const Text('Save'),
+              child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
             ),
           ],
         );
@@ -822,23 +867,27 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   }
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Payment History'),
+        title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
         backgroundColor: Colors.blueAccent,
       ),
       body: payments.isEmpty
-          ? const Center(child: Text('No payments recorded for this vendor.'))
+          ?  Center(child: Text(
+        languageProvider.isEnglish ? 'No payments recorded for this vendor.' : 'اس وینڈر کے لیے کوئی ادائیگی ریکارڈ نہیں کی گئی۔',
+      ))
           : ListView.builder(
         itemCount: payments.length,
         itemBuilder: (context, index) {
           final payment = payments[index];
           return ListTile(
-            title: Text("Amount: ${payment['amount']}Rs"),
+            title: Text("${languageProvider.isEnglish ? 'Amount' : 'رقم'}: ${payment['amount']}Rs"),
             subtitle: Text(
-              "Description: ${payment['description']}\n"
-                  "Date: ${payment['date']}\n"
-                  "Payment Method: ${payment['paymentMethod']}",
+              "${languageProvider.isEnglish ? 'Description' : 'تفصیل'}: ${payment['description']}\n"
+                  "${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${payment['date']}\n"
+                  "${languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ'}: ${payment['paymentMethod']}",
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -858,10 +907,9 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                 ),
               ],
             ),
-
           );
         },
       ),
-    );
+    );//s
   }
 }

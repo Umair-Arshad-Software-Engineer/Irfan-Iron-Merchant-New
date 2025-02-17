@@ -170,7 +170,9 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
           child: ListView(
             children: [
               // Search Item Field
-              const Text('Search Item', style: TextStyle(fontWeight: FontWeight.bold)),
+               Text(
+                  languageProvider.isEnglish ? 'Search Item' : 'آئٹم تلاش کریں',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Autocomplete<Map<String, dynamic>>(
                 optionsBuilder: (textEditingValue) {
@@ -190,8 +192,8 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   return TextFormField(
                     controller: controller,
                     focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Search Item',
+                    decoration:  InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Search Item' : 'آئٹم تلاش کریں',
                       border: OutlineInputBorder(),
                     ),
                   );
@@ -200,7 +202,8 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
               const SizedBox(height: 16),
 
               // Search Vendor Field
-              const Text('Search Vendor', style: TextStyle(fontWeight: FontWeight.bold)),
+               Text(
+                  languageProvider.isEnglish ? 'Search Vendor' : 'وینڈر تلاش کریں',                  style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Autocomplete<Map<String, dynamic>>(
                 optionsBuilder: (textEditingValue) {
@@ -219,8 +222,8 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                   return TextFormField(
                     controller: controller,
                     focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Search Vendor',
+                    decoration:  InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Search Vendor' : 'وینڈر تلاش کریں',
                       border: OutlineInputBorder(),
                     ),
                   );
@@ -230,25 +233,29 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
               TextFormField(
                 controller: _quantityController,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity',
+                decoration:  InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Quantity' : 'مقدار',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) =>
-                value == null || value.isEmpty ? 'Please enter the quantity' : null,
+                value == null || value.isEmpty ?
+                languageProvider.isEnglish ? 'Please enter the quantity' : 'براہ کرم مقدار درج کریں'
+                    : null,
               ),
               const SizedBox(height: 16),
 
               TextFormField(
                 controller: _purchasePriceController,
-                decoration: const InputDecoration(
-                  labelText: 'Purchase Price',
+                decoration:  InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Purchase Price' : 'خریداری کی قیمت',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) =>
-                value == null || value.isEmpty ? 'Please enter the purchase price' : null,
+                value == null || value.isEmpty ?
+                languageProvider.isEnglish ? 'Please enter the purchase price' : 'براہ کرم خریداری کی قیمت درج کریں'
+                    : null,
               ),
               const SizedBox(height: 16),
 

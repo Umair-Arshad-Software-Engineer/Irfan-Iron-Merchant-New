@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 
+import '../Provider/lanprovider.dart';
 import 'banknames.dart';
 import 'banktransactionpage.dart';
 
@@ -45,9 +47,13 @@ class _BankManagementPageState extends State<BankManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Bank Management', style: TextStyle(color: Colors.white)),
+        title: Text(
+            languageProvider.isEnglish ? 'Bank Management' : 'بینک مینجمنٹ',
+            style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.blue.shade800,
         elevation: 10,
         centerTitle: true,
@@ -88,7 +94,7 @@ class _BankManagementPageState extends State<BankManagementPage> {
                           controller: textEditingController,
                           focusNode: focusNode,
                           decoration: InputDecoration(
-                            labelText: 'Bank Name',
+                            labelText: languageProvider.isEnglish ? 'Bank Name' : 'بینک کا نام',
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.symmetric(horizontal: 10),
                           ),
@@ -139,7 +145,7 @@ class _BankManagementPageState extends State<BankManagementPage> {
                       controller: _initialBalanceController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: 'Initial Balance',
+                        labelText: languageProvider.isEnglish ? 'Initial Balance' : 'ابتدائی بیلنس',
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(horizontal: 10),
                       ),
@@ -149,7 +155,9 @@ class _BankManagementPageState extends State<BankManagementPage> {
                 SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _addBank,
-                  child: Text('Add Bank', style: TextStyle(fontSize: 16,color: Colors.white,fontWeight: FontWeight.bold)),
+                  child: Text(
+                      languageProvider.isEnglish ? 'Add Bank' : 'بینک شامل کریں',
+                      style: TextStyle(fontSize: 16,color: Colors.white,fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
@@ -205,7 +213,8 @@ class _BankManagementPageState extends State<BankManagementPage> {
                           },
                         ),
                         title: Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Remaining Balance: ${bank['balance']} Rs',
+                        subtitle: Text(
+                            '${languageProvider.isEnglish ? "Remaining Balance" : "بقیہ بیلنس"}: ${bank['balance']} Rs',
                             style: TextStyle(color: Colors.grey.shade700)),
                         trailing: Icon(Icons.arrow_forward_ios, color: Colors.blue.shade800),
                         onTap: () {

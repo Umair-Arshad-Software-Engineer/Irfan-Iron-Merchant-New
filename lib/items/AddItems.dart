@@ -57,6 +57,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
     });
     fetchDropdownData();
   }
+
   void _filterVendors(String query) {
     setState(() {
       if (query.isEmpty) {
@@ -69,7 +70,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
     });
   }
 
-
   void _filterCategories(String query) {
     setState(() {
       _filteredCategories = query.isEmpty
@@ -77,7 +77,6 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
           : _categories.where((category) => category.toLowerCase().contains(query.toLowerCase())).toList();
     });
   }
-
 
   Future<void> fetchDropdownData() async {
     final DatabaseReference database = FirebaseDatabase.instance.ref();
@@ -168,6 +167,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
       _selectedCategory = null;
     });
   }
+
   void saveOrUpdateItem() async {
     if (_formKey.currentState!.validate()) {
       final itemName = _itemNameController.text;
@@ -252,7 +252,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   TextFormField(
                     controller: _itemNameController,
                     decoration: InputDecoration(
-                      labelText: 'Item Name',
+                      labelText: languageProvider.isEnglish ? 'Item Name' : 'آئٹم کا نام',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.teal),
@@ -260,7 +260,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter the item name';
+                        return languageProvider.isEnglish ? 'Please enter the item name' : 'براہ کرم آئٹم کا نام درج کریں۔';
                       }
                       return null;
                     },
@@ -269,7 +269,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   DropdownButtonFormField<String>(
                     value: _selectedUnit,
                     decoration: InputDecoration(
-                      labelText: 'Unit',
+                      labelText: languageProvider.isEnglish ? 'Unit' : 'یونٹ',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.teal),
@@ -286,13 +286,15 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                         _selectedUnit = value;
                       });
                     },
-                    validator: (value) => value == null ? 'Please select a unit' : null,
+                    validator: (value) => value == null ?
+                    languageProvider.isEnglish ? 'Please select a unit' : 'براہ کرم ایک یونٹ منتخب کریں۔'
+                        : null,
                   ),
                   SizedBox(height: 16),
                   TextFormField(
                     controller: _costPriceController,
                     decoration: InputDecoration(
-                      labelText: 'Cost Price',
+                      labelText: languageProvider.isEnglish ? 'Cost Price' : 'لاگت کی قیمت',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.teal),
@@ -310,7 +312,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   TextFormField(
                     controller: _salePriceController,
                     decoration: InputDecoration(
-                      labelText: 'Sale Price',
+                      labelText: languageProvider.isEnglish ? 'Sale Price' : 'فروخت کی قیمت',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.teal),
@@ -328,7 +330,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                   TextFormField(
                     controller: _qtyOnHandController,
                     decoration: InputDecoration(
-                      labelText: 'Quantity on Hand',
+                      labelText: languageProvider.isEnglish ? 'Quantity on Hand' : 'موجود مقدار',
                       border: OutlineInputBorder(),
                       focusedBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.teal),
@@ -338,7 +340,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                     readOnly: widget.itemData != null, // Make it read-only if itemData is not null
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter the quantity on hand';
+                        return languageProvider.isEnglish ? 'Please enter the quantity on hand' : 'براہ کرم ہاتھ میں مقدار درج کریں۔';
                       }
                       return null;
                     },
@@ -350,9 +352,8 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Search Vendor',
-                          style: TextStyle(
+                        Text(
+                          languageProvider.isEnglish ? 'Search Vendor' : 'وینڈر تلاش کریں',                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -361,7 +362,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                         TextField(
                           controller: _vendorsearchController,
                           decoration: InputDecoration(
-                            hintText: 'Type to search vendors...',
+                            hintText: languageProvider.isEnglish ? 'Type to search vendors...' : 'وینڈرز کو تلاش کرنے کے لیے ٹائپ کریں...',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -390,7 +391,9 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                                       _filteredVendors = List.from(_vendors); // Reset suggestions
                                     });
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Selected Vendor: $vendor')),
+                                      SnackBar(content: Text(
+                                          languageProvider.isEnglish ? 'Selected Vendor:' : 'منتخب فروش:'
+                                              '$vendor')),
                                     );
                                   },
                                 );
@@ -412,7 +415,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'Selected Vendor: $_selectedVendor',
+                                    languageProvider.isEnglish ? 'Selected Vendor:' : 'منتخب فروش:' '$_selectedVendor',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: Colors.tealAccent,

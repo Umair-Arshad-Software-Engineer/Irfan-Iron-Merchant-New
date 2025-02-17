@@ -7,6 +7,7 @@ import 'Provider/bankprovider.dart';
 import 'Provider/expenseprovider.dart';
 import 'Provider/filled provider.dart';
 import 'Provider/invoice provider.dart';
+import 'Provider/lanprovider.dart';
 import 'Provider/purchaseprovider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
@@ -54,10 +55,14 @@ class _RoznamchapageState extends State<Roznamchapage> {
     final totalPurchases = purchaseProvider.totalPurchaseAmount;
 
     final bankProvider = Provider.of<BankProvider>(context);
+    final languageProvider = Provider.of<LanguageProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Roznamcha', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title:  Text(
+            // 'Roznamcha',
+            languageProvider.isEnglish ? 'Roznamcha' : 'روزنامچہ',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.blueAccent,
@@ -111,22 +116,22 @@ class _RoznamchapageState extends State<Roznamchapage> {
           children: [
             _buildSectionHeader('Today\'s Invoices'),
             _buildInfoCard(
-              'Invoices Count',
+              languageProvider.isEnglish ? 'Invoices Count' : 'انوائس کی گنتی',
               todaysInvoices.length.toString(),
               Icons.receipt,
             ),
             _buildInfoCard(
-              'Total Amount',
+              languageProvider.isEnglish ? 'Total Amount' : 'کل رقم',
               'Rs ${totalAmountinvoice.toStringAsFixed(2)}',
               Icons.attach_money,
             ),
             _buildInfoCard(
-              'Total Paid Amount',
+              languageProvider.isEnglish ? 'Total Paid Amount' : 'کل ادا شدہ رقم',
               'Rs ${totalPaidAmountinvoice.toStringAsFixed(2)}',
               Icons.payment,
             ),
             _buildInfoCard(
-              'Remaining Amount',
+              languageProvider.isEnglish ? 'Remaining Amount' : 'بقایا رقم',
               'Rs ${(totalAmountinvoice - totalPaidAmountinvoice).toStringAsFixed(2)}',
               Icons.money_off,
               color: Colors.red,
@@ -134,22 +139,22 @@ class _RoznamchapageState extends State<Roznamchapage> {
             const Divider(),
             _buildSectionHeader('Today\'s Filled'),
             _buildInfoCard(
-              'Filled Count',
+              languageProvider.isEnglish ? 'Filled Count' : 'فلڈ کی گنتی',
               todaysFilled.length.toString(),
               Icons.inventory,
             ),
             _buildInfoCard(
-              'Total Amount',
+              languageProvider.isEnglish ? 'Total Amount' : 'کل رقم',
               'Rs ${totalAmountfilled.toStringAsFixed(2)}',
               Icons.attach_money,
             ),
             _buildInfoCard(
-              'Total Paid Amount',
+              languageProvider.isEnglish ? 'Total Paid Amount' : 'کل ادا شدہ رقم',
               'Rs ${totalPaidAmountfilled.toStringAsFixed(2)}',
               Icons.payment,
             ),
             _buildInfoCard(
-              'Remaining Amount',
+              languageProvider.isEnglish ? 'Remaining Amount' : 'بقایا رقم',
               'Rs ${(totalAmountfilled - totalPaidAmountfilled).toStringAsFixed(2)}',
               Icons.money_off,
               color: Colors.red,
@@ -157,12 +162,12 @@ class _RoznamchapageState extends State<Roznamchapage> {
             const Divider(),
             _buildSectionHeader('Today\'s Expenses'),
             _buildInfoCard(
-              'Expenses Count',
+              languageProvider.isEnglish ? 'Expenses Count' : 'اخراجات کا گنتی',
               todaysExpenses.length.toString(),
               Icons.money_off,
             ),
             _buildInfoCard(
-              'Total Expenses',
+              languageProvider.isEnglish ? 'Total Expenses' : 'کل اخراجات',
               'Rs ${totalExpenses.toStringAsFixed(2)}',
               Icons.attach_money,
             ),
@@ -171,7 +176,7 @@ class _RoznamchapageState extends State<Roznamchapage> {
             Consumer<BankProvider>(
               builder: (context, bankProvider, _) {
                 return _buildInfoCard(
-                  'Total Bank Balance',
+                  languageProvider.isEnglish ? 'Total Bank Balance' : 'کل بینک بیلنس',
                   'Rs ${bankProvider.getTotalBankBalance().toStringAsFixed(2)}',
                   Icons.account_balance,
                 );
@@ -180,12 +185,12 @@ class _RoznamchapageState extends State<Roznamchapage> {
             const Divider(),
             _buildSectionHeader('Today\'s Purchases'),
             _buildInfoCard(
-              'Purchases Count',
+              languageProvider.isEnglish ? 'Purchases Count' : 'خریداریوں کی تعداد',
               purchaseProvider.totalPurchaseCount.toString(),
               Icons.shopping_cart,
             ),
             _buildInfoCard(
-              'Total Purchase Amount',
+              languageProvider.isEnglish ? 'Total Purchases Amount' : 'خریداری کی کل رقم',
               'Rs ${purchaseProvider.totalPurchaseAmount.toStringAsFixed(2)}',
               Icons.attach_money,
             ),
