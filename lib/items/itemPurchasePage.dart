@@ -157,7 +157,9 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(languageProvider.isEnglish ? 'Purchase Item' : 'آئٹم خریداری',style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),),
+        title: Text(
+          languageProvider.isEnglish ? 'Purchase Item' : 'آئٹم خریداری',
+          style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),),
         backgroundColor: Colors.teal,
         centerTitle: true,
       ),

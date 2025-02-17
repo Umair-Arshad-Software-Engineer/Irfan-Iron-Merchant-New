@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:provider/provider.dart';
 
+import '../Provider/lanprovider.dart';
 import 'itemPurchasePage.dart';
 
 class PurchaseListPage extends StatefulWidget {
@@ -111,10 +113,13 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Purchase List',
-        style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold),
+        title: Text(
+          languageProvider.isEnglish ? 'Purchase List' : 'خریداری کی فہرست',
+        style: const TextStyle(color: Colors.white,fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.teal,
         actions: [
@@ -136,8 +141,8 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
             TextField(
               controller: _searchController,
               onChanged: searchPurchases,
-              decoration: const InputDecoration(
-                labelText: 'Search by Item or Vendor',
+              decoration:  InputDecoration(
+                 labelText: languageProvider.isEnglish ? 'Search by Item or Vendor' : 'آئٹم یا وینڈر کے ذریعہ تلاش کریں۔',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.search),
               ),
