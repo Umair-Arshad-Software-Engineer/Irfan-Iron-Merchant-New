@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-
 import '../dashboard.dart';
 
 class LoginPage extends StatefulWidget {
@@ -12,136 +11,198 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _auth = FirebaseAuth.instance;
   final _formKey = GlobalKey<FormState>();
+  final _emailFocusNode = FocusNode();
+  final _passwordFocusNode = FocusNode();
 
   String _email = '';
   String _password = '';
-  bool _isProcessing = false; // Flag to track if login is in progress
-  bool _isPasswordVisible = false; // Flag to toggle password visibility
+  bool _isProcessing = false;
+  bool _isPasswordVisible = false;
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-      setState(() {
-        _isProcessing = true; // Set flag to true when login starts
-      });
+      setState(() => _isProcessing = true);
       try {
         await _auth.signInWithEmailAndPassword(
           email: _email,
           password: _password,
         );
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Login successful!'),
-        ));
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => Dashboard()),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Login failed: $e'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Login failed: ${e.toString().split('] ').last}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       } finally {
-        setState(() {
-          _isProcessing = false; // Reset flag when login is complete
-        });
+        setState(() => _isProcessing = false);
       }
     }
   }
 
   @override
+  void dispose() {
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 600;
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login'),
-        automaticallyImplyLeading: false,
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return Center(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.all(Radius.circular(20)),
-                border: Border.all(
-                  color: Colors.blue, // Set the color of the border
-                  width: 2.0,        // Set the width of the border
-                ),
+      body: Center(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 500),
+          padding: EdgeInsets.all(isWeb ? 40 : 24),
+          child: SingleChildScrollView(
+            child: Card(
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-              width: constraints.maxWidth > 600 ? 400 : double.infinity,
-              padding: const EdgeInsets.all(16.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 20),
-                    const CircleAvatar(
-                      radius: 70,
-                      backgroundImage: AssetImage('assets/images/logo.png'), // Correct usage
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(10)),
-                          borderSide: BorderSide(color: Colors.grey),
+              child: Padding(
+                padding: EdgeInsets.all(isWeb ? 40 : 24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/images/logo.png',
+                        height: isWeb ? 150 : 120,
+                        fit: BoxFit.contain,
+                      ),
+                      SizedBox(height: 30),
+                      Text(
+                        'Welcome Back',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.primaryColor,
                         ),
                       ),
-                      onSaved: (value) => _email = value!,
-                      validator: (value) => value!.isEmpty || !value.contains('@') ? 'Enter a valid email' : null,
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        border: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(10)),
-                          borderSide: BorderSide(color: Colors.grey),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
+                      SizedBox(height: 20),
+                      TextFormField(
+                        focusNode: _emailFocusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Email',
+                          prefixIcon: Icon(Icons.email_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                        ),
-                      ),
-                      obscureText: !_isPasswordVisible,
-                      onSaved: (value) => _password = value!,
-                      validator: (value) => value!.length < 6 ? 'Password must be at least 6 characters' : null,
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: 200,
-                      decoration: BoxDecoration(
-                        color: Colors.lightBlueAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: TextButton(
-                        onPressed: _isProcessing ? null : _login, // Disable button if processing
-                        child: _isProcessing
-                            ? const CircularProgressIndicator(color: Colors.white)
-                            : const Text(
-                          "Login",
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                                color: theme.primaryColor,
+                                width: 2),
                           ),
                         ),
+                        keyboardType: TextInputType.emailAddress,
+                        onSaved: (value) => _email = value!.trim(),
+                        validator: (value) => value!.contains('@')
+                            ? null
+                            : 'Please enter a valid email',
                       ),
-                    ),
-                  ],
+                      SizedBox(height: 20),
+                      TextFormField(
+                        focusNode: _passwordFocusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                              color: Colors.grey[600],
+                            ),
+                            onPressed: () => setState(
+                                    () => _isPasswordVisible = !_isPasswordVisible),
+                          ),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                                color: theme.primaryColor,
+                                width: 2),
+                          ),
+                        ),
+                        obscureText: !_isPasswordVisible,
+                        onSaved: (value) => _password = value!.trim(),
+                        validator: (value) => value!.length >= 6
+                            ? null
+                            : 'Minimum 6 characters required',
+                      ),
+                      SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isProcessing ? null : _login,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.primaryColor,
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            elevation: 3,
+                          ),
+                          child: _isProcessing
+                              ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                              : Text(
+                            'LOGIN',
+                            style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      // TextButton(
+                      //   onPressed: () {}, // Add password reset logic
+                      //   child: Text(
+                      //     'Forgot Password?',
+                      //     style: TextStyle(
+                      //         color: theme.primaryColor,
+                      //         fontWeight: FontWeight.w600),
+                      //   ),
+                      // ),
+                      // SizedBox(height: 10),
+                      // Row(
+                      //   mainAxisAlignment: MainAxisAlignment.center,
+                      //   children: [
+                      //     Text("Don't have an account? "),
+                      //     TextButton(
+                      //       onPressed: () {}, // Add signup navigation
+                      //       child: Text(
+                      //         'Sign Up',
+                      //         style: TextStyle(
+                      //             color: theme.primaryColor,
+                      //             fontWeight: FontWeight.bold),
+                      //       ),
+                      //     ),
+                      //   ],
+                      // ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

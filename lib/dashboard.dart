@@ -37,7 +37,7 @@ class Dashboard extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           languageProvider.isEnglish ? 'Dashboard' : 'ڈیش بورڈ',
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
           ),
@@ -51,12 +51,11 @@ class Dashboard extends StatelessWidget {
             onPressed: languageProvider.toggleLanguage,
             tooltip: languageProvider.isEnglish ? 'Switch to Urdu' : 'انگریزی میں تبدیل کریں',
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _logout(context), // Call the logout function here
-            tooltip: languageProvider.isEnglish ? 'Logout' : 'لاگ آوٹ',
-
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.logout),
+          //   onPressed: () => _logout(context), // Call the logout function here
+          //   tooltip: languageProvider.isEnglish ? 'Logout' : 'لاگ آوٹ',
+          // ),
         ],
       ),
       drawer: _buildDrawer(context, languageProvider),
@@ -97,13 +96,13 @@ class Dashboard extends StatelessWidget {
             case 0:
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => Dashboard()),
+                MaterialPageRoute(builder: (context) => const Dashboard()),
               );
               break;
             case 1:
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ledgerselection()),
+                MaterialPageRoute(builder: (context) => const LedgerSelection()),
               );
               break;
             case 2:
@@ -121,126 +120,71 @@ class Dashboard extends StatelessWidget {
 
   Widget _buildDrawer(BuildContext context, LanguageProvider languageProvider) {
     return Drawer(
-      child: ListView(
+      child: Column(
         children: [
-          // Updated Drawer Header
-          DrawerHeader(
+          // Drawer Header
+          UserAccountsDrawerHeader(
             decoration: BoxDecoration(
               gradient: LinearGradient(
+                colors: [Colors.blue.shade800, Colors.blue.shade600],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Colors.blue[800]!, Colors.blue[600]!],
               ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            accountName: Text(
+              languageProvider.isEnglish ? 'Zulfiqar Iron Merchant' : 'ذوالفقار آئرن مرچنت',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            accountEmail: null, // You can add an email or remove this line
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white.withOpacity(0.2),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Image.asset('assets/images/logo.png'),
+              ),
+            ),
+          ),
+
+          // Drawer Items
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
               children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.white.withOpacity(0.1),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Image.asset('assets/images/logo.png'),
+                _drawerItem(Icons.home, 'Home', 'ہوم', context, const Dashboard(), languageProvider),
+                _drawerItem(Icons.list, 'Items List', 'ٹوٹل آئٹمز', context, ItemsListPage(), languageProvider),
+                _drawerItem(Icons.shopping_cart, 'Purchase', 'خریداری', context, PurchaseListPage(), languageProvider),
+                _drawerItem(Icons.store, 'Vendors', 'بیچنے والا', context, const ViewVendorsPage(), languageProvider),
+                _drawerItem(Icons.account_balance_wallet, 'Transactions', 'لین دین', context, const LedgerSelection(), languageProvider),
+                _drawerItem(Icons.account_balance, 'Bank Management', 'بینک مینجمنٹ', context, BankManagementPage(), languageProvider),
+                _drawerItem(Icons.assignment, 'Roznamcha', 'روزنامچہ', context, const Roznamchapage(), languageProvider),
+                _drawerItem(Icons.settings, 'Settings', 'ترتیبات', context, UsersPage(), languageProvider),
+
+                const Divider(), // Adds a divider before the logout button
+
+                ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: Text(
+                    languageProvider.isEnglish ? 'Logout' : 'لاگ آوٹ',
+                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  languageProvider.isEnglish
-                      ? 'Zulfiqar Iron Merchant'
-                      : 'ذوالفقار آئرن مرچنت',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
+                  onTap: () => _logout(context),
                 ),
               ],
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.home),
-            title: Text(languageProvider.isEnglish ? 'Home' : 'ہوم'),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const Dashboard()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.list),
-            title: Text(languageProvider.isEnglish ? 'Items List' : 'ٹوٹل آئٹمز'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) =>  ItemsListPage()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.shopping_cart),
-            title: Text(languageProvider.isEnglish ? 'Purchase Page' : 'خریداری'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) =>  PurchaseListPage()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.store),
-            title: Text(languageProvider.isEnglish ? 'Vendors' : 'بیچنے والا'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) =>  ViewVendorsPage()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.account_balance_wallet),
-            title: Text(languageProvider.isEnglish ? 'Transactions' : 'لین دین'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ledgerselection(),
-                ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.account_balance),
-            title: Text(languageProvider.isEnglish ? 'Bank Management' : 'بینک مینجمنٹ'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) =>  BankManagementPage()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.assignment),
-            title: Text(languageProvider.isEnglish ? 'Roznamcha' : 'روزنامچہ'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => Roznamchapage()),
-              );
-            },
-          ),//s
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: Text(languageProvider.isEnglish ? 'Settings' : 'ترتیبات'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => UsersPage(),
-                ),
-              );
-            },
-          ),
         ],
       ),
+    );
+  }
+
+  Widget _drawerItem(IconData icon, String englishTitle, String urduTitle, BuildContext context, Widget page, LanguageProvider languageProvider) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.blueAccent),
+      title: Text(languageProvider.isEnglish ? englishTitle : urduTitle),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
+      },
     );
   }
 
@@ -267,7 +211,7 @@ class Dashboard extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ledgerselection(),
+                  builder: (context) => const LedgerSelection(),
                 ),
               );            },
           ),
@@ -331,7 +275,7 @@ class Dashboard extends StatelessWidget {
             Icons.account_balance_wallet,
             languageProvider.isEnglish ? 'View Ledger' : 'کھاتہ دیکھیں',
             Colors.green,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ledgerselection())),
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerSelection())),
           ),
           _buildDashboardCard(
             Icons.analytics,
