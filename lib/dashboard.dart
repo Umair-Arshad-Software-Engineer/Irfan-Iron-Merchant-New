@@ -37,7 +37,14 @@ class Dashboard extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           languageProvider.isEnglish ? 'Dashboard' : 'ڈیش بورڈ',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
         ),
+        centerTitle: true,
+        elevation: 4,
+        shadowColor: Colors.blue.withOpacity(0.2),
         actions: [
           IconButton(
             icon: const Icon(Icons.language),
@@ -116,24 +123,39 @@ class Dashboard extends StatelessWidget {
     return Drawer(
       child: ListView(
         children: [
+          // Updated Drawer Header
           DrawerHeader(
-            decoration: const BoxDecoration(color: Colors.blue),
-            child: Center(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 45,
-                    backgroundImage: AssetImage('assets/images/logo.png'), // Replasce wisth yours image pathسسسssس
-                    backgroundColor: Colors.white, // Fallback color
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    languageProvider.isEnglish ? 'Zulfiqar Iron Merchant' : 'ذوالفقار آئرن مرچنت ',
-                    style: const TextStyle(color: Colors.white, fontSize: 20),
-                  ),
-                ],
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.blue[800]!, Colors.blue[600]!],
               ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.white.withOpacity(0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Image.asset('assets/images/logo.png'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  languageProvider.isEnglish
+                      ? 'Zulfiqar Iron Merchant'
+                      : 'ذوالفقار آئرن مرچنت',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
           ListTile(
@@ -271,88 +293,112 @@ class Dashboard extends StatelessWidget {
       padding: const EdgeInsets.all(16.0),
       child: GridView.count(
         crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 20,
+        mainAxisSpacing: 20,
         children: [
           _buildDashboardCard(
-              Icons.add, languageProvider.isEnglish ? 'Invoice' : 'بل اندراج', Colors.blue,
-              (){
-                Navigator.push(context, MaterialPageRoute(builder: (context)=>InvoiceListPage()));
-              }
+            Icons.receipt_long,
+            languageProvider.isEnglish ? 'Invoice' : 'بل اندراج',
+            Colors.deepPurple,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => InvoiceListPage())),
           ),
           _buildDashboardCard(
-              Icons.add, languageProvider.isEnglish ? 'Filled' : 'فلڈ اندراج', Colors.blue,
-                  (){
-                Navigator.push(context, MaterialPageRoute(builder: (context)=>filledListpage()));
-              }
+            Icons.inventory,
+            languageProvider.isEnglish ? 'Filled' : 'فلڈ اندراج',
+            Colors.orange,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => filledListpage())),
           ),
           _buildDashboardCard(
-              Icons.add, languageProvider.isEnglish ? 'Expenses' : 'اخراجات', Colors.blue,
-                  (){
-                Navigator.push(context, MaterialPageRoute(builder: (context)=>ViewExpensesPage()));
-              }
+            Icons.attach_money,
+            languageProvider.isEnglish ? 'Expenses' : 'اخراجات',
+            Colors.redAccent,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => ViewExpensesPage())),
           ),
           _buildDashboardCard(
-              Icons.add, languageProvider.isEnglish ? 'Employee' : 'ورکر', Colors.blue,
-                  (){
-                Navigator.push(context, MaterialPageRoute(builder: (context)=>EmployeeListPage()));
-              }
+            Icons.engineering,
+            languageProvider.isEnglish ? 'Employee' : 'ورکر',
+            Colors.teal,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => EmployeeListPage())),
           ),
           _buildDashboardCard(
-              Icons.list, languageProvider.isEnglish ? 'Customers' : 'کسٹمرز', Colors.green,(){
-            Navigator.push(context, MaterialPageRoute(builder: (context)=>CustomerList()));
-
-          }),
+            Icons.group,
+            languageProvider.isEnglish ? 'Customers' : 'کسٹمرز',
+            Colors.blueAccent,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => CustomerList())),
+          ),
           _buildDashboardCard(
-              Icons.list, languageProvider.isEnglish ? 'View Ledger' : 'کھاتہ دیکھیں', Colors.green,(){
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ledgerselection(),
-              ),
-            );
-          }),
+            Icons.account_balance_wallet,
+            languageProvider.isEnglish ? 'View Ledger' : 'کھاتہ دیکھیں',
+            Colors.green,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ledgerselection())),
+          ),
           _buildDashboardCard(
-              Icons.report, languageProvider.isEnglish ? 'Reports' : 'رپورٹس', Colors.red,(){
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ReportsPage(),
-              ),
-            );
-          }),
+            Icons.analytics,
+            languageProvider.isEnglish ? 'Reports' : 'رپورٹس',
+            Colors.indigo,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportsPage())),
+          ),
           _buildDashboardCard(
-              Icons.settings, languageProvider.isEnglish ? 'Settings' : 'ترتیبات', Colors.orange,(){
-                Navigator.push(context, MaterialPageRoute(builder: (context)=>UsersPage()));
-          }),
+            Icons.settings,
+            languageProvider.isEnglish ? 'Settings' : 'ترتیبات',
+            Colors.grey,
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => UsersPage())),
+          ),
         ],
       ),
     );
   }
 
-
-  Widget _buildDashboardCard(IconData icon, String title, Color color,VoidCallback onTap) {
+  Widget _buildDashboardCard(IconData icon, String title, Color color, VoidCallback onTap) {
     return Card(
-      elevation: 4,
+      elevation: 6,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
       ),
+      shadowColor: color.withOpacity(0.2),
       child: InkWell(
+        borderRadius: BorderRadius.circular(20),
         onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.2),
-              child: Icon(icon, color: color),
+        splashColor: color.withOpacity(0.1),
+        highlightColor: color.withOpacity(0.05),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withOpacity(0.15),
+                color.withOpacity(0.05),
+              ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ],
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 32, color: color),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

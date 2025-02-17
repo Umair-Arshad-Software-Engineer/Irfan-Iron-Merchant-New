@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'Auth/login.dart';
 import 'Auth/register.dart';
+import 'Provider/bankprovider.dart';
 import 'Provider/customerprovider.dart';
 import 'Provider/employeeprovider.dart';
+import 'Provider/expenseprovider.dart';
 import 'Provider/filled provider.dart';
 import 'Provider/filledreportprovider.dart';
 import 'Provider/invoice provider.dart';
 import 'Provider/lanprovider.dart';
+import 'Provider/purchaseprovider.dart';
 import 'dashboard.dart';
 import 'firebase_options.dart';
 
@@ -26,6 +29,10 @@ void main() async{
         ChangeNotifierProvider(create: (_) => InvoiceProvider()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => CustomerProvider()), // Add CustomerProvider
+        ChangeNotifierProvider(create: (_) => ExpenseProvider()), // Add ExpenseProvider
+        ChangeNotifierProvider(create: (_) => BankProvider()), // Add this line
+        ChangeNotifierProvider(create: (_) => PurchaseProvider()),
+
       ],
       child: const MyApp(),
     ),

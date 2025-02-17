@@ -33,6 +33,7 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
         setState(() {
           _purchases = purchases;
           _filteredPurchases = purchases;
+          print(_filteredPurchases);
         });
       }
     });
@@ -146,7 +147,7 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
               child: _filteredPurchases.isEmpty
                   ? const Center(child: Text('No purchases found'))
                   : ListView.builder(
-                itemCount: _filteredPurchases.length,
+                itemCount: _filteredPurchases.length,//s
                 itemBuilder: (context, index) {
                   final purchase = _filteredPurchases[index];
                   return Card(

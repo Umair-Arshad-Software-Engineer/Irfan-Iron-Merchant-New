@@ -446,7 +446,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
 
           final transactions = (snapshot.data! as DatabaseEvent).snapshot.value as Map<dynamic, dynamic>; // Cast to Map<dynamic, dynamic>
           final transactionList = transactions.entries.toList();
-// Filter transactions based on date range
+          // Filter transactions based on date range
           if (_startDate != null || _endDate != null) {
             transactionList.retainWhere((entry) {
               final timestamp = entry.value['timestamp'] as int;
