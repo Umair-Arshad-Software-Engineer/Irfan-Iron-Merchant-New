@@ -53,6 +53,8 @@ dependencies:
   firebase_storage: any
   cached_network_image: any
   share_plus: ^10.1.4
+  http: ^1.2.0
+  uuid: ^4.3.0
 
 dev_dependencies:
   flutter_test:

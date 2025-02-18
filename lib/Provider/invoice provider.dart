@@ -368,15 +368,6 @@ class InvoiceProvider with ChangeNotifier {
       // Retrieve and parse the current debit amount
       final currentDebit = _parseToDouble(invoice['debitAmount']);
 
-      // Check if the payment amount exceeds the remaining balance
-      // if (paymentAmount > (grandTotal - currentDebit)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text("Payment exceeds the remaining invoice balance.")),
-      //   );
-      //   throw Exception("Payment exceeds the remaining invoice balance.");
-      // }
-
-      // Update the invoice with the new payment data
       final updatedDebit = currentDebit + paymentAmount;
       final debitAt = DateTime.now().toIso8601String();
 
@@ -387,7 +378,16 @@ class InvoiceProvider with ChangeNotifier {
         'debitAmount': updatedDebit, // Make sure this is updated correctly
         'debitAt': debitAt,
       });
-
+      // Update the local state without fetching all invoices
+      final invoiceIndex = _invoices.indexWhere((inv) => inv['id'] == invoiceId);
+      if (invoiceIndex != -1) {
+        _invoices[invoiceIndex]['cashPaidAmount'] = updatedCashPaid;
+        _invoices[invoiceIndex]['onlinePaidAmount'] = updatedOnlinePaid;
+        _invoices[invoiceIndex]['checkPaidAmount'] = updatedCheckPaid;
+        _invoices[invoiceIndex]['debitAmount'] = updatedDebit;
+        _invoices[invoiceIndex]['debitAt'] = debitAt;
+        notifyListeners(); // Trigger UI update
+      }
       // Update the ledger with the calculated remaining balance
       await _updateCustomerLedger(
         invoice['customerId'],

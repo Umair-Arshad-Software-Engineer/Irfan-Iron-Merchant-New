@@ -373,6 +373,16 @@ class FilledProvider with ChangeNotifier {
         'debitAt': debitAt,
       });
 
+      // Update the local state without fetching all invoices
+      final invoiceIndex = _filled.indexWhere((inv) => inv['id'] == filledId);
+      if (invoiceIndex != -1) {
+        _filled[invoiceIndex]['cashPaidAmount'] = updatedCashPaid;
+        _filled[invoiceIndex]['onlinePaidAmount'] = updatedOnlinePaid;
+        _filled[invoiceIndex]['checkPaidAmount'] = updatedCheckPaid;
+        _filled[invoiceIndex]['debitAmount'] = updatedDebit;
+        _filled[invoiceIndex]['debitAt'] = debitAt;
+        notifyListeners(); // Trigger UI update
+      }
       // Update the ledger with the calculated remaining balance
       await _updateCustomerLedger(
         filled['customerId'],
