@@ -65,7 +65,7 @@ class Dashboard extends StatelessWidget {
             // Web view
             return Row(
               children: [
-                _buildSidebar(context, languageProvider),
+                // _buildSidebar(context, languageProvider),
                 Expanded(child: _buildContent(context,languageProvider)),
               ],
             );
@@ -226,6 +226,7 @@ class Dashboard extends StatelessWidget {
               );
             },
           ),
+
         ],
       ),
     );
