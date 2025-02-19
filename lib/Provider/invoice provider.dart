@@ -19,6 +19,8 @@ class InvoiceProvider with ChangeNotifier {
     required double grandTotal,
     required String paymentType,
     String? paymentMethod, // For instant payments
+    required String createdAt, // Add this parameter
+
     required List<Map<String, dynamic>> items,
   }) async {
     try {
@@ -43,7 +45,12 @@ class InvoiceProvider with ChangeNotifier {
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
-        'createdAt': DateTime.now().toIso8601String(),
+        // 'createdAt': DateTime.now().toIso8601String(),
+        // 'createdAt': _dateController.text.isNotEmpty
+        //     ? DateTime.parse(_dateController.text).toIso8601String()
+        //     : DateTime.now().toIso8601String(), // Use selected date or current date
+        'createdAt': createdAt, // Use the provided date
+
       };
       // Save the invoice at the specified invoiceId path
       await _db.child('invoices').child(invoiceId).set(invoiceData);

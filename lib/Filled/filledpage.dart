@@ -42,7 +42,23 @@ class _filledpageState extends State<filledpage> {
   bool _isButtonPressed = false;
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _rateController = TextEditingController();
+  final TextEditingController _dateController = TextEditingController();
 
+
+  // Method to show the date picker
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null) {
+      setState(() {
+        _dateController.text = "${picked.toLocal()}".split(' ')[0];
+      });
+    }
+  }
 
   String generateFilledNumber() {
     // Generate a timestamp as filled number (in millsiseconds)
@@ -92,7 +108,7 @@ class _filledpageState extends State<filledpage> {
     double discountAmount = _discount;
     return subtotal - discountAmount;
   }
-
+//s
   Future<Uint8List> _generatePDFBytes(String filledNumber) async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -100,9 +116,31 @@ class _filledpageState extends State<filledpage> {
     final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
 
     // Get current date and time
-    final DateTime now = DateTime.now();
-    final String formattedDate = '${now.day}/${now.month}/${now.year}';
-    final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+    // final DateTime now = DateTime.now();
+    // final String formattedDate = '${now.day}/${now.month}/${now.year}';
+    // final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+    DateTime invoiceDate;
+    if (widget.filled != null) {
+      invoiceDate = DateTime.parse(widget.filled!['createdAt']);
+    } else {
+      if (_dateController.text.isNotEmpty) {
+        DateTime selectedDate = DateTime.parse(_dateController.text);
+        DateTime now = DateTime.now();
+        invoiceDate = DateTime(
+          selectedDate.year,
+          selectedDate.month,
+          selectedDate.day,
+          now.hour,
+          now.minute,
+          now.second,
+        );
+      } else {
+        invoiceDate = DateTime.now();
+      }
+    }
+
+    final String formattedDate = '${invoiceDate.day}/${invoiceDate.month}/${invoiceDate.year}';
+    final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
 
     // Get the remaining balance from the ledger
     double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
@@ -485,7 +523,7 @@ class _filledpageState extends State<filledpage> {
       row['descriptionController']?.dispose();
     }
     _discountController.dispose(); // Dispose discount controller
-
+    _dateController.dispose();
     super.dispose();
   }
 
@@ -498,6 +536,9 @@ class _filledpageState extends State<filledpage> {
     customerProvider.fetchCustomers().then((_) {
       if (widget.filled != null) {
         final filled = widget.filled!;
+        _dateController.text = filled['createdAt'] != null
+            ? DateTime.parse(filled['createdAt']).toLocal().toString().split(' ')[0]
+            : '';
         _selectedCustomerId = filled['customerId'];
         final customer = customerProvider.customers.firstWhere(
               (c) => c.id == _selectedCustomerId,
@@ -726,6 +767,20 @@ class _filledpageState extends State<filledpage> {
                       'Selected Customer: $_selectedCustomerName',
                       style: TextStyle(color: Colors.teal.shade600),
                     ),
+
+                  // Add a TextField for the date
+                  TextField(
+                    controller: _dateController,
+                    decoration: InputDecoration(
+                      labelText: 'Invoice Date',
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.calendar_today),
+                        onPressed: () => _selectDate(context),
+                      ),
+                    ),
+                    readOnly: true, // Prevent manual typing
+                    onTap: () => _selectDate(context),
+                  ),
                   // Space between sections
                   const SizedBox(height: 20),
                   // Display columns for the filled details
@@ -1206,8 +1261,17 @@ class _filledpageState extends State<filledpage> {
                               paymentType: _paymentType,
                               paymentMethod: _instantPaymentMethod,
                               items: _filledRows,
+                              createdAt: _dateController.text.isNotEmpty
+                                  ? DateTime(
+                                DateTime.parse(_dateController.text).year,
+                                DateTime.parse(_dateController.text).month,
+                                DateTime.parse(_dateController.text).day,
+                                DateTime.now().hour,
+                                DateTime.now().minute,
+                                DateTime.now().second,
+                              ).toIso8601String()
+                                  : DateTime.now().toIso8601String(),
                             );
-
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(

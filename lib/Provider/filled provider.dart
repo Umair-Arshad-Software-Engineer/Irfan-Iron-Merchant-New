@@ -20,6 +20,7 @@ class FilledProvider with ChangeNotifier {
     required String paymentType,
     String? paymentMethod, // For instant payments
     required List<Map<String, dynamic>> items,
+    required String createdAt, // Add this parameter
   }) async {
     try {
       final cleanedItems = items.map((item) {
@@ -43,7 +44,9 @@ class FilledProvider with ChangeNotifier {
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
-        'createdAt': DateTime.now().toIso8601String(),
+        // 'createdAt': DateTime.now().toIso8601String(),
+        'createdAt': createdAt, // Use the provided date
+
       };
       // Save the filled at the specified filledId path
       await _db.child('filled').child(filledId).set(filledData);

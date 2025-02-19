@@ -45,6 +45,23 @@
     bool _isButtonPressed = false;
     final TextEditingController _customerController = TextEditingController();
     final TextEditingController _rateController = TextEditingController();
+    final TextEditingController _dateController = TextEditingController();
+
+
+    // Method to show the date picker
+    Future<void> _selectDate(BuildContext context) async {
+      final DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2101),
+      );
+      if (picked != null) {
+        setState(() {
+          _dateController.text = "${picked.toLocal()}".split(' ')[0];
+        });
+      }
+    }
 
     String generateInvoiceNumber() {
       // Generate a timestamp as invoice number (in milliseconds)
@@ -117,11 +134,32 @@
               address: ''
           )
       );
-      // Get current date and time
-      final DateTime now = DateTime.now();
-      final String formattedDate = '${now.day}/${now.month}/${now.year}';
-      final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+      // // Get current date and time
+      // final DateTime now = DateTime.now();
+      // final String formattedDate = '${now.day}/${now.month}/${now.year}';
+      // final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+      DateTime invoiceDate;
+      if (widget.invoice != null) {
+        invoiceDate = DateTime.parse(widget.invoice!['createdAt']);
+      } else {
+        if (_dateController.text.isNotEmpty) {
+          DateTime selectedDate = DateTime.parse(_dateController.text);
+          DateTime now = DateTime.now();
+          invoiceDate = DateTime(
+            selectedDate.year,
+            selectedDate.month,
+            selectedDate.day,
+            now.hour,
+            now.minute,
+            now.second,
+          );
+        } else {
+          invoiceDate = DateTime.now();
+        }
+      }
 
+      final String formattedDate = '${invoiceDate.day}/${invoiceDate.month}/${invoiceDate.year}';
+      final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
       // Get the remaining balance from the ledger
       double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
 
@@ -503,6 +541,9 @@
       customerProvider.fetchCustomers().then((_) {
         if (widget.invoice != null) {
           final invoice = widget.invoice!;
+          _dateController.text = invoice['createdAt'] != null
+              ? DateTime.parse(invoice['createdAt']).toLocal().toString().split(' ')[0]
+              : '';
           _selectedCustomerId = invoice['customerId'];
           final customer = customerProvider.customers.firstWhere(
                 (c) => c.id == _selectedCustomerId,
@@ -574,6 +615,7 @@
       }
       _discountController.dispose(); // Dispose discount controller
       _customerController.dispose();
+      _dateController.dispose();
       super.dispose();
     }
 
@@ -779,6 +821,19 @@
                             style: TextStyle(color: Colors.teal.shade600),
                           ),
                         // Space between sections
+                        // Add a TextField for the date
+                        TextField(
+                          controller: _dateController,
+                          decoration: InputDecoration(
+                            labelText: 'Invoice Date',
+                            suffixIcon: IconButton(
+                              icon: Icon(Icons.calendar_today),
+                              onPressed: () => _selectDate(context),
+                            ),
+                          ),
+                          readOnly: true, // Prevent manual typing
+                          onTap: () => _selectDate(context),
+                        ),
                         const SizedBox(height: 20),
                         // Display columns for the invoice details
                         Text(languageProvider.isEnglish ? 'Invoice Details:' : 'انوائس کی تفصیلات:',
@@ -1298,6 +1353,19 @@
                                     grandTotal: grandTotal,
                                     paymentType: _paymentType,
                                     paymentMethod: _instantPaymentMethod,
+                                    // createdAt: _dateController.text.isNotEmpty
+                                    //     ? DateTime.parse(_dateController.text).toIso8601String()
+                                    //     : DateTime.now().toIso8601String(), // Pass the selected date
+                                    createdAt: _dateController.text.isNotEmpty
+                                        ? DateTime(
+                                      DateTime.parse(_dateController.text).year,
+                                      DateTime.parse(_dateController.text).month,
+                                      DateTime.parse(_dateController.text).day,
+                                      DateTime.now().hour,
+                                      DateTime.now().minute,
+                                      DateTime.now().second,
+                                    ).toIso8601String()
+                                        : DateTime.now().toIso8601String(),
                                     items: _invoiceRows.map((row) {
                                       return {
                                         'itemName': row['itemName'], // Include the item name
