@@ -268,6 +268,8 @@ class FilledProvider with ChangeNotifier {
       String paymentMethod, {
         String? description,
         Uint8List? imageBytes,
+        required DateTime paymentDate, // Add this parameter
+
       }) async {
     try {
       // Fetch the current filled data from the database
@@ -322,7 +324,7 @@ class FilledProvider with ChangeNotifier {
       // Create a payment object to store in the database
       final paymentData = {
         'amount': paymentAmount,
-        'date': DateTime.now().toIso8601String(),
+        'date': paymentDate.toIso8601String(), // Use selected date
         'paymentMethod': paymentMethod,
         'description': description,
       };

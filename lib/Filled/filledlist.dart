@@ -248,7 +248,7 @@ class _filledListpageState extends State<filledListpage> {
 
     // Print the PDF
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-  }
+  }//s
 
   DateTime _parsePaymentDate(dynamic date) {
     if (date is String) {
@@ -304,7 +304,10 @@ class _filledListpageState extends State<filledListpage> {
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(DateFormat('yyyy-MM-dd – HH:mm').format(payment['date'])),
+                              // In payment history list
+                              Text(DateFormat('yyyy-MM-dd – HH:mm')
+                                  .format(payment['date'])),
+                              // Text(DateFormat('yyyy-MM-dd – HH:mm').format(payment['date'])),
                               if (payment['description'] != null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
@@ -644,6 +647,8 @@ class _filledListpageState extends State<filledListpage> {
     bool _isPaymentButtonPressed = false;
     String? _description;
     Uint8List? _imageBytes;
+    DateTime _selectedPaymentDate = DateTime.now();
+
     await showDialog(
       context: context,
       builder: (context) {
@@ -655,6 +660,38 @@ class _filledListpageState extends State<filledListpage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Add this widget to the payment dialog content
+                    ListTile(
+                      title: Text(languageProvider.isEnglish
+                          ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
+                          : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
+                      trailing: Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedPaymentDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (pickedDate != null) {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
+                          );
+                          if (pickedTime != null) {
+                            setState(() {
+                              _selectedPaymentDate = DateTime(
+                                pickedDate.year,
+                                pickedDate.month,
+                                pickedDate.day,
+                                pickedTime.hour,
+                                pickedTime.minute,
+                              );
+                            });
+                          }
+                        }
+                      },
+                    ),
                     DropdownButtonFormField<String>(
                       value: selectedPaymentMethod,
                       items: [
@@ -765,6 +802,7 @@ class _filledListpageState extends State<filledListpage> {
                         selectedPaymentMethod!,
                         description: _description,
                         imageBytes: _imageBytes,
+                        paymentDate: _selectedPaymentDate, // Pass selected date
                       );
                       Navigator.of(context).pop();
                     } else {

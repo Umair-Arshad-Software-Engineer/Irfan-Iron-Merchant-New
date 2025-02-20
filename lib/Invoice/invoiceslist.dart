@@ -211,6 +211,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       },
     );
   }
+
   double _parseToDouble(dynamic value) {
     if (value is int) {
       return value.toDouble();
@@ -222,6 +223,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       return 0.0;
     }
   }
+
   DateTime _parsePaymentDate(dynamic date) {
     if (date is String) {
       // If the date is a string, try parsing it directly
@@ -275,6 +277,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Text(DateFormat('yyyy-MM-dd – HH:mm')
+                        //     .format(payment['date'])),
+                        // In payment history list
                         Text(DateFormat('yyyy-MM-dd – HH:mm')
                             .format(payment['date'])),
                         if (payment['description'] != null)
@@ -384,6 +389,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
         final paymentAmount = _parseToDouble(payment['amount']);
         final paymentDate = _parsePaymentDate(payment['date']);
         final description = payment['description'] ?? 'N/A';
+        // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
 
         // Generate image from description text
         final descriptionImage = await _createTextImage(description);
@@ -632,6 +638,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     bool _isPaymentButtonPressed = false;
     String? _description;
     Uint8List? _imageBytes;
+    DateTime _selectedPaymentDate = DateTime.now();
 
     await showDialog(
       context: context,
@@ -644,6 +651,38 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Add this widget to the payment dialog content
+                    ListTile(
+                      title: Text(languageProvider.isEnglish
+                          ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
+                          : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
+                      trailing: Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedPaymentDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (pickedDate != null) {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
+                          );
+                          if (pickedTime != null) {
+                            setState(() {
+                              _selectedPaymentDate = DateTime(
+                                pickedDate.year,
+                                pickedDate.month,
+                                pickedDate.day,
+                                pickedTime.hour,
+                                pickedTime.minute,
+                              );
+                            });
+                          }
+                        }
+                      },
+                    ),
                     DropdownButtonFormField<String>(
                       value: selectedPaymentMethod,
                       items: [
@@ -754,6 +793,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         selectedPaymentMethod!,
                         description: _description,
                         imageBytes: _imageBytes,
+                        paymentDate: _selectedPaymentDate, // Pass selected date
                       );
                       Navigator.of(context).pop();
                     } else {
