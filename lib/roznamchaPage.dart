@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -23,10 +24,37 @@ class Roznamchapage extends StatefulWidget {
 }
 
 class _RoznamchapageState extends State<Roznamchapage> {
+  double _cashbookRemaining = 0.0;
+
+
+  Future<void> _getCashbookRemaining() async {
+    final DatabaseReference ref = FirebaseDatabase.instance.ref().child('cashbook');
+    final snapshot = await ref.get();
+
+    double cashIn = 0;
+    double cashOut = 0;
+
+    if (snapshot.exists) {
+      final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+      values.forEach((key, value) {
+        if (value['type'] == 'cash_in') {
+          cashIn += value['amount'];
+        } else {
+          cashOut += value['amount'];
+        }
+      });
+    }
+
+    setState(() {
+      _cashbookRemaining = cashIn - cashOut;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getCashbookRemaining();
       Provider.of<InvoiceProvider>(context, listen: false).fetchInvoices();
       Provider.of<FilledProvider>(context, listen: false).fetchFilled();
       Provider.of<ExpenseProvider>(context, listen: false).fetchExpenses();
@@ -57,6 +85,10 @@ class _RoznamchapageState extends State<Roznamchapage> {
     final bankProvider = Provider.of<BankProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
 
+    // In Roznamchapage's build method
+    final totalRemainingCash = (totalPaidAmountinvoice + totalPaidAmountfilled + bankProvider.getTotalBankBalance()) -
+        (totalExpenses + totalPurchases);
+
     return Scaffold(
       appBar: AppBar(
         title:  Text(
@@ -84,6 +116,8 @@ class _RoznamchapageState extends State<Roznamchapage> {
                 bankBalance: bankProvider.getTotalBankBalance(),
                 purchaseCount: purchaseProvider.totalPurchaseCount,
                 totalPurchases: purchaseProvider.totalPurchaseAmount,
+                cashbookRemaining: _cashbookRemaining, // Add this
+
               );
             },
           ),
@@ -104,6 +138,8 @@ class _RoznamchapageState extends State<Roznamchapage> {
                 bankBalance: bankProvider.getTotalBankBalance(),
                 purchaseCount: purchaseProvider.totalPurchaseCount,
                 totalPurchases: purchaseProvider.totalPurchaseAmount,
+                cashbookRemaining: _cashbookRemaining, // Add this
+
               );
             },
           ),
@@ -194,6 +230,15 @@ class _RoznamchapageState extends State<Roznamchapage> {
               'Rs ${purchaseProvider.totalPurchaseAmount.toStringAsFixed(2)}',
               Icons.attach_money,
             ),
+            // Add after purchases section
+            const Divider(),
+            _buildSectionHeader('Cashbook Balance'),
+            _buildInfoCard(
+              languageProvider.isEnglish ? 'Cashbook Remaining' : 'کیش بک بقایا',
+              'Rs ${_cashbookRemaining.toStringAsFixed(2)}',
+              Icons.account_balance_wallet,
+              color: Colors.purple,
+            ),
           ],
         ),
       ),
@@ -269,6 +314,8 @@ class RoznamchaPDFHelper {
         required double bankBalance,
         required int purchaseCount,
         required double totalPurchases,
+        required double cashbookRemaining,
+
       }) async {
     final pdf = pw.Document();
 
@@ -326,6 +373,10 @@ class RoznamchaPDFHelper {
           _buildSectionHeader("Today's Purchases"),
           _buildDataRow("Purchase Count", purchaseCount.toString()),
           _buildDataRow("Total Purchases", "Rs ${totalPurchases.toStringAsFixed(2)}"),
+
+          // In both PDF methods, add:
+          _buildSectionHeader("Cashbook Balance"),
+          _buildDataRow("Remaining Cash", "Rs ${cashbookRemaining.toStringAsFixed(2)}"),
         ],
       ),
     );
@@ -350,6 +401,9 @@ class RoznamchaPDFHelper {
         required double bankBalance,
         required int purchaseCount,
         required double totalPurchases,
+        required double cashbookRemaining,
+
+
       }) async {
     final pdf = pw.Document();
 
@@ -407,6 +461,11 @@ class RoznamchaPDFHelper {
           _buildSectionHeader("Today's Purchases"),
           _buildDataRow("Purchase Count", purchaseCount.toString()),
           _buildDataRow("Total Purchases", "Rs ${totalPurchases.toStringAsFixed(2)}"),
+
+
+          // In both PDF methods, add:
+          _buildSectionHeader("Cashbook Balance"),
+          _buildDataRow("Remaining Cash", "Rs ${cashbookRemaining.toStringAsFixed(2)}"),
         ],
       ),
     );

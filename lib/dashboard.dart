@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iron_project_new/Auth/login.dart';
+import 'package:iron_project_new/cashbook/cashbook.dart';
 import 'package:iron_project_new/roznamchaPage.dart';
 import 'package:iron_project_new/userspage.dart';
 import 'package:iron_project_new/vendors/viewvendors.dart';
@@ -155,6 +156,7 @@ class Dashboard extends StatelessWidget {
                 _drawerItem(Icons.store, 'Vendors', 'بیچنے والا', context, const ViewVendorsPage(), languageProvider),
                 _drawerItem(Icons.account_balance_wallet, 'Transactions', 'لین دین', context, const LedgerSelection(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Bank Management', 'بینک مینجمنٹ', context, BankManagementPage(), languageProvider),
+                _drawerItem(Icons.account_balance, 'Cash Book', 'کیش بک', context, CashbookPage(), languageProvider),
                 _drawerItem(Icons.assignment, 'Roznamcha', 'روزنامچہ', context, const Roznamchapage(), languageProvider),
                 _drawerItem(Icons.settings, 'Settings', 'ترتیبات', context, UsersPage(), languageProvider),
 
