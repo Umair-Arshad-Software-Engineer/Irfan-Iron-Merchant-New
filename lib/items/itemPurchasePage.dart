@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../Provider/lanprovider.dart';
 
@@ -10,6 +11,7 @@ class ItemPurchasePage extends StatefulWidget {
 
 class _ItemPurchasePageState extends State<ItemPurchasePage> {
   final _formKey = GlobalKey<FormState>();
+  late DateTime _selectedDateTime;
 
   // Controllers
   late TextEditingController _quantityController;
@@ -27,12 +29,17 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
   @override
   void initState() {
     super.initState();
+    _selectedDateTime = DateTime.now();
     _quantityController = TextEditingController();
     _purchasePriceController = TextEditingController();
     _itemSearchController = TextEditingController();
     _vendorSearchController = TextEditingController();
     fetchItems();
     fetchVendors();
+
+    // Add listeners to update total when values change
+    _quantityController.addListener(() => setState(() {}));
+    _purchasePriceController.addListener(() => setState(() {}));
   }
 
   Future<void> fetchItems() async {
@@ -75,6 +82,43 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
     }
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateTime,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedDateTime) {
+      setState(() {
+        _selectedDateTime = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _selectedDateTime.hour,
+          _selectedDateTime.minute,
+        );
+      });
+    }
+  }
+
+  Future<void> _selectTime(BuildContext context) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDateTime = DateTime(
+          _selectedDateTime.year,
+          _selectedDateTime.month,
+          _selectedDateTime.day,
+          picked.hour,
+          picked.minute,
+        );
+      });
+    }
+  }
   void savePurchase() async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
@@ -122,7 +166,8 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         'quantity': purchasedQty,
         'purchasePrice': purchasePrice,
         'total': total, // Add total field
-        'timestamp': DateTime.now().toString(),
+        // 'timestamp': DateTime.now().toString(),
+        'timestamp': _selectedDateTime.toString(),
         'type': 'credit',
       };
 
@@ -151,9 +196,14 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
       });
     }
   }
+
+
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
+    final quantity = double.tryParse(_quantityController.text) ?? 0.0;
+    final price = double.tryParse(_purchasePriceController.text) ?? 0.0;
+    final total = quantity * price;
 
     return Scaffold(
       appBar: AppBar(
@@ -258,7 +308,65 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
                     : null,
               ),
               const SizedBox(height: 16),
+              // Date and Time Picker
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.calendar_today, size: 18),
+                      label: Text(languageProvider.isEnglish ? 'Select Date' : 'تاریخ منتخب کریں'),
+                      onPressed: () => _selectDate(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade100,
+                        foregroundColor: Colors.teal.shade900,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.access_time, size: 18),
+                      label: Text(languageProvider.isEnglish ? 'Select Time' : 'وقت منتخب کریں'),
+                      onPressed: () => _selectTime(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade100,
+                        foregroundColor: Colors.teal.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text(
+                languageProvider.isEnglish
+                    ? 'Selected: ${DateFormat('yyyy-MM-dd HH:mm').format(_selectedDateTime)}'
+                    : 'منتخب شدہ: ${DateFormat('yyyy-MM-dd HH:mm').format(_selectedDateTime)}',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+              SizedBox(height: 16),
 
+              // Total Display
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.teal),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(languageProvider.isEnglish ? 'Total:' : 'کل:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('${total.toStringAsFixed(2)} PKR',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal.shade800,
+                            fontSize: 16)),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
               ElevatedButton(
                 onPressed: savePurchase,
                 style: ElevatedButton.styleFrom(

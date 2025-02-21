@@ -155,95 +155,6 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
     );
   }
 
-  // void _payVendor(String vendorId) {
-  //   TextEditingController amountController = TextEditingController();
-  //   TextEditingController descriptionController = TextEditingController();
-  //   String selectedPaymentMethod = "Cash"; // Default selection
-  //
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return AlertDialog(
-  //         title: const Text('Pay Vendor'),
-  //         content: Column(
-  //           mainAxisSize: MainAxisSize.min,
-  //           children: [
-  //             TextField(
-  //               controller: amountController,
-  //               keyboardType: TextInputType.number,
-  //               decoration: const InputDecoration(
-  //                 labelText: 'Amount',
-  //                 prefixIcon: Icon(Icons.attach_money),
-  //               ),
-  //             ),
-  //             const SizedBox(height: 10),
-  //             TextField(
-  //               controller: descriptionController,
-  //               decoration: const InputDecoration(
-  //                 labelText: 'Description',
-  //                 prefixIcon: Icon(Icons.description),
-  //               ),
-  //             ),
-  //             const SizedBox(height: 10),
-  //             DropdownButtonFormField<String>(
-  //               value: selectedPaymentMethod,
-  //               decoration: const InputDecoration(
-  //                 labelText: 'Payment Method',
-  //                 prefixIcon: Icon(Icons.payment),
-  //               ),
-  //               items: ["Cash", "Online", "Check"].map((method) {
-  //                 return DropdownMenuItem(
-  //                   value: method,
-  //                   child: Text(method),
-  //                 );
-  //               }).toList(),
-  //               onChanged: (value) {
-  //                 setState(() {
-  //                   selectedPaymentMethod = value!;
-  //                 });
-  //               },
-  //             ),
-  //
-  //           ],
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () {
-  //               double newAmount = double.tryParse(amountController.text.trim()) ?? 0.0;
-  //               String newDescription = descriptionController.text.trim();
-  //               String date = DateTime.now().toString(); // Capture current date
-  //
-  //               if (newAmount > 0) {
-  //                 _databaseRef.child(vendorId).child("payments").push().set({
-  //                   'amount': newAmount,
-  //                   'description': newDescription,
-  //                   'date': date,
-  //                   'paymentMethod': selectedPaymentMethod, // Store selected payment method
-  //                 });
-  //                 _databaseRef.child(vendorId).child("paidAmount")
-  //                     .set(ServerValue.increment(newAmount));
-  //                 Navigator.pop(context);
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(content: Text('Payment recorded successfully!')),
-  //                 );
-  //               } else {
-  //                 ScaffoldMessenger.of(context).showSnackBar(
-  //                   const SnackBar(content: Text('Please enter a valid amount.')),
-  //                 );
-  //               }
-  //             },
-  //             child: const Text('Save'),
-  //           ),
-  //           TextButton(
-  //             onPressed: () => Navigator.pop(context),
-  //             child: const Text('Cancel'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-
   Future<Uint8List?> _pickImage() async {
     Uint8List? imageBytes;
 
@@ -282,6 +193,8 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
         TextEditingController amountController = TextEditingController();
         TextEditingController descriptionController = TextEditingController();
         String selectedPaymentMethod = "Cash";
+        DateTime selectedDate = DateTime.now(); // Default to current date and time
+        TimeOfDay selectedTime = TimeOfDay.now();
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -327,6 +240,46 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                                   });
                                 },
                               ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Open date picker
+                      final DateTime? pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2101),
+                      );
+
+                      if (pickedDate != null) {
+                        // Open time picker after date is selected
+                        final TimeOfDay? pickedTime = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                        );
+
+                        if (pickedTime != null) {
+                          setState(() {
+                            selectedDate = DateTime(
+                              pickedDate.year,
+                              pickedDate.month,
+                              pickedDate.day,
+                              pickedTime.hour,
+                              pickedTime.minute,
+                            );
+                          });
+                        }
+                      }
+                    },
+                    child: Text(languageProvider.isEnglish ? 'Select Date & Time' : 'تاریخ اور وقت منتخب کریں'),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    languageProvider.isEnglish
+                        ? 'Selected Date & Time: ${selectedDate.toString()}'
+                        : 'منتخب کردہ تاریخ اور وقت: ${selectedDate.toString()}',
+                    style: TextStyle(fontSize: 14),
+                  ),
                   ElevatedButton(
                     onPressed: () async {
                       Uint8List? imageBytes = await _pickImage();
@@ -382,7 +335,8 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                     await paymentRef.set({
                       'amount': amount,
                       'description': description,
-                      'date': DateTime.now().toString(),
+                      'date': selectedDate.toString(), // Use selected date and time
+                      // 'date': DateTime.now().toString(),
                       'paymentMethod': selectedPaymentMethod,
                       'imageUrl': imageUrl ?? '', // Store URL or empty
                     });
