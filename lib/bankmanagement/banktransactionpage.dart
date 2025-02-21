@@ -436,6 +436,33 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     // );
   }
 
+  void _deleteTransaction(String transactionKey) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Transaction'),
+        content: const Text('Are you sure you want to delete this transaction?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _dbRef.child('banks/${widget.bankId}/transactions/$transactionKey').remove().then((_) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Transaction deleted successfully')),
+                );
+              });
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -676,8 +703,20 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                       ListTile(
                         title: Text('Initial Deposit', style: TextStyle(color: Colors.blue)),
                         subtitle: Text('${initialDeposit!.value['amount']} Rs\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(initialDeposit!.value['timestamp']))}'),
-                        trailing: Icon(Icons.edit, color: Colors.blue),
-                        onTap: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteTransaction(initialDeposit!.key.toString()),
+                            ),
+                          ],
+                        ),
+                        // onTap: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
                       ),
                     for (var transaction in transactionList)
                       ListTile(
@@ -688,8 +727,19 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                           ),
                         ),//s
                         subtitle: Text('${transaction.value['amount']} Rs - ${transaction.value['description']} - ${transaction.value['amount']} Rs - ${transaction.value['description']}\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(transaction.value['timestamp']))}'),
-                        trailing: Icon(Icons.edit, color: Colors.grey),
-                        onTap: () => _editTransaction(transaction.key.toString(), transaction.value),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.edit, color: Colors.grey),
+                              onPressed: () => _editTransaction(transaction.key.toString(), transaction.value),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteTransaction(transaction.key.toString()),
+                            ),
+                          ],
+                        ),                        // onTap: () => _editTransaction(transaction.key.toString(), transaction.value),
                       ),
                   ],
                 ),
@@ -766,7 +816,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                           ),
                         ),
                         SizedBox(width: 4),
-                        ElevatedButton(
+                        IconButton(
                           onPressed: () async {
                             final DateTime? pickedDate = await showDatePicker(
                               context: context,
@@ -792,9 +842,10 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                               }
                             }
                           },
-                          child: Text(_selectedTransactionDateTime == null
+                          icon: Icon(Icons.access_time, color: Colors.blue),
+                          tooltip: _selectedTransactionDateTime == null
                               ? 'Select Date & Time'
-                              : 'Selected: ${DateFormat('dd/MM/yyyy HH:mm').format(_selectedTransactionDateTime!)}'),
+                              : 'Selected: ${DateFormat('dd/MM/yyyy HH:mm').format(_selectedTransactionDateTime!)}',
                         ),
                         Expanded(
                           child: TextField(
