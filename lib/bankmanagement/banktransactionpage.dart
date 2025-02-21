@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:ui' as ui;
 
 
 class BankTransactionsPage extends StatefulWidget {
@@ -28,7 +29,55 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
   double remainingBalance = 0;
   DateTime? _startDate;
   DateTime? _endDate;
+  DateTime? _selectedTransactionDateTime;
+  List<MapEntry<dynamic, dynamic>> displayTransactions = [];
 
+
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    const double scaleFactor = 2.0; // Higher scale for better quality
+    final String displayText = text.isEmpty ? "N/A" : text;
+
+    final textStyle = const TextStyle(
+      fontSize: 8 * scaleFactor,
+      fontFamily: 'JameelNoori',
+      color: Colors.black,
+    );
+
+    final textSpan = TextSpan(text: displayText, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: ui.TextDirection.rtl,
+    );
+
+    textPainter.layout();
+
+    // Calculate image dimensions with padding
+    final width = textPainter.width + (10 * scaleFactor); // Add padding
+    final height = textPainter.height + (4 * scaleFactor);
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(Offset.zero, Offset(width, height)),
+    );
+
+    // Draw background
+    final paint = Paint()..color = Colors.white;
+    canvas.drawRect(Rect.fromLTRB(0, 0, width, height), paint);
+
+    // Paint text centered
+    textPainter.paint(
+      canvas,
+      Offset(5 * scaleFactor, 2 * scaleFactor), // Adjust padding
+    );
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width.ceil(), height.ceil());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    return pw.MemoryImage(buffer);
+  }
 
   void _addTransaction() {
     if (_amountController.text.isNotEmpty && _descriptionController.text.isNotEmpty) {
@@ -47,7 +96,8 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
       'amount': amount,
       'description': _descriptionController.text,
       'type': _isCashIn ? 'cash_in' : 'cash_out',
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'timestamp': _selectedTransactionDateTime?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch,
+      // 'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
     _dbRef.child('banks/${widget.bankId}/transactions').push().set(transaction).then((_) {
@@ -215,6 +265,19 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     final footerLogo = pw.MemoryImage(footerBuffer);
 
 
+    if (initialDeposit != null) {
+      displayTransactions.add(initialDeposit!);
+    }
+    displayTransactions.addAll(otherTransactions);
+
+// Pre-generate images for descriptions
+    List<pw.MemoryImage> descriptionImages = [];
+    for (var entry in displayTransactions) {
+      final description = entry.value['description']?.toString() ?? '';
+      final image = await _createTextImage(description);
+      descriptionImages.add(image);
+    }
+
     // Sort transactions by timestamp (newest first)
     otherTransactions.sort((a, b) => b.value['timestamp'].compareTo(a.value['timestamp']));
 
@@ -258,46 +321,67 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
               ),
             ),
 
-            pw.Table.fromTextArray(
+            pw.Table(
               columnWidths: {
                 0: const pw.FlexColumnWidth(2),
                 1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(1.5),
+                2: const pw.FlexColumnWidth(3), // Wider for images
+                3: const pw.FlexColumnWidth(2),
               },
-              border: null,
-              cellAlignment: pw.Alignment.centerLeft, // Aligns content to the left within cells
-              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.black, // Optional: Set header text color
-                fontSize: 10, // Optional: Set header font size
-              ),
-              headers: ['Type', 'Amount (Rs)', 'Description', 'Date & Time'],
-              data: [
-                // Initial Deposit Row
-                if (initialDeposit != null)
-                  [
-                    'INITIAL DEPOSIT',
-                    '${initialDeposit!.value['amount']}',
-                    initialDeposit!.value['description'],
-                    dateFormat.format(DateTime.fromMillisecondsSinceEpoch(initialDeposit!.value['timestamp']).toLocal()),
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              children: [
+                // Header Row
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: PdfColors.grey300),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Amount (Rs)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Date & Time', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
                   ],
-                // Other transactions
-                ...otherTransactions.map((entry) => [
-                  entry.value['type'] == 'cash_in' ? 'Cash In' : 'Cash Out',
-                  '${entry.value['amount']}',
-                  entry.value['description'],
-                  dateFormat.format(DateTime.fromMillisecondsSinceEpoch(entry.value['timestamp']).toLocal()),
-                ]),
+                ),
+                // Data Rows
+                for (int i = 0; i < displayTransactions.length; i++)
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(
+                          displayTransactions[i].value['type'] == 'initial_deposit'
+                              ? 'INITIAL DEPOSIT'
+                              : (displayTransactions[i].value['type'] == 'cash_in' ? 'Cash In' : 'Cash Out'),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text('${displayTransactions[i].value['amount']}'),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Image(descriptionImages[i], fit: pw.BoxFit.contain,dpi: 2000),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(dateFormat.format(
+                          DateTime.fromMillisecondsSinceEpoch(displayTransactions[i].value['timestamp']).toLocal(),
+                        )
+                        ),
+                      ),
+                    ],
+                  ),
               ],
-              cellStyle: pw.TextStyle(
-                color: PdfColors.black,
-                fontSize: 10,
-              ),
-              headerPadding: pw.EdgeInsets.all(4),
-              cellPadding: pw.EdgeInsets.all(4),
-              headerAlignment: pw.Alignment.centerLeft, // Aligns header text to the left
             ),
             pw.SizedBox(height: 20),
             pw.Column(
@@ -591,7 +675,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                     if (initialDeposit != null)
                       ListTile(
                         title: Text('Initial Deposit', style: TextStyle(color: Colors.blue)),
-                        subtitle: Text('${initialDeposit!.value['amount']} Rs'),
+                        subtitle: Text('${initialDeposit!.value['amount']} Rs\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(initialDeposit!.value['timestamp']))}'),
                         trailing: Icon(Icons.edit, color: Colors.blue),
                         onTap: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
                       ),
@@ -602,8 +686,8 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                           style: TextStyle(
                             color: transaction.value['type'] == 'cash_in' ? Colors.green : Colors.red,
                           ),
-                        ),
-                        subtitle: Text('${transaction.value['amount']} Rs - ${transaction.value['description']}'),
+                        ),//s
+                        subtitle: Text('${transaction.value['amount']} Rs - ${transaction.value['description']} - ${transaction.value['amount']} Rs - ${transaction.value['description']}\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(transaction.value['timestamp']))}'),
                         trailing: Icon(Icons.edit, color: Colors.grey),
                         onTap: () => _editTransaction(transaction.key.toString(), transaction.value),
                       ),
@@ -681,7 +765,37 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                             ),
                           ),
                         ),
-                        SizedBox(width: 8),
+                        SizedBox(width: 4),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final DateTime? pickedDate = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                            );
+                            if (pickedDate != null) {
+                              final TimeOfDay? pickedTime = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (pickedTime != null) {
+                                setState(() {
+                                  _selectedTransactionDateTime = DateTime(
+                                    pickedDate.year,
+                                    pickedDate.month,
+                                    pickedDate.day,
+                                    pickedTime.hour,
+                                    pickedTime.minute,
+                                  );
+                                });
+                              }
+                            }
+                          },
+                          child: Text(_selectedTransactionDateTime == null
+                              ? 'Select Date & Time'
+                              : 'Selected: ${DateFormat('dd/MM/yyyy HH:mm').format(_selectedTransactionDateTime!)}'),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _descriptionController,
