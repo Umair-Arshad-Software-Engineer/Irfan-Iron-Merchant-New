@@ -108,7 +108,7 @@ class _filledpageState extends State<filledpage> {
     double discountAmount = _discount;
     return subtotal - discountAmount;
   }
-//s
+
   Future<Uint8List> _generatePDFBytes(String filledNumber) async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -417,6 +417,7 @@ class _filledpageState extends State<filledpage> {
       return 0.0; // Return 0 if there's an error
     }
   }
+
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
     final DatabaseEvent snapshot = await itemsRef.once();
@@ -438,7 +439,8 @@ class _filledpageState extends State<filledpage> {
     });
   }
 
-  void _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
+
+  Future<void> _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
     try {
       for (var item in validItems) {
         final itemName = item['itemName'];
@@ -452,17 +454,14 @@ class _filledpageState extends State<filledpage> {
         if (dbItem.id.isNotEmpty) {
           final String itemId = dbItem.id;
           final double currentQty = dbItem.qtyOnHand ?? 0.0;
-          final double itemQty = item['qty'] ?? 0.0; // Changed from weight to qty
-          double initialQty = item['initialQty'] ?? 0.0; // Changed from initialWeight
+          final double newQty = item['qty'] ?? 0.0;
+          final double initialQty = item['initialQty'] ?? 0.0;
 
-          double updatedQty;
-          if (widget.filled != null) {
-            // For edits, adjust by the difference
-            updatedQty = currentQty + (initialQty - itemQty);
-          } else {
-            // For new entries, subtract the qty
-            updatedQty = currentQty - itemQty;
-          }
+          // Calculate the difference between the new quantity and the initial quantity
+          double delta = initialQty - newQty;
+
+          // Update the qtyOnHand in the database
+          double updatedQty = currentQty + delta;
 
           await _db.child('items/$itemId').update({'qtyOnHand': updatedQty});
         }
@@ -531,7 +530,6 @@ class _filledpageState extends State<filledpage> {
   void initState() {
     super.initState();
     _fetchItems();
-    // Initialize customer provider and fetch customers
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     customerProvider.fetchCustomers().then((_) {
       if (widget.filled != null) {
@@ -559,22 +557,20 @@ class _filledpageState extends State<filledpage> {
       _paymentType = filled['paymentType'];
       _instantPaymentMethod = filled['paymentMethod'];
 
-      // Initialize rows with calculated totals
+      // Initialize rows with calculated totals and initial quantities
       _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
         double rate = (row['rate'] as num).toDouble();
-        // double weight = (row['weight'] as num).toDouble();
         double qty = (row['qty'] as num).toDouble();
         double total = rate * qty; // Calculate total here
 
         return {
           'itemName': row['itemName'],
           'rate': rate,
-          // 'weight': weight,
-          'qty': (row['qty'] as num).toDouble(),
+          'qty': qty,
+          'initialQty': qty, // Store the initial quantity
           'description': row['description'],
-          'total': total, // Use calculated total
+          'total': total,
           'itemNameController': TextEditingController(text: row['itemName']),
-          // 'weightController': TextEditingController(text: weight.toString()),
           'rateController': TextEditingController(text: rate.toString()),
           'qtyController': TextEditingController(text: row['qty'].toString()),
           'descriptionController': TextEditingController(text: row['description']),
@@ -586,10 +582,9 @@ class _filledpageState extends State<filledpage> {
           'total': 0.0,
           'rate': 0.0,
           'qty': 0.0,
-          'weight': 0.0,
+          'initialQty': 0.0, // Initialize initialQty for new rows
           'description': '',
-          'itemNameController': TextEditingController(), // Add this
-          'weightController': TextEditingController(),
+          'itemNameController': TextEditingController(),
           'rateController': TextEditingController(),
           'qtyController': TextEditingController(),
           'descriptionController': TextEditingController(),
@@ -778,7 +773,7 @@ class _filledpageState extends State<filledpage> {
                         onPressed: () => _selectDate(context),
                       ),
                     ),
-                    readOnly: true, // Prevent manual typing
+                    // readOnly: true, // Prevent manual typing
                     onTap: () => _selectDate(context),
                   ),
                   // Space between sections
@@ -821,6 +816,7 @@ class _filledpageState extends State<filledpage> {
                                   const SizedBox(height: 5,),
                                   CustomAutocomplete(
                                     items: _items,
+
                                     controller: _filledRows[i]['itemNameController'],
                                     onSelected: (Item selectedItem) {
                                       setState(() {
@@ -830,8 +826,9 @@ class _filledpageState extends State<filledpage> {
                                         _filledRows[i]['rateController'].text = selectedItem.costPrice.toString();
                                         _filledRows[i]['itemNameController'].text = selectedItem.itemName;
                                       });
+                                      print(_items);
                                     },
-                                    readOnly: _isReadOnly,
+                                    // readOnly: _isReadOnly,
                                   ),
                                   const SizedBox(height: 5),
                                   // Sarya Rate TextField
@@ -841,7 +838,7 @@ class _filledpageState extends State<filledpage> {
                                       double newRate = double.tryParse(value) ?? 0.0;
                                       _updateRow(i, 'rate', newRate);
                                     },
-                                    enabled: !_isReadOnly,
+                                    // enabled: !_isReadOnly,
                                     decoration: const InputDecoration(
                                       labelText: 'Rate',
                                       border: OutlineInputBorder(),
@@ -855,7 +852,7 @@ class _filledpageState extends State<filledpage> {
                                   // Sarya Qty
                                   TextField(
                                     controller: _filledRows[i]['qtyController'],
-                                    enabled: !_isReadOnly,
+                                    // enabled: !_isReadOnly,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     inputFormatters: [
                                       FilteringTextInputFormatter.digitsOnly,
@@ -876,7 +873,7 @@ class _filledpageState extends State<filledpage> {
                                   // Descriptions
                                   TextField(
                                     controller: _filledRows[i]['descriptionController'],
-                                    enabled: !_isReadOnly,
+                                    // enabled: !_isReadOnly,
                                     onChanged: (value) {
                                       _updateRow(i, 'description', value);
                                     },
@@ -929,7 +926,7 @@ class _filledpageState extends State<filledpage> {
                   Text(languageProvider.isEnglish ? 'Discount (Amount):' : 'رعایت (رقم):', style: const TextStyle(fontSize: 18)),
                   TextField(
                     controller: _discountController,
-                    enabled: !_isReadOnly, // Disable in read-only mode
+                    // enabled: !_isReadOnly, // Disable in read-only mode
 
                     keyboardType: TextInputType.number,
                     onChanged: (value) {
@@ -980,7 +977,9 @@ class _filledpageState extends State<filledpage> {
                                     value: 'instant',
                                     groupValue: _paymentType,
                                     title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
-                                    onChanged:_isReadOnly ? null : (value) {
+                                    onChanged:
+                                    // _isReadOnly ? null :
+                                        (value) {
                                       setState(() {
                                         _paymentType = value!;
                                         _instantPaymentMethod = null; // Reset instant payment method
@@ -992,7 +991,9 @@ class _filledpageState extends State<filledpage> {
                                     value: 'udhaar',
                                     groupValue: _paymentType,
                                     title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
-                                    onChanged:_isReadOnly ? null :  (value) {
+                                    onChanged:
+                                    // _isReadOnly ? null :
+                                        (value) {
                                       setState(() {
                                         _paymentType = value!;
                                       });
@@ -1009,7 +1010,9 @@ class _filledpageState extends State<filledpage> {
                                       value: 'cash',
                                       groupValue: _instantPaymentMethod,
                                       title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
-                                      onChanged: _isReadOnly ? null : (value) {
+                                      onChanged:
+                                      // _isReadOnly ? null :
+                                          (value) {
                                         setState(() {
                                           _instantPaymentMethod = value!;
                                         });
@@ -1019,7 +1022,9 @@ class _filledpageState extends State<filledpage> {
                                       value: 'online',
                                       groupValue: _instantPaymentMethod,
                                       title: Text(languageProvider.isEnglish ? 'Online Bank Transfer' : 'آن لائن بینک ٹرانسفر'),
-                                      onChanged: _isReadOnly ? null : (value) {
+                                      onChanged:
+                                      // _isReadOnly ? null :
+                                          (value) {
                                         setState(() {
                                           _instantPaymentMethod = value!;
                                         });
@@ -1054,7 +1059,7 @@ class _filledpageState extends State<filledpage> {
                       ],
                     ),
                   ),
-                  if (!_isReadOnly)
+                  // if (!_isReadOnly)
                     ElevatedButton(
                       onPressed: _isButtonPressed
                           ? null
@@ -1238,6 +1243,16 @@ class _filledpageState extends State<filledpage> {
                               paymentType: _paymentType,
                               paymentMethod: _instantPaymentMethod,
                               items: _filledRows,
+                              createdAt: _dateController.text.isNotEmpty
+                                  ? DateTime(
+                                DateTime.parse(_dateController.text).year,
+                                DateTime.parse(_dateController.text).month,
+                                DateTime.parse(_dateController.text).day,
+                                DateTime.now().hour,
+                                DateTime.now().minute,
+                                DateTime.now().second,
+                              ).toIso8601String()
+                                  : DateTime.now().toIso8601String(),
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(

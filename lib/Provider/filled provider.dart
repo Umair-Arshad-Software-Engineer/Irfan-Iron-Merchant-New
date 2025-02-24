@@ -3,9 +3,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+import '../Models/itemModel.dart';
+
 class FilledProvider with ChangeNotifier {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   List<Map<String, dynamic>> _filled = [];
+  List<Item> _items = []; // Initialize the _items list
+  List<Item> get items => _items; // Add a getter for _items
 
   List<Map<String, dynamic>> get filled => _filled;
 
@@ -64,34 +68,61 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> getFilledById(String filledId) async {
+    try {
+      final snapshot = await _db.child('filled').child(filledId).get();
+      if (snapshot.exists) {
+        return Map<String, dynamic>.from(snapshot.value as Map);
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Failed to fetch filled: $e');
+    }
+  }
+
   Future<void> updateFilled({
-    required String filledId, // Same filledId as the one used during save
+    required String filledId,
     required String filledNumber,
     required String customerId,
-    required String customerName, // Accept the customer name as a parameter
+    required String customerName,
     required double subtotal,
     required double discount,
     required double grandTotal,
     required String paymentType,
-    String? paymentMethod, // For instant payments
+    String? paymentMethod,
     required List<Map<String, dynamic>> items,
+    required String createdAt,
   }) async {
     try {
+      // Fetch the old filled data
+      final oldFilled = await getFilledById(filledId);
+      if (oldFilled == null) {
+        throw Exception('Filled not found.');
+      }
+
+      // Get the old grand total
+      final double oldGrandTotal = (oldFilled['grandTotal'] as num).toDouble();
+
+      // Calculate the difference between the old and new grand totals
+      final double difference = grandTotal - oldGrandTotal;
+
+      // Clean the items data
       final cleanedItems = items.map((item) {
         return {
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
-          // 'weight': item['weight'] ?? 0.0,
+          'initialQty': item['initialQty'] ?? 0.0, // Include initialQty
           'description': item['description'] ?? '',
           'total': item['total'],
         };
       }).toList();
 
-      final updatedFilledData = {
+      // Prepare the updated filled data
+      final filledData = {
         'filledNumber': filledNumber,
         'customerId': customerId,
-        'customerName': customerName, // Update customer name here as well
+        'customerName': customerName,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -99,13 +130,76 @@ class FilledProvider with ChangeNotifier {
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'updatedAt': DateTime.now().toIso8601String(),
+        'createdAt': createdAt
       };
 
-      // Update the filled at the same path using the filledId
-      await _db.child('filled').child(filledId).update(updatedFilledData);
+      // Update the filled in the database
+      await _db.child('filled').child(filledId).update(filledData);
 
-      // Optionally refresh the filled list after updating
+      // // Update the ledger with the difference
+      // await _updateCustomerLedger(
+      //   customerId,
+      //   creditAmount: difference, // Use the difference instead of the full amount
+      //   debitAmount: 0.0,
+      //   remainingBalance: grandTotal, // Update the remaining balance
+      //   filledNumber: filledNumber,
+      // );
+      // Step 1: Find the existing ledger entry for this filled
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('filledNumber').equalTo(filledNumber);
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> entries = snapshot.value as Map<dynamic, dynamic>;
+        if (entries.isNotEmpty) {
+          String entryKey = entries.keys.first;
+          Map<String, dynamic> entry = Map<String, dynamic>.from(entries[entryKey]);
+
+          // Step 2: Update the existing entry with the difference
+          double currentCredit = (entry['creditAmount'] as num).toDouble();
+          double newCredit = currentCredit + difference;
+
+          double currentRemaining = (entry['remainingBalance'] as num).toDouble();
+          double newRemaining = currentRemaining + difference;
+
+          await customerLedgerRef.child(entryKey).update({
+            'creditAmount': newCredit,
+            'remainingBalance': newRemaining,
+          });
+        }
+      }
+
+      // Update the stock (qtyOnHand) for each item
+      for (var item in items) {
+        final itemName = item['itemName'];
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in the _items list
+        final dbItem = _items.firstWhere(
+              (i) => i.itemName == itemName,
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+        );
+
+        if (dbItem.id.isNotEmpty) {
+          final String itemId = dbItem.id;
+          final double currentQty = dbItem.qtyOnHand;
+          final double newQty = item['qty'] ?? 0.0;
+          final double initialQty = item['initialQty'] ?? 0.0;
+
+          // Calculate the difference between the initial quantity and the new quantity
+          double delta = initialQty - newQty;
+
+          // Update the qtyOnHand in the database
+          double updatedQty = currentQty + delta;
+
+          await _db.child('items/$itemId').update({'qtyOnHand': updatedQty});
+        }
+      }
+
+      // Refresh the filled list
       await fetchFilled();
+
+      notifyListeners();
     } catch (e) {
       throw Exception('Failed to update filled: $e');
     }
@@ -146,6 +240,22 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+
+  // Fetch items from Firebase
+  Future<void> fetchItems() async {
+    try {
+      final snapshot = await _db.child('items').get();
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<dynamic, dynamic>;
+        _items = data.entries.map((entry) {
+          return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
+        }).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      throw Exception('Failed to fetch items: $e');
+    }
+  }
 
   Future<void> deleteFilled(String filledId) async {
     try {
@@ -308,15 +418,6 @@ class FilledProvider with ChangeNotifier {
       // Calculate the total paid so far
       final totalPaid = currentCashPaid + currentOnlinePaid;
 
-      // Check if the new payment exceeds the remaining balance
-      // if (paymentAmount > (grandTotal - totalPaid)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
-      //   );
-      //   throw Exception("Payment exceeds the remaining filled balance.");
-      // }
-
-      // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
       double updatedCheckPaid = _parseToDouble(filled['checkPaidAmount']);
@@ -358,15 +459,6 @@ class FilledProvider with ChangeNotifier {
       // Retrieve and parse the current debit amount
       final currentDebit = _parseToDouble(filled['debitAmount']);
 
-      // Check if the payment amount exceeds the remaining balance
-      // if (paymentAmount > (grandTotal - currentDebit)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text("Payment exceeds the remaining filled balance.")),
-      //   );
-      //   throw Exception("Payment exceeds the remaining filled balance.");
-      // }
-
-      // Update the filled with the new payment data
       final updatedDebit = currentDebit + paymentAmount;
       final debitAt = DateTime.now().toIso8601String();
 
@@ -444,6 +536,7 @@ class FilledProvider with ChangeNotifier {
       throw Exception('Failed to fetch payments: $e');
     }
   }
+
   Future<void> deletePaymentEntry({
     required BuildContext context,
     required String filledId,

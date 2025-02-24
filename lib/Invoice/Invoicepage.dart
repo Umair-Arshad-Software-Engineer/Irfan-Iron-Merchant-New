@@ -457,7 +457,7 @@
       });
     }
 
-    void _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
+    Future<void> _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
       try {
         for (var item in validItems) {
           final itemName = item['itemName'];
@@ -471,17 +471,15 @@
           if (dbItem.id.isNotEmpty) {
             final String itemId = dbItem.id;
             final double currentQty = dbItem.qtyOnHand ?? 0.0;
-            final double weight = item['weight'] ?? 0.0;
-            double initialWeight = item['initialWeight'] ?? 0.0;
+            final double newQty = item['weight'] ?? 0.0;
+            final double initialWeight = item['initialWeight'] ?? 0.0;
 
-            double updatedQty;
-            if (widget.invoice != null) {
-              updatedQty = currentQty + (initialWeight - weight);
-            } else {
-              updatedQty = currentQty - weight;
-            }
+            // Calculate the difference between the new quantity and the initial quantity
+            double delta = initialWeight - newQty;
 
-            // Update the item's qtyOnHand (allow negative values)
+            // Update the qtyOnHand in the database
+            double updatedQty = currentQty + delta;
+
             await _db.child('items/$itemId').update({'qtyOnHand': updatedQty});
           }
         }
@@ -575,6 +573,7 @@
             'itemName': row['itemName'],
             'rate': rate,
             'weight': weight,
+            'initialWeight': weight, // Store initial weight for delta calculation
             'qty': (row['qty'] as num).toDouble(),
             'description': row['description'],
             'total': total, // Use calculated total
@@ -831,7 +830,7 @@
                               onPressed: () => _selectDate(context),
                             ),
                           ),
-                          readOnly: true, // Prevent manual typing
+                          // readOnly: true, // Prevent manual typing
                           onTap: () => _selectDate(context),
                         ),
                         const SizedBox(height: 20),
@@ -883,7 +882,7 @@
                                               _invoiceRows[i]['itemNameController'].text = selectedItem.itemName;
                                             });
                                           },
-                                          readOnly: _isReadOnly,
+                                          // readOnly: _isReadOnly,
                                         ),
                                         const SizedBox(height: 5),
                                         // Sarya Rate TextField
@@ -893,7 +892,7 @@
                                             double newRate = double.tryParse(value) ?? 0.0;
                                             _updateRow(i, 'rate', newRate);
                                           },
-                                          enabled: !_isReadOnly,
+                                          // enabled: !_isReadOnly,
                                           decoration: const InputDecoration(
                                             labelText: 'Rate',
                                             border: OutlineInputBorder(),
@@ -907,7 +906,7 @@
                                         // Sarya Qty
                                         TextField(
                                           controller: _invoiceRows[i]['qtyController'],
-                                          enabled: !_isReadOnly,
+                                          // enabled: !_isReadOnly,
                                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                           inputFormatters: [
                                             FilteringTextInputFormatter.digitsOnly,
@@ -928,7 +927,7 @@
                                         // Sarya Weight
                                         TextField(
                                           controller: _invoiceRows[i]['weightController'],
-                                          enabled: !_isReadOnly,
+                                          // enabled: !_isReadOnly,
                                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                           inputFormatters: [
                                             FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
@@ -949,7 +948,7 @@
                                         // Descriptions
                                         TextField(
                                           controller: _invoiceRows[i]['descriptionController'],
-                                          enabled: !_isReadOnly,
+                                          // enabled: !_isReadOnly,
                                           onChanged: (value) {
                                             _updateRow(i, 'description', value);
                                           },
@@ -971,7 +970,7 @@
                             ),
                           ),
                         ),
-                        if(!_isReadOnly)
+                        // if(!_isReadOnly)
                           Center(
                             child: ElevatedButton.icon(
                               onPressed: _addNewRow,
@@ -1003,7 +1002,7 @@
                         Text(languageProvider.isEnglish ? 'Discount (Amount):' : 'رعایت (رقم):', style: const TextStyle(fontSize: 18)),
                         TextField(
                           controller: _discountController,
-                          enabled: !_isReadOnly, // Disable in read-only modess
+                          // enabled: !_isReadOnly, // Disable in read-only modess
                           keyboardType: TextInputType.number,
                           onChanged: (value) {
                             setState(() {
@@ -1053,7 +1052,9 @@
                                           value: 'instant',
                                           groupValue: _paymentType,
                                           title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
-                                          onChanged: _isReadOnly ? null : (value) {
+                                          onChanged:
+                                          // _isReadOnly ? null :
+                                              (value) {
                                             setState(() {
                                               _paymentType = value!;
                                               _instantPaymentMethod = null; // Reset instant payment method
@@ -1072,7 +1073,9 @@
                                           value: 'udhaar',
                                           groupValue: _paymentType,
                                           title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
-                                          onChanged: _isReadOnly ? null : (value) {
+                                          onChanged:
+                                          // _isReadOnly ? null :
+                                              (value) {
                                             setState(() {
                                               _paymentType = value!;
                                             });
@@ -1094,7 +1097,9 @@
                                             value: 'cash',
                                             groupValue: _instantPaymentMethod,
                                             title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
-                                            onChanged: _isReadOnly ? null : (value) {
+                                            onChanged:
+                                            // _isReadOnly ? null :
+                                                (value) {
                                               setState(() {
                                                 _instantPaymentMethod = value!;
                                               });
@@ -1109,7 +1114,9 @@
                                             value: 'online',
                                             groupValue: _instantPaymentMethod,
                                             title: Text(languageProvider.isEnglish ? 'Online Bank Transfer' : 'آن لائن بینک ٹرانسفر'),
-                                            onChanged: _isReadOnly ? null : (value) {
+                                            onChanged:
+                                            // _isReadOnly ? null :
+                                                (value) {
                                               setState(() {
                                                 _instantPaymentMethod = value!;
                                               });
@@ -1149,7 +1156,7 @@
                             ],
                           ),
                         ),
-                        if (!_isReadOnly)
+                        // if (!_isReadOnly)
                           ElevatedButton(
                             onPressed: _isButtonPressed
                                 ? null
@@ -1331,6 +1338,16 @@
                                     paymentType: _paymentType,
                                     paymentMethod: _instantPaymentMethod,
                                     items: _invoiceRows,
+                                    createdAt: _dateController.text.isNotEmpty
+                                        ? DateTime(
+                                      DateTime.parse(_dateController.text).year,
+                                      DateTime.parse(_dateController.text).month,
+                                      DateTime.parse(_dateController.text).day,
+                                      DateTime.now().hour,
+                                      DateTime.now().minute,
+                                      DateTime.now().second,
+                                    ).toIso8601String()
+                                        : DateTime.now().toIso8601String(),
                                   );
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(

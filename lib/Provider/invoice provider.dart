@@ -3,10 +3,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+import '../Models/itemModel.dart';
+
 class InvoiceProvider with ChangeNotifier {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   List<Map<String, dynamic>> _invoices = [];
-
+  List<Item> _items = []; // Initialize the _items list
+  List<Item> get items => _items; // Add a getter for _items
   List<Map<String, dynamic>> get invoices => _invoices;
 
   Future<void> saveInvoice({
@@ -68,19 +71,55 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> getInvoiceById(String invoiceId) async {
+    try {
+      final snapshot = await _db.child('invoices').child(invoiceId).get();
+      if (snapshot.exists) {
+        return Map<String, dynamic>.from(snapshot.value as Map);
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Failed to fetch invoice: $e');
+    }
+  }
+
   Future<void> updateInvoice({
-    required String invoiceId, // Same invoiceId as the one used during save
+    required String invoiceId,
     required String invoiceNumber,
     required String customerId,
-    required String customerName, // Accept the customer name as a parameter
+    required String customerName,
     required double subtotal,
     required double discount,
     required double grandTotal,
     required String paymentType,
-    String? paymentMethod, // For instant payments
+    String? paymentMethod,
     required List<Map<String, dynamic>> items,
+    required String createdAt,
   }) async {
     try {
+      // Fetch the old invoice data
+      final oldInvoice = await getInvoiceById(invoiceId);
+      if (oldInvoice == null) {
+        throw Exception('Invoice not found.');
+      }
+
+      // Get the old grand total
+      final double oldGrandTotal = (oldInvoice['grandTotal'] as num).toDouble();
+
+      // Calculate the difference between the old and new grand totals
+      final double difference = grandTotal - oldGrandTotal;
+
+      // Clean the items data
+      // final cleanedItems = items.map((item) {
+      //   return {
+      //     'itemName': item['itemName'],
+      //     'rate': item['rate'] ?? 0.0,
+      //     'qty': item['qty'] ?? 0.0,
+      //     'initialQty': item['initialQty'] ?? 0.0, // Include initialQty
+      //     'description': item['description'] ?? '',
+      //     'total': item['total'],
+      //   };
+      // }).toList();
       final cleanedItems = items.map((item) {
         return {
           'itemName': item['itemName'],
@@ -93,10 +132,11 @@ class InvoiceProvider with ChangeNotifier {
         };
       }).toList();
 
-      final updatedInvoiceData = {
+      // Prepare the updated filled data
+      final invoiceData = {
         'invoiceNumber': invoiceNumber,
         'customerId': customerId,
-        'customerName': customerName, // Update customer name here as well
+        'customerName': customerName,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -104,13 +144,68 @@ class InvoiceProvider with ChangeNotifier {
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'updatedAt': DateTime.now().toIso8601String(),
+        'createdAt': createdAt
       };
 
-      // Update the invoice at the same path using the invoiceId
-      await _db.child('invoices').child(invoiceId).update(updatedInvoiceData);
+      // Update the invoice in the database
+      await _db.child('invoices').child(invoiceId).update(invoiceData);
 
-      // Optionally refresh the invoices list after updating
+      // Step 1: Find the existing ledger entry for this invoice
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('invoiceNumber').equalTo(invoiceNumber);
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> entries = snapshot.value as Map<dynamic, dynamic>;
+        if (entries.isNotEmpty) {
+          String entryKey = entries.keys.first;
+          Map<String, dynamic> entry = Map<String, dynamic>.from(entries[entryKey]);
+
+          // Step 2: Update the existing entry with the difference
+          double currentCredit = (entry['creditAmount'] as num).toDouble();
+          double newCredit = currentCredit + difference;
+
+          double currentRemaining = (entry['remainingBalance'] as num).toDouble();
+          double newRemaining = currentRemaining + difference;
+
+          await customerLedgerRef.child(entryKey).update({
+            'creditAmount': newCredit,
+            'remainingBalance': newRemaining,
+          });
+        }
+      }
+
+      // Update the stock (qtyOnHand) for each item
+      for (var item in items) {
+        final itemName = item['itemName'];
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in the _items list
+        final dbItem = _items.firstWhere(
+              (i) => i.itemName == itemName,
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+        );
+
+        if (dbItem.id.isNotEmpty) {
+          final String itemId = dbItem.id;
+          final double currentQty = dbItem.qtyOnHand;
+          final double newWeight = item['weight'] ?? 0.0; // Use 'weight' instead of 'qty'
+          final double initialWeight = item['initialWeight'] ?? 0.0; // Ensure this is 'initialWeight'
+
+          // Calculate the difference between the initial quantity and the new quantity
+          double delta = initialWeight - newWeight;
+
+          // Update the qtyOnHand in the database
+          double updatedQty = currentQty + delta;
+
+          await _db.child('items/$itemId').update({'qtyOnHand': updatedQty});
+        }
+      }
+
+      // Refresh the invoice list
       await fetchInvoices();
+
+      notifyListeners();
     } catch (e) {
       throw Exception('Failed to update invoice: $e');
     }
@@ -551,7 +646,7 @@ class InvoiceProvider with ChangeNotifier {
       await fetchInvoices();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment deleted successfully.')),
+        const SnackBar(content: Text('Payment deleted successfully.')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

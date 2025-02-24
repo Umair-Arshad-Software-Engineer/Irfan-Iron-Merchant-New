@@ -170,13 +170,23 @@ class CustomerReportProvider with ChangeNotifier {
           final debit = (value['debitAmount'] ?? 0.0).toDouble();
           final credit = (value['creditAmount'] ?? 0.0).toDouble();
 
-          transactions.add({
-            'id': key,
-            'date': value['createdAt'],
-            'invoiceNumber': value['invoiceNumber'],
-            'debit': debit,
-            'credit': credit,
-          });
+          // Skip transactions where both debit and credit are zero
+          if (debit != 0.0 || credit != 0.0) {
+            transactions.add({
+              'id': key,
+              'date': value['createdAt'],
+              'filledNumber': value['filledNumber'],
+              'debit': debit,
+              'credit': credit,
+            });
+          }
+          // transactions.add({
+          //   'id': key,
+          //   'date': value['createdAt'],
+          //   'invoiceNumber': value['invoiceNumber'],
+          //   'debit': debit,
+          //   'credit': credit,
+          // });
         });
 
         // Sort transactions by date

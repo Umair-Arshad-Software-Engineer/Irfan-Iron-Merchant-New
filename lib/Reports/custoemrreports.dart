@@ -55,7 +55,14 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                       icon: Icon(Icons.picture_as_pdf, color: Colors.white),
                       onPressed: () {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
-
+                        //
+                        // final transactions = selectedDateRange == null
+                        //     ? provider.transactions
+                        //     : provider.transactions.where((transaction) {
+                        //   final date = DateTime.parse(transaction['date']);
+                        //   return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
+                        //       date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
+                        // }).toList();
                         final transactions = selectedDateRange == null
                             ? provider.transactions
                             : provider.transactions.where((transaction) {
@@ -63,6 +70,10 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                           return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
                               date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
                         }).toList();
+
+                        // Additional filter to ensure no zero entries (redundant but safe)
+                        transactions.removeWhere((transaction) =>
+                        transaction['debit'] == 0.0 && transaction['credit'] == 0.0);
 
                         _generateAndPrintPDF(provider.report, transactions, false); // Save PDF
                       },

@@ -54,6 +54,14 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                       onPressed: () {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
 
+                        // final transactions = selectedDateRange == null
+                        //     ? provider.transactions
+                        //     : provider.transactions.where((transaction) {
+                        //   final date = DateTime.parse(transaction['date']);
+                        //   return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
+                        //       date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
+                        // }).toList();
+                        // Inside _generateAndPrintPDF function
                         final transactions = selectedDateRange == null
                             ? provider.transactions
                             : provider.transactions.where((transaction) {
@@ -61,6 +69,11 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                           return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
                               date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
                         }).toList();
+
+                        // Additional filter to ensure no zero entries (redundant but safe)
+                        transactions.removeWhere((transaction) =>
+                        transaction['debit'] == 0.0 && transaction['credit'] == 0.0);
+
 
                         _generateAndPrintPDF(provider.report, transactions, false); // Save PDF
                       },
@@ -253,7 +266,10 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           return DataRow(cells: [
             DataCell(Text(DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])), style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text(transaction['filledNumber'] ?? 'N/A', style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text(transaction['credit'] != 0.0 ? 'Filled' : 'Bill', style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            DataCell(Text(transaction['credit'] < 0.0 ? 'Filled (Edited)' :
+            (transaction['credit'] != 0.0 ? 'Filled' : 'Bill'),
+                style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            // DataCell(Text(transaction['credit'] != 0.0 ? 'Filled' : 'Bill', style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text('Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text('Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text('Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
