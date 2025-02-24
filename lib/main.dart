@@ -32,7 +32,6 @@ void main() async{
         ChangeNotifierProvider(create: (_) => ExpenseProvider()), // Add ExpenseProvider
         ChangeNotifierProvider(create: (_) => BankProvider()), // Add this line
         ChangeNotifierProvider(create: (_) => PurchaseProvider()),
-
       ],
       child: const MyApp(),
     ),
@@ -49,7 +48,7 @@ class MyApp extends StatelessWidget {
       builder: (context, languageProvider, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          home:  Dashboard(),
+          home:  LoginPage(),
           theme: ThemeData(
             fontFamily: languageProvider.isEnglish ? 'Roboto' : 'JameelNoori',
           ),

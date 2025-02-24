@@ -240,6 +240,10 @@ class _CustomerListState extends State<CustomerList> {
                                             _showEditDialog(context, customer, customerProvider);
                                           },
                                         ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, color: Colors.red),
+                                          onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
+                                        ),
                                       ],
                                     )),
                                   ]);
@@ -275,12 +279,22 @@ class _CustomerListState extends State<CustomerList> {
                                       ),
                                     ],
                                   ),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.teal),
-                                    onPressed: () {
-                                      _showEditDialog(context, customer, customerProvider);
-                                    },
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.teal),
+                                        onPressed: () {
+                                          _showEditDialog(context, customer, customerProvider);
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
+                                      ),
+                                    ],
                                   ),
+
                                 ),
                               );
                             },
@@ -297,6 +311,59 @@ class _CustomerListState extends State<CustomerList> {
       ),
     );
   }
+  void _showDeleteConfirmationDialog(
+      BuildContext context,
+      Customer customer,
+      CustomerProvider customerProvider,
+      ) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish
+            ? 'Delete Customer?'
+            : 'کسٹمر حذف کریں؟'),
+        content: Text(languageProvider.isEnglish
+            ? 'Are you sure you want to delete ${customer.name}?'
+            : 'کیا آپ واقعی ${customer.name} کو حذف کرنا چاہتے ہیں؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              try {
+                await customerProvider.deleteCustomer(customer.id);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(languageProvider.isEnglish
+                        ? 'Customer deleted successfully'
+                        : 'کسٹمر کامیابی سے حذف ہو گیا'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(languageProvider.isEnglish
+                        ? 'Error deleting customer: $e'
+                        : 'کسٹمر کو حذف کرنے میں خرابی: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: Text(languageProvider.isEnglish ? 'Delete' : 'حذف کریں'),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   void _showEditDialog(
       BuildContext context,

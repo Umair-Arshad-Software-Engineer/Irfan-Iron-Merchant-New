@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
+import 'package:iron_project_new/dashboard.dart';
 import 'package:provider/provider.dart';
 import '../Provider/lanprovider.dart';
 import 'addexpensepage.dart';
@@ -561,6 +562,13 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
 
     return Scaffold(
       appBar: AppBar(
+          leading: IconButton(onPressed: (){
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => Dashboard()), // Replace HomePage with your target screen
+                  (Route<dynamic> route) => false,
+            );
+          }, icon: const Icon(Icons.arrow_back)),
           title: Text(
             languageProvider.isEnglish ? 'View Daily Expense' : 'روزانہ کے اخراجات',
             style: TextStyle(color: Colors.white),

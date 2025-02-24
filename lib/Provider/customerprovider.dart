@@ -54,8 +54,18 @@ class CustomerProvider with ChangeNotifier {
   }
 
   Future<void> deleteCustomer(String id) async {
-    await _dbRef.child(id).remove();
-    fetchCustomers(); // Refresh list
+    try {
+      await _dbRef.child(id).remove();
+      // Also delete related ledger entries if needed
+      // await FirebaseDatabase.instance.ref('invoices/$id').remove();
+      // await FirebaseDatabase.instance.ref('ledger/$id').remove();
+      // await FirebaseDatabase.instance.ref('filled/$id').remove();
+      // await FirebaseDatabase.instance.ref('filledledger/$id').remove();
+      await fetchCustomers();
+    } catch (e) {
+      print("Error deleting customer: $e");
+      throw e;
+    }
   }
 
 }

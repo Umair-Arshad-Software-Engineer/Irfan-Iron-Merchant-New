@@ -1,9 +1,14 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import '../Provider/employeeprovider.dart';
 import '../Provider/lanprovider.dart';
 import 'dart:ui' as ui;
@@ -19,6 +24,56 @@ class AttendanceReportPage extends StatefulWidget {
 class _AttendanceReportPageState extends State<AttendanceReportPage> {
   String _searchName = '';
   DateTimeRange? _dateRange;
+
+  // Add these new methods:
+  Future<void> _savePdf(
+      List<String> filteredEmployees,
+      EmployeeProvider employeeProvider,
+      Map<String, Map<String, String>> employees) async {
+    try {
+      final pdfBytes = await _generatePdfBytes(filteredEmployees, employeeProvider, employees);
+      final String? path = await FilePicker.platform.saveFile(
+        fileName: 'attendance_report.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (path != null) {
+        final file = File(path);
+        await file.writeAsBytes(pdfBytes);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF saved successfully!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving PDF: $e')),
+      );
+    }
+  }
+
+  Future<void> _sharePdf(
+      List<String> filteredEmployees,
+      EmployeeProvider employeeProvider,
+      Map<String, Map<String, String>> employees) async {
+    try {
+      final pdfBytes = await _generatePdfBytes(filteredEmployees, employeeProvider, employees);
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/attendance_report.pdf');
+      await file.writeAsBytes(pdfBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Attendance Report',
+        subject: 'Employee Attendance Details',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sharing PDF: $e')),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +99,10 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
           IconButton(
             icon: const Icon(Icons.print,color: Colors.white,),
             onPressed: () => _generateAndPrintPdf(filteredEmployees, employeeProvider, employees),
+          ),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white),
+            onPressed: () => _sharePdf(filteredEmployees, employeeProvider, employees),
           ),
         ],
       ),
@@ -142,6 +201,25 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
                                 Text('Time: ${attendance['time'] ?? 'N/A'}'),
                               ],
                             ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                try {
+                                  await employeeProvider.deleteAttendance(employeeId, date);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(languageProvider.isEnglish
+                                        ? 'Attendance deleted successfully'
+                                        : 'حاضری کامیابی سے حذف ہو گئی')),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(languageProvider.isEnglish
+                                        ? 'Error deleting attendance: $e'
+                                        : 'حاضری حذف کرنے میں خرابی: $e')),
+                                  );
+                                }
+                              },
+                            ),
                           );
                         }).toList(),
                       );
@@ -191,7 +269,7 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
     return pw.MemoryImage(buffer);  // Return the image as MemoryImage
   }
 
-  Future<void> _generateAndPrintPdf(
+  Future<Uint8List> _generatePdfBytes(
       List<String> filteredEmployees,
       EmployeeProvider employeeProvider,
       Map<String, Map<String, String>> employees) async {
@@ -248,7 +326,15 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
     final firstEmployeeId = filteredEmployees.isNotEmpty ? filteredEmployees.first : null;
     final firstEmployeeName = firstEmployeeId != null ? employees[firstEmployeeId]!['name']! : 'N/A';
     final firstEmployeeNameImage = await _createTextImage(firstEmployeeName);
+// Get language provider first
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
+// Update the header text logic with language support
+    final headerText = filteredEmployees.length > 1
+        ? (languageProvider.isEnglish ? 'ALL Employees' : 'تمام ملازمین')
+        : firstEmployeeName;
+
+    final headerTextImage = await _createTextImage(headerText);
     // Add the collected rows to the PDF table using MultiPage
     pdf.addPage(
       pw.MultiPage(
@@ -274,7 +360,7 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
                       style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold),
                     ),
                     pw.SizedBox(height: 10),
-                    pw.Image(firstEmployeeNameImage, width: 150, height: 50, dpi: 1000), // Employee name image
+                    pw.Image(headerTextImage, width: 150, height: 50, dpi: 2000), // Changed here
                     pw.Text('Zulfiqar Ahmad: 03006316202',
                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     pw.Text('Muhammad Irfan: 03008167446',
@@ -356,9 +442,22 @@ class _AttendanceReportPageState extends State<AttendanceReportPage> {
         },
       ),
     );
+    return pdf.save();
+  }
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-    );
+  Future<void> _generateAndPrintPdf(
+      List<String> filteredEmployees,
+      EmployeeProvider employeeProvider,
+      Map<String, Map<String, String>> employees) async {
+    try {
+      final pdfBytes = await _generatePdfBytes(filteredEmployees, employeeProvider, employees);
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error printing PDF: $e')),
+      );
+    }
   }
 }

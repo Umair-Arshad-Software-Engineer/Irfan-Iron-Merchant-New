@@ -260,11 +260,14 @@ class _AddExpensePageState extends State<AddExpensePage> {
           ),
           content: TextField(
             controller: adjustmentController,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(signed: true),
             decoration: InputDecoration(
               labelText: languageProvider.isEnglish
-                  ? 'Enter Additional Amount'
-                  : 'اضافی رقم درج کریں۔',
+                  ? 'Enter Adjustment Amount (+/-)'
+                  : 'ایڈجسٹمنٹ رقم درج کریں (+/-)',
+              hintText: languageProvider.isEnglish
+                  ? 'Positive to add, negative to deduct'
+                  : 'اضافہ کرنے کے لیے مثبت، کٹوتی کے لیے منفی',
             ),
           ),
           actions: <Widget>[
@@ -272,29 +275,27 @@ class _AddExpensePageState extends State<AddExpensePage> {
               child: Text(
                 languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں۔',
               ),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.pop(context),
             ),
             TextButton(
               child: Text(
-                languageProvider.isEnglish ? 'Add' : 'شامل کریں۔',
+                languageProvider.isEnglish ? 'Adjust' : 'ایڈجسٹ کریں',
               ),
               onPressed: () {
-                double? additionalBalance = double.tryParse(adjustmentController.text);
-                if (additionalBalance == null || additionalBalance <= 0) {
+                final adjustment = double.tryParse(adjustmentController.text);
+                if (adjustment == null || adjustment == 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
                         languageProvider.isEnglish
-                            ? 'Please enter a valid amount'
-                            : 'براہ کرم ایک درست رقم درج کریں۔',
+                            ? 'Please enter a valid non-zero amount'
+                            : 'براہ کرم ایک درست غیر صفر رقم درج کریں',
                       ),
                     ),
                   );
                 } else {
-                  Navigator.of(context).pop();
-                  _updateOpeningBalance(additionalBalance);
+                  Navigator.pop(context);
+                  _updateOpeningBalance(adjustment);
                 }
               },
             ),
@@ -304,46 +305,45 @@ class _AddExpensePageState extends State<AddExpensePage> {
     );
   }
 
-  void _updateOpeningBalance(double additionalBalance) {
+
+  void _updateOpeningBalance(double adjustment) {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
 
-    // First get both current balances
     dbRef.child("openingBalance").child(formattedDate).get().then((openingSnapshot) {
       if (openingSnapshot.exists) {
         final currentOpening = openingSnapshot.value as num? ?? 0.0;
 
-        // Now get the original opening balance
         dbRef.child("originalOpeningBalance").child(formattedDate).get().then((originalSnapshot) {
           final currentOriginal = originalSnapshot.value as num? ?? currentOpening.toDouble();
-          final newOriginal = currentOriginal.toDouble() + additionalBalance;
-          final updatedOpening = currentOpening.toDouble() + additionalBalance;
+          final newOriginal = currentOriginal + adjustment;
+          final updatedOpening = currentOpening + adjustment;
 
-          // Update both balances atomically
+          // Prevent negative original balance
+          if (newOriginal < 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  languageProvider.isEnglish
+                      ? 'Original balance cannot be negative!'
+                      : 'اصل بیلنس منفی نہیں ہو سکتا!',
+                ),
+              ),
+            );
+            return;
+          }
+
           dbRef.update({
             "openingBalance/$formattedDate": updatedOpening,
             "originalOpeningBalance/$formattedDate": newOriginal,
           }).then((_) {
-            setState(() {
-              _openingBalance = updatedOpening;
-            });
-
+            setState(() => _openingBalance = updatedOpening);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
                   languageProvider.isEnglish
-                      ? 'Balances updated successfully!'
-                      : 'بیلنس کامیابی سے اپ ڈیٹ ہو گئے!',
-                ),
-              ),
-            );
-          }).catchError((error) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  languageProvider.isEnglish
-                      ? 'Error updating balances: $error'
-                      : 'بیلنس اپ ڈیٹ کرنے میں خرابی: $error',
+                      ? 'Balance adjusted by ${adjustment >= 0 ? '+' : ''}$adjustment'
+                      : 'بیلنس ${adjustment >= 0 ? '+' : ''}$adjustment سے ایڈجسٹ',
                 ),
               ),
             );
@@ -355,14 +355,13 @@ class _AddExpensePageState extends State<AddExpensePage> {
         SnackBar(
           content: Text(
             languageProvider.isEnglish
-                ? 'Error fetching balances: $error'
+                ? 'Error fetching balance: $error'
                 : 'بیلنس حاصل کرنے میں خرابی: $error',
           ),
         ),
       );
     });
   }
-
 
   @override
   Widget build(BuildContext context) {

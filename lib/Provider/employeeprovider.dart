@@ -42,47 +42,6 @@ class EmployeeProvider with ChangeNotifier {
   }
 
 
-
-  // Method to save attendance to Firebase
-  // Future<void> markAttendance(
-  //     BuildContext context,
-  //     String employeeId,
-  //     String status,
-  //     String description,
-  //     DateTime date) async {
-  //   final dateString = date.toIso8601String().split('T').first; // Format the date (e.g., "2025-01-08")
-  //   final timeString = date.toIso8601String().split('T').last.split('.').first; // Extract the time (e.g., "14:30:00")
-  //
-  //
-  //   // Check if attendance for this day already exists
-  //   final snapshot = await _attendanceRef.child(employeeId).child(dateString).get();
-  //   if (snapshot.exists) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text("Attendance already marked for today.")),
-  //     );
-  //     print("Attendance already marked for today.");
-  //     return; // Do not save if attendance already exists for today
-  //   }
-  //
-  //   // Save attendance data in Firebase if not already marked
-  //   try {
-  //     await _attendanceRef.child(employeeId).child(dateString).set({
-  //       'status': status,
-  //       'description': description,
-  //       'date':dateString,
-  //       'time': timeString
-  //     });
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text("Attendance already marked for today.")),
-  //     );
-  //     print("Attendance marked for today.");
-  //     notifyListeners(); // Notify listeners after data is saved
-  //   } catch (e) {
-  //     print("Error saving attendance: $e");
-  //   }
-  // }
-
-
   Future<void> markAttendance(
       BuildContext context,
       String employeeId,
@@ -132,7 +91,16 @@ class EmployeeProvider with ChangeNotifier {
     }
   }
 
-
+// In EmployeeProvider class
+  Future<void> deleteAttendance(String employeeId, String dateString) async {
+    try {
+      await _attendanceRef.child(employeeId).child(dateString).remove();
+      notifyListeners();
+    } catch (e) {
+      print("Error deleting attendance: $e");
+      throw e;
+    }
+  }
 
   Future<Map<String, Map<String, dynamic>>> getAttendanceForDateRange(
       String employeeId, DateTimeRange dateRange) async {
