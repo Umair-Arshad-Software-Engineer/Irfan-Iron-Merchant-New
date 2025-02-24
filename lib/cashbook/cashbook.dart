@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
+import 'package:provider/provider.dart';
 import '../Models/cashbookModel.dart';
 import 'dart:io';
 import 'dart:typed_data';
@@ -11,6 +12,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:ui' as ui;
+
+import '../Provider/lanprovider.dart';
 
 
 class CashbookPage extends StatefulWidget {
@@ -287,9 +290,14 @@ class _CashbookPageState extends State<CashbookPage> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cashbook', style: TextStyle(color: Colors.white)),
+        title: Text(
+            // 'Cashbook',
+            languageProvider.isEnglish ? 'CashBook' : 'کیش بک',
+            style: const TextStyle(color: Colors.white)),
         backgroundColor: Colors.blueAccent,
         elevation: 0,
       ),
@@ -301,8 +309,9 @@ class _CashbookPageState extends State<CashbookPage> {
             children: [
               _buildForm(),
               const SizedBox(height: 20),
-              const Text(
-                'Entries',
+               Text(
+                // 'Entries',
+                languageProvider.isEnglish ? 'Entries' : 'انٹریز',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               Row(
@@ -337,6 +346,8 @@ class _CashbookPageState extends State<CashbookPage> {
   }
 
   Widget _buildForm() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Card(
       elevation: 4,
       child: Padding(
@@ -347,13 +358,16 @@ class _CashbookPageState extends State<CashbookPage> {
             children: [
               TextFormField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
+                decoration:  InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter a description';
+                    return
+                      // 'Please enter a description'
+                      languageProvider.isEnglish ? 'Please enter a description' : 'براہ کرم ایک تفصیل درج کریں'
+                    ;
                   }
                   return null;
                 },
@@ -361,14 +375,17 @@ class _CashbookPageState extends State<CashbookPage> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _amountController,
-                decoration: const InputDecoration(
-                  labelText: 'Amount',
+                decoration:  InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter an amount';
+                    return
+                      // 'Please enter an amount'
+                      languageProvider.isEnglish ? 'Please enter a amount' : 'براہ کرم ایک رقم درج کریں'
+                    ;
                   }
                   return null;
                 },
@@ -416,7 +433,13 @@ class _CashbookPageState extends State<CashbookPage> {
                     _selectedType = newValue!;
                   });
                 },
-                items: <String>['cash_in', 'cash_out'].map<DropdownMenuItem<String>>((String value) {
+                items: <String>[
+                  'cash_in',
+                  // languageProvider.isEnglish ? 'Cash_in' : 'کیش ان',
+                  // languageProvider.isEnglish ? 'cash_out' : 'کیش آؤٹ'
+
+                      'cash_out'
+                ].map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
@@ -432,11 +455,17 @@ class _CashbookPageState extends State<CashbookPage> {
                 onPressed: _saveEntry,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  padding: const EdgeInsets.symmetric(vertical: 5),
                 ),
                 child: Text(
-                  _editingEntry == null ? 'Add Entry' : 'Update Entry',
-                  style: const TextStyle(color: Colors.white),
+                  _editingEntry == null ?
+                  // 'Add Entry'
+                  languageProvider.isEnglish ? 'Add Entry' : 'انٹری جمع کریں'
+                    :
+                  // 'Update Entry',
+                  languageProvider.isEnglish ? 'Update Entry' : 'انٹری تبدیل کریں',
+
+                    style: const TextStyle(color: Colors.white),
                 ),
               ),
             ],
@@ -462,6 +491,7 @@ class _CashbookPageState extends State<CashbookPage> {
 
           return Column(
             children: [
+              _buildTotalDisplay(totals),
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -493,7 +523,6 @@ class _CashbookPageState extends State<CashbookPage> {
                   );
                 },
               ),
-              _buildTotalDisplay(totals),
             ],
           );
         }
@@ -502,15 +531,26 @@ class _CashbookPageState extends State<CashbookPage> {
   }
 
   Widget _buildTotalDisplay(Map<String, double> totals) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Card(
       color: Colors.blue[50],
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            _buildTotalRow('Total Cash In', totals['cashIn']!),
-            _buildTotalRow('Total Cash Out', totals['cashOut']!),
-            _buildTotalRow('Remaining Cash', totals['remaining']!,
+            _buildTotalRow(
+                // 'Total Cash In',
+                languageProvider.isEnglish ? 'Total Cash In' : 'ٹوٹل کیش ان',
+                totals['cashIn']!),
+            _buildTotalRow(
+                // 'Total Cash Out',
+                languageProvider.isEnglish ? 'Total Cash Out' : 'ٹوٹل کیش آؤٹ',
+                totals['cashOut']!),
+            _buildTotalRow(
+                // 'Remaining Cash',
+                languageProvider.isEnglish ? 'Remaining Cash' : 'بقایا رقم',
+                totals['remaining']!,
                 isHighlighted: true),
           ],
         ),
