@@ -93,6 +93,39 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
     });
   }
 
+  void _confirmDelete(String id) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish
+              ? "Confirm Delete"
+              : "حذف کرنے کی تصدیق کریں"),
+          content: Text(languageProvider.isEnglish
+              ? "Are you sure you want to delete this vendor?"
+              : "کیا آپ واقعی یہ فروش حذف کرنا چاہتے ہیں؟"),
+          actions: <Widget>[
+            TextButton(
+              child: Text(languageProvider.isEnglish ? "Cancel" : "منسوخ کریں",
+                  style: TextStyle(color: Colors.teal)),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? "Delete" : "حذف کریں",
+                  style: TextStyle(color: Colors.red)),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                _deleteVendor(id); // Proceed with deletion
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _deleteVendor(String id) async {
     try {
       await _databaseRef.child(id).remove();
@@ -571,10 +604,20 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                             '${languageProvider.isEnglish ? 'Paid' : 'ادائیگی'}: ${vendor["paidAmount"].toStringAsFixed(2)} Rs',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.orange),
-                            onPressed: () => _editOpeningBalance(vendor["id"], vendor["openingBalance"]),
-                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, color: Colors.orange),
+                                onPressed: () => _editOpeningBalance(vendor["id"], vendor["openingBalance"]),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                // onPressed: () => _deleteVendor(vendor["id"]),
+                                onPressed: () => _confirmDelete(vendor["id"])
+
+                              ),
+                            ],
+                          )
                         ],
                       ),
                       onTap: () => _editVendor(vendor["id"], vendor["name"]),
@@ -583,10 +626,6 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Distribute icons properly
                           children: [
-                            // IconButton(
-                            //   icon: const Icon(Icons.delete, color: Colors.red),
-                            //   onPressed: () => _deleteVendor(vendor["id"]),
-                            // ),
                             IconButton(
                               icon: const Icon(Icons.payment, color: Colors.green),
                               onPressed: () => _payVendor(vendor["id"]),

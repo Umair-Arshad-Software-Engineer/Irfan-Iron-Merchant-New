@@ -432,7 +432,7 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
         headingTextStyle: const TextStyle(fontWeight: FontWeight.bold),
         columns: [
           DataColumn(label: Text(languageProvider.isEnglish ? 'Date' : 'ڈیٹ')),
-          DataColumn(label: Text(languageProvider.isEnglish ? 'Invoice' : 'انوائس')),
+          DataColumn(label: Text(languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Type' : 'قسم')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
@@ -442,7 +442,10 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
           return DataRow(cells: [
             DataCell(Text(DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])), style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text(transaction['invoiceNumber'] ?? 'N/A', style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text(transaction['credit'] != 0.0 ? 'Invoice' : 'Bill', style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            DataCell(Text(transaction['credit'] < 0.0 ? 'Filled (Edited)' :
+            (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
+                style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            // DataCell(Text(transaction['credit'] != 0.0 ? 'Invoice' : 'Bill', style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text('Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text('Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text('Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
+import 'package:iron_project_new/DailyExpensesPages/viewexpensepage.dart';
 import 'package:provider/provider.dart';
 
 import '../Provider/lanprovider.dart'; // Import intl package
@@ -305,28 +306,34 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
   void _updateOpeningBalance(double additionalBalance) {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
     String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
 
-    dbRef.child("openingBalance").child(formattedDate).get().then((snapshot) {
-      if (snapshot.exists) {
-        final currentBalance = snapshot.value as num? ?? 0.0;
-        final updatedBalance = currentBalance.toDouble() + additionalBalance;
+    // First get both current balances
+    dbRef.child("openingBalance").child(formattedDate).get().then((openingSnapshot) {
+      if (openingSnapshot.exists) {
+        final currentOpening = openingSnapshot.value as num? ?? 0.0;
 
-        // Save updated balance to the "openingBalance" node
-        dbRef.child("openingBalance").child(formattedDate).set(updatedBalance).then((_) {
-          setState(() {
-            _openingBalance = updatedBalance;
-          });
+        // Now get the original opening balance
+        dbRef.child("originalOpeningBalance").child(formattedDate).get().then((originalSnapshot) {
+          final currentOriginal = originalSnapshot.value as num? ?? currentOpening.toDouble();
+          final newOriginal = currentOriginal.toDouble() + additionalBalance;
+          final updatedOpening = currentOpening.toDouble() + additionalBalance;
 
-          // Also update the original opening balance to the new value
-          dbRef.child("originalOpeningBalance").child(formattedDate).set(updatedBalance).then((_) {
+          // Update both balances atomically
+          dbRef.update({
+            "openingBalance/$formattedDate": updatedOpening,
+            "originalOpeningBalance/$formattedDate": newOriginal,
+          }).then((_) {
+            setState(() {
+              _openingBalance = updatedOpening;
+            });
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
                   languageProvider.isEnglish
-                      ? 'Opening balance and original balance updated successfully!'
-                      : 'اوپننگ بیلنس اور اصل بیلنس کامیابی کے ساتھ اپ ڈیٹ ہو گئے۔',
+                      ? 'Balances updated successfully!'
+                      : 'بیلنس کامیابی سے اپ ڈیٹ ہو گئے!',
                 ),
               ),
             );
@@ -335,22 +342,12 @@ class _AddExpensePageState extends State<AddExpensePage> {
               SnackBar(
                 content: Text(
                   languageProvider.isEnglish
-                      ? 'Error updating original opening balance: $error'
-                      : 'اصل اوپننگ بیلنس کو اپ ڈیٹ کرنے میں خرابی: $error',
+                      ? 'Error updating balances: $error'
+                      : 'بیلنس اپ ڈیٹ کرنے میں خرابی: $error',
                 ),
               ),
             );
           });
-        }).catchError((error) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                languageProvider.isEnglish
-                    ? 'Error updating opening balance: $error'
-                    : 'اوپننگ بیلنس کو اپ ڈیٹ کرنے میں خرابی: $error',
-              ),
-            ),
-          );
         });
       }
     }).catchError((error) {
@@ -358,8 +355,8 @@ class _AddExpensePageState extends State<AddExpensePage> {
         SnackBar(
           content: Text(
             languageProvider.isEnglish
-                ? 'Error fetching current opening balance: $error'
-                : 'موجودہ اوپننگ بیلنس کو حاصل کرنے میں خرابی: $error',
+                ? 'Error fetching balances: $error'
+                : 'بیلنس حاصل کرنے میں خرابی: $error',
           ),
         ),
       );
@@ -370,120 +367,199 @@ class _AddExpensePageState extends State<AddExpensePage> {
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final isEnglish = languageProvider.isEnglish;
 
     return Scaffold(
-      backgroundColor: Colors.teal.shade50, // Background colorss
+      backgroundColor: Colors.teal.shade50,
       appBar: AppBar(
-        // title: const Text("Add Expense"),
+        leading: IconButton(onPressed: (){
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => ViewExpensesPage()), // Replace HomePage with your target screen
+                (Route<dynamic> route) => false,
+          );
+        }, icon: const Icon(Icons.arrow_back)),
+        automaticallyImplyLeading: false,
         title: Text(
-          languageProvider.isEnglish ? 'Add Expense' : 'اخراجات شامل کریں۔',
-          style: TextStyle(color: Colors.white),
-
+          isEnglish ? 'Add Expense' : 'اخراجات شامل کریں۔',
+          style: const TextStyle(color: Colors.white),
         ),
         actions: [
-          IconButton(onPressed: (){
-            _adjustOpeningBalanceDialog();
-          }, icon: Icon(Icons.add,color: Colors.white,))
+          IconButton(
+            icon: const Icon(Icons.balance, color: Colors.white),
+            onPressed: _adjustOpeningBalanceDialog,
+            tooltip: isEnglish ? 'Adjust Balance' : 'بیلنس ایڈجسٹ کریں',
+          )
         ],
         backgroundColor: Colors.teal,
-        centerTitle: true,      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  // "Selected Date: ${_selectedDate.day.toString().padLeft(2, '0')}:${_selectedDate.month.toString().padLeft(2, '0')}:${_selectedDate.year}",
-                  "${languageProvider.isEnglish ? 'Selected Date:' : 'تاریخ منتخب کریں:'} ${_selectedDate.day.toString().padLeft(2, '0')}:${_selectedDate.month.toString().padLeft(2, '0')}:${_selectedDate.year}",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal.shade700,
-                  ),
-                ),
-                const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.date_range,color: Colors.white,),
-                  label:  Text(
-                      // 'Select Date'
-                    languageProvider.isEnglish ? 'Select Date' : 'تاریخ منتخب کریں',
-
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400, // Text color
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
+                _buildDateCard(isEnglish),
+                const SizedBox(height: 24),
+                _buildOpeningBalanceDisplay(isEnglish),
+                const SizedBox(height: 32),
+                _buildInputFields(isEnglish),
+                const SizedBox(height: 40),
+                _buildSaveButton(isEnglish),
               ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _descriptionController,
-              decoration: InputDecoration(
-                labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-
-                labelStyle: TextStyle(color: Colors.teal.shade700),
-                fillColor: Colors.white,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.teal.shade700),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _amountController,
-              decoration: InputDecoration(
-                labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
-                labelStyle: TextStyle(color: Colors.teal.shade700),
-                fillColor: Colors.white,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.teal.shade700),
-                ),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 20),
-            const Spacer(),
-            ElevatedButton(
-              // onPressed: _saveExpense,
-              onPressed: _isSaveButtonPressed ? null : _saveExpense, // Disable if pressed
-
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal, // Button background color
-                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 40),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child:  Text(
-                // 'Save Expense',
-                languageProvider.isEnglish ? 'Save Expense' : 'اخراجات محفوظ کریں',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _buildDateCard(bool isEnglish) => Card(
+    elevation: 4,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today, color: Colors.teal.shade700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${isEnglish ? 'Selected Date:' : 'تاریخ منتخب کریں:'} '
+                  '${_selectedDate.day.toString().padLeft(2, '0')}:'
+                  '${_selectedDate.month.toString().padLeft(2, '0')}:'
+                  '${_selectedDate.year}',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.teal.shade800,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.edit_calendar, size: 20),
+            label: Text(isEnglish ? 'Change' : 'تبدیل کریں'),
+            onPressed: _pickDate,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal.shade400,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildOpeningBalanceDisplay(bool isEnglish) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.teal.shade100,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          isEnglish ? 'Available Balance:' : 'دستیاب بیلنس:',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.teal.shade800,
+          ),
+        ),
+        Text(
+          '${_openingBalance.toStringAsFixed(2)}Rs',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.teal.shade700,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildInputFields(bool isEnglish) => Column(
+    children: [
+      TextField(
+        controller: _descriptionController,
+        decoration: InputDecoration(
+          labelText: isEnglish ? 'Description' : 'تفصیل',
+          prefixIcon: Icon(Icons.description, color: Colors.teal.shade700),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.teal.shade700, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        ),
+        style: const TextStyle(fontSize: 16),
+      ),
+      const SizedBox(height: 20),
+      TextField(
+        controller: _amountController,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: isEnglish ? 'Amount' : 'رقم',
+          prefixIcon: Icon(Icons.currency_exchange, color: Colors.teal.shade700),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.teal.shade700, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        ),
+        style: const TextStyle(fontSize: 16),
+      ),
+    ],
+  );
+
+  Widget _buildSaveButton(bool isEnglish) => ElevatedButton.icon(
+  icon: _isSaveButtonPressed
+  ? const SizedBox(
+  width: 24,
+  height: 24,
+  child: CircularProgressIndicator(
+  color: Colors.white,
+  strokeWidth: 2,
+  ),
+  )
+      : const Icon(Icons.save_rounded),
+  label: Text(
+  _isSaveButtonPressed
+  ? (isEnglish ? 'Saving...' : 'محفوظ ہو رہا ہے...')
+      : (isEnglish ? 'Save Expense' : 'اخراجات محفوظ کریں'),
+  style: const TextStyle(fontSize: 16),
+  ),
+  onPressed: _isSaveButtonPressed ? null : _saveExpense,
+  style: ElevatedButton.styleFrom(
+  backgroundColor: Colors.teal,
+  foregroundColor: Colors.white,
+  padding: const EdgeInsets.symmetric(vertical: 18),
+  shape: RoundedRectangleBorder(
+  borderRadius: BorderRadius.circular(12),
+  // elevation: 2,
+  ),
+  )
+  );
+
 }

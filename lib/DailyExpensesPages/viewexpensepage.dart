@@ -11,10 +11,6 @@ import 'dart:ui' as ui; // Keep this import only once
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart'; // This can be removed if not necessary
 
-
-
-
-
 class ViewExpensesPage extends StatefulWidget {
   @override
   _ViewExpensesPageState createState() => _ViewExpensesPageState();
@@ -95,8 +91,6 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     }
   }
 
-
-
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Create a custom painter with the Urdu text
     final recorder = ui.PictureRecorder();
@@ -126,7 +120,6 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
 
     return pw.MemoryImage(buffer);  // Return the image as MemoryImage
   }
-
 
   void _generatePdf() async {
     final pdf = pw.Document();
@@ -259,222 +252,346 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     );
   }
 
+  Widget _buildTotalItem({required String label, required String value}) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.teal.shade700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "$value rs",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.teal.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTotalSection(LanguageProvider languageProvider) {
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildTotalItem(
+              label: languageProvider.isEnglish ? 'Total Expenses' : 'کل اخراجات',
+              value: _totalExpense.toStringAsFixed(2),
+            ),
+            _buildTotalItem(
+              label: languageProvider.isEnglish ? 'Remaining Balance' : 'بقایا رقم',
+              value: _remainingBalance.toStringAsFixed(2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteExpense(Map<String, dynamic> expense, BuildContext context) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    final confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Delete Expense?' : 'اخراجات کو حذف کریں؟'),
+          content: Text(languageProvider.isEnglish
+              ? 'Are you sure you want to delete this expense?'
+              : 'کیا آپ واقعی یہ اخراجات حذف کرنا چاہتے ہیں؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(languageProvider.isEnglish ? 'Delete' : 'حذف کریں'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmDelete == true) {
+      try {
+        final expenseId = expense["id"];
+        String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
+        await dbRef.child(formattedDate).child("expenses").child(expenseId).remove();
+        _fetchExpenses();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(languageProvider.isEnglish
+                ? 'Expense deleted successfully'
+                : 'اخراجات کامیابی سے حذف ہو گئے'),
+          ),
+        );
+      } catch (error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(languageProvider.isEnglish
+                ? 'Error deleting expense: $error'
+                : 'اخراجات کو حذف کرنے میں خرابی: $error'),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildMobileExpenseList() {
+    return ListView.separated(
+      itemCount: expenses.length,
+      separatorBuilder: (context, index) => Divider(height: 1),
+      itemBuilder: (ctx, index) {
+        final expense = expenses[index];
+        return ListTile(
+          contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          title: Text(
+            expense["description"],
+            style: TextStyle(
+              color: Colors.teal.shade800,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Text(
+            expense["date"],
+            style: TextStyle(color: Colors.teal.shade600),
+          ),
+          trailing: Container(
+            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              "${expense["amount"].toStringAsFixed(2)} rs",
+              style: TextStyle(
+                color: Colors.teal.shade800,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          onLongPress: () => _confirmDeleteExpense(expense, context),
+        );
+      },
+    );
+  }
+
+  Widget _buildWideExpenseList() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: DataTable(
+        columnSpacing: 20,
+        horizontalMargin: 16,
+        columns: [
+          DataColumn(label: Text('Description')),
+          DataColumn(label: Text('Date'), numeric: false),
+          DataColumn(label: Text('Amount'), numeric: true),
+        ],
+        rows: expenses.map((expense) {
+          return DataRow(
+            cells: [
+              DataCell(Text(expense["description"])),
+              DataCell(Text(expense["date"])),
+              DataCell(
+                Container(
+                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    "${expense["amount"].toStringAsFixed(2)} rs",
+                    style: TextStyle(
+                      color: Colors.teal.shade800,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            onLongPress: () => _confirmDeleteExpense(expense, context),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildExpenseList(LanguageProvider languageProvider) {
+    return Expanded(
+      child: Card(
+        elevation: 4,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: expenses.isEmpty
+              ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Text(
+                languageProvider.isEnglish
+                    ? 'No expenses found for this date'
+                    : 'اس تاریخ کے لیے کوئی اخراجات نہیں ملے',
+                style: TextStyle(
+                  color: Colors.teal.shade700,
+                  fontSize: 18,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          )
+              : LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth > 600) {
+                return _buildWideExpenseList();
+              }
+              return _buildMobileExpenseList();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatePicker(LanguageProvider languageProvider) {
+    return ElevatedButton.icon(
+      icon: Icon(Icons.calendar_today, size: 20, color: Colors.white),
+      label: Text(
+        languageProvider.isEnglish ? 'Change Date' : 'تاریخ تبدیل کریں',
+        style: TextStyle(color: Colors.white),
+      ),
+      style: ElevatedButton.styleFrom(
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        backgroundColor: Colors.teal.shade400,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      onPressed: _pickDate, // Moved onPressed to proper location
+    );
+  }
+
+  Widget _buildBalanceInfo(LanguageProvider languageProvider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          languageProvider.isEnglish
+              ? 'Opening Balance: ${_originalOpeningBalance.toStringAsFixed(2)} rs'
+              : ' اوپننگ بیلنس: ${_originalOpeningBalance.toStringAsFixed(2)} روپے',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.teal.shade700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${languageProvider.isEnglish ? 'Selected Date:' : 'تاریخ منتخب کریں:'} ${DateFormat('dd:MM:yyyy').format(_selectedDate)}',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.teal.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader(LanguageProvider languageProvider) {
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth > 600) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildBalanceInfo(languageProvider),
+                      _buildDatePicker(languageProvider),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      _buildBalanceInfo(languageProvider),
+                      const SizedBox(height: 16),
+                      _buildDatePicker(languageProvider),
+                    ],
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(languageProvider.isEnglish ? 'View Daily Expense' : 'روزانہ کے اخراجات',style: TextStyle(color: Colors.white),),
-        backgroundColor: Colors.teal,
-        centerTitle: true,
-
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => AddExpensePage()),
-              );
-            },
-            color: Colors.white,
+          title: Text(
+            languageProvider.isEnglish ? 'View Daily Expense' : 'روزانہ کے اخراجات',
+            style: TextStyle(color: Colors.white),
           ),
+          backgroundColor: Colors.teal,
+          centerTitle: true,
+          actions: [
           IconButton(
-            icon: const Icon(Icons.print),
-            onPressed: _generatePdf, // Trigger PDF generation and printing
-            color: Colors.white,
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Show original opening balance and selected dates
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      // "Opening Balance: ${_originalOpeningBalance.toStringAsFixed(2)} rs",
-                      // '${languageProvider.isEnglish ? 'Opening Balance:' : 'اوپننگ بیلنس:'} ${_originalOpeningBalance.toStringAsFixed(2)} rs',
-                      '${languageProvider.isEnglish ? 'Opening Balance: ${_originalOpeningBalance.toStringAsFixed(2)} rs' : ' اوپننگ بیلنس: ${_originalOpeningBalance.toStringAsFixed(2)} روپے'}',
-
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal.shade700,
-                      ),
-                    ),
-                    SizedBox(height: 5),
-                    Text(
-                      // "Selected Date: ${DateFormat('dd:MM:yyyy').format(_selectedDate)}",
-                      '${languageProvider.isEnglish ? 'Selected Date:' : 'تاریخ منتخب کریں:'} ${DateFormat('dd:MM:yyyy').format(_selectedDate)}',
-
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal.shade700,
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.date_range,color: Colors.white,),
-                      // label: const Text('Change Date'),
-                      label: Text(
-                        '${languageProvider.isEnglish ? 'Change Date:' : 'تاریخ تبدیل کریں:'}',
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.teal.shade400,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          icon: const Icon(Icons.add, color: Colors.white),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => AddExpensePage()),),),
+          IconButton(
+              icon: const Icon(Icons.print, color: Colors.white),
+              onPressed: _generatePdf,
             ),
-            SizedBox(height: 20),
-            // Display expenses for the selected date
-            expenses.isEmpty
-                ? Center(
-              child: Text(
-                // "No expenses found for this date.",
-                '${languageProvider.isEnglish ? 'No expenses found for this date' : 'اس تاریخ کے لیے کوئی اخراجات نہیں ملے'}',
-                style: TextStyle(color: Colors.teal.shade700, fontSize: 18),
-              ),
-            )
-                : Expanded(
-              child: ListView.builder(
-                itemCount: expenses.length,
-                itemBuilder: (ctx, index) {
-                  final expense = expenses[index];
-                  return Card(
-                    margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    elevation: 5,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.all(16),
-                      title: Text(
-                        expense["description"],
-                        style: TextStyle(
-                          color: Colors.teal.shade800,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      subtitle: Text(
-                        expense["date"],
-                        style: TextStyle(color: Colors.teal.shade600),
-                      ),
-                      trailing: Text(
-                        "${expense["amount"].toStringAsFixed(2)}rs",
-                        style: TextStyle(
-                          color: Colors.teal.shade800,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                        ),
-                      ),
-                      onLongPress: () async {
-                        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-                        // Show confirmation dialog before deleting
-                        final confirmDelete = await showDialog<bool>(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return AlertDialog(
-                              title: Text(languageProvider.isEnglish ? 'Delete Expense?' : 'اخراجات کو حذف کریں؟'),
-                              content: Text(languageProvider.isEnglish
-                                  ? 'Are you sure you want to delete this expense?'
-                                  : 'کیا آپ واقعی یہ اخراجات حذف کرنا چاہتے ہیں؟'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(false),
-                                  child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(true),
-                                  child: Text(languageProvider.isEnglish ? 'Delete' : 'حذف کریں'),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-
-                        if (confirmDelete == true) {
-                          // Proceed with deleting the expense from Firebase
-                          try {
-                            final expenseId = expense["id"];
-                            String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
-                            await dbRef.child(formattedDate).child("expenses").child(expenseId).remove();
-
-                            // After deletion, fetch the updated expenses list
-                            _fetchExpenses();
-
-                            // Show confirmation message
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(languageProvider.isEnglish
-                                    ? 'Expense deleted successfully'
-                                    : 'اخراجات کامیابی سے حذف ہو گئے'),
-                              ),
-                            );
-                          } catch (error) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(languageProvider.isEnglish
-                                    ? 'Error deleting expense: $error'
-                                    : 'اخراجات کو حذف کرنے میں خرابی: $error'),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  );
-                },
-              )
-              ,
-            ),
-            // Show total expense and remaining balance
-            Padding(
-              padding: const EdgeInsets.only(top: 20.0),
-              child: Column(
-                children: [
-                  Text(
-                    // "Total Expenses: ${_totalExpense.toStringAsFixed(2)} rs",
-                    '${languageProvider.isEnglish ? 'Total Expenses: ${_totalExpense.toStringAsFixed(2)} rs' : 'کل اخراجات: ${_totalExpense.toStringAsFixed(2)} روپے'}',
-
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.teal.shade700,
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    // "Remaining Balance: ${_remainingBalance.toStringAsFixed(2)} rs",s
-                    // '${languageProvider.isEnglish ? 'Remaining Balance:' : 'بقایا رقم'} ${_remainingBalance.toStringAsFixed(2)} rs',
-                    '${languageProvider.isEnglish ? 'Remaining Balance: ${_remainingBalance.toStringAsFixed(2)} rs ': 'بقایا رقم${_remainingBalance.toStringAsFixed(2)}ّروپے'}',
-
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.teal.shade700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+          ]
+    ),
+    body: Container(
+    constraints: BoxConstraints(maxWidth: 1200),
+    padding: EdgeInsets.all(16),
+    child: Column(
+    children: [
+    _buildHeader(languageProvider),
+    const SizedBox(height: 16),
+    _buildExpenseList(languageProvider),
+    const SizedBox(height: 16),
+    _buildTotalSection(languageProvider),
+    ],
+    ),
+    ),
     );
   }
 }

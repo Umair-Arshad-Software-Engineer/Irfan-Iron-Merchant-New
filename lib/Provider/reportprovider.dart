@@ -175,7 +175,7 @@ class CustomerReportProvider with ChangeNotifier {
             transactions.add({
               'id': key,
               'date': value['createdAt'],
-              'filledNumber': value['filledNumber'],
+              'invoiceNumber': value['invoiceNumber'],
               'debit': debit,
               'credit': credit,
             });

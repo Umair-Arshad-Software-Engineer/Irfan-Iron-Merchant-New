@@ -338,6 +338,7 @@ class _CashbookPageState extends State<CashbookPage> {
       ),
     );
   }
+
   void _clearDateFilter() {
     setState(() {
       _startDate = null;
@@ -455,7 +456,7 @@ class _CashbookPageState extends State<CashbookPage> {
                 onPressed: _saveEntry,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  // padding: const EdgeInsets.symmetric(vertical: 5),
                 ),
                 child: Text(
                   _editingEntry == null ?
@@ -515,7 +516,9 @@ class _CashbookPageState extends State<CashbookPage> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteEntry(entry.id!),
+                            // onPressed: () => _deleteEntry(entry.id!),
+                            onPressed: () => _showDeleteConfirmation(entry.id!),
+
                           ),
                         ],
                       ),
@@ -585,6 +588,7 @@ class _CashbookPageState extends State<CashbookPage> {
 
   void _saveEntry() {
     if (_formKey.currentState!.validate()) {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       final entry = CashbookEntry(
         id: _editingEntry?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         description: _descriptionController.text,
@@ -592,12 +596,41 @@ class _CashbookPageState extends State<CashbookPage> {
         dateTime: _selectedDate,
         type: _selectedType,
       );
+
       _databaseRef.child(entry.id!).set(entry.toJson()).then((_) {
-        setState(() {
-          _editingEntry = null;
-          _descriptionController.clear();
-          _amountController.clear();
-        });
+        if (mounted) {
+          setState(() {
+            _editingEntry = null;
+            _descriptionController.clear();
+            _amountController.clear();
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  _editingEntry == null
+                      ? languageProvider.isEnglish
+                      ? 'Entry added successfully'
+                      : 'انٹری کامیابی سے شامل ہو گئی'
+                      : languageProvider.isEnglish
+                      ? 'Entry updated successfully'
+                      : 'انٹری کامیابی سے اپ ڈیٹ ہو گئی'
+              ),
+            ),
+          );
+        }
+      }).catchError((error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                languageProvider.isEnglish
+                    ? 'Error saving entry: $error'
+                    : 'انٹری محفوظ کرنے میں خرابی: $error',
+              ),
+            ),
+          );
+        }
       });
     }
   }
@@ -612,7 +645,68 @@ class _CashbookPageState extends State<CashbookPage> {
     });
   }
 
-  void _deleteEntry(String id) {
-    _databaseRef.child(id).remove();
+  Future<void> _deleteEntry(String id) async {
+    try {
+      await _databaseRef.child(id).remove();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                  ? 'Entry deleted successfully'
+                  : 'انٹری کامیابی سے حذف ہو گئی',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                  ? 'Failed to delete entry: $error'
+                  : 'انٹری حذف کرنے میں ناکام: $error',
+            ),
+          ),
+        );
+      }
+    }
   }
+
+  // Add this new method for confirmation dialog
+  Future<void> _showDeleteConfirmation(String entryId) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish
+            ? 'Delete Entry'
+            : 'انٹری حذف کریں'),
+        content: Text(languageProvider.isEnglish
+            ? 'Are you sure you want to delete this entry?'
+            : 'کیا آپ واقعی اس انٹری کو حذف کرنا چاہتے ہیں؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              languageProvider.isEnglish ? 'Delete' : 'حذف کریں',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed ?? false) {
+      await _deleteEntry(entryId);
+      if (mounted) setState(() {});
+    }
+  }
+
+
 }

@@ -336,10 +336,11 @@ class _ItemsListPageState extends State<ItemsListPage> {
                           icon: Icon(Icons.edit, color: Colors.blue,),
                           onPressed: () => updateItem(item),
                         ),
-                        // IconButton(
-                        //   icon: Icon(Icons.delete, color: Colors.red),
-                        //   onPressed: () => deleteItem(item['key']),
-                        // ),
+                        IconButton(
+                          icon: Icon(Icons.delete, color: Colors.red),
+                          // onPressed: () => deleteItem(item['key']),
+                          onPressed: () => _confirmDelete(item['key']), // Changed to confirmation dialog
+                        ),
                         IconButton(
                           icon: Icon(Icons.edit_note, color: Colors.blue),
                           onPressed: () => Navigator.push(
@@ -357,6 +358,39 @@ class _ItemsListPageState extends State<ItemsListPage> {
             ),)
           ],
         )
+    );
+
+  }
+  void _confirmDelete(String key) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish
+              ? "Confirm Delete"
+              : "حذف کرنے کی تصدیق کریں"),
+          content: Text(languageProvider.isEnglish
+              ? "Are you sure you want to delete this item?"
+              : "کیا آپ واقعی اس آئٹم کو حذف کرنا چاہتے ہیں؟"),
+          actions: <Widget>[
+            TextButton(
+              child: Text(languageProvider.isEnglish ? "Cancel" : "منسوخ کریں",
+                  style: TextStyle(color: Colors.teal)),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? "Delete" : "حذف کریں",
+                  style: TextStyle(color: Colors.red)),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                deleteItem(key); // Proceed with deletion
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }

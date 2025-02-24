@@ -45,6 +45,30 @@ class _BankManagementPageState extends State<BankManagementPage> {
     }
   }
 
+
+// Add this method inside the _BankManagementPageState class
+  void _deleteBank(String bankKey) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    _dbRef.child(bankKey).remove().then((_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(languageProvider.isEnglish
+              ? 'Bank deleted successfully'
+              : 'بینک کامیابی سے حذف ہو گیا'),
+        ),
+      );
+    }).catchError((error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(languageProvider.isEnglish
+              ? 'Failed to delete bank: $error'
+              : 'بینک حذف کرنے میں ناکام: $error'),
+        ),
+      );
+    });
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -189,45 +213,134 @@ class _BankManagementPageState extends State<BankManagementPage> {
 
                 return ListView.builder(
                   itemCount: bankList.length,
+                  // itemBuilder: (context, index) {
+                  //   final bank = bankList[index].value;
+                  //   final bankName = bank['name'];
+                  //
+                  //   Bank? matchedBank = pakistaniBanks.firstWhere(
+                  //         (b) => b.name == bankName,
+                  //     orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
+                  //   );
+                  //   return Card(
+                  //     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  //     elevation: 3,
+                  //     shape: RoundedRectangleBorder(
+                  //       borderRadius: BorderRadius.circular(10),
+                  //     ),
+                  //     child: ListTile(
+                  //       leading: Image.asset(
+                  //         matchedBank.iconPath,
+                  //         height: 50,
+                  //         width: 50,
+                  //         errorBuilder: (context, error, stackTrace) {
+                  //           return Icon(Icons.account_balance, size: 50);
+                  //         },
+                  //       ),
+                  //       title: Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold)),
+                  //       subtitle: Text(
+                  //           '${languageProvider.isEnglish ? "Remaining Balance" : "بقیہ بیلنس"}: ${bank['balance']} Rs',
+                  //           style: TextStyle(color: Colors.grey.shade700)),
+                  //       trailing: Icon(Icons.arrow_forward_ios, color: Colors.blue.shade800),
+                  //       onTap: () {
+                  //         Navigator.push(
+                  //           context,
+                  //           MaterialPageRoute(
+                  //             builder: (context) => BankTransactionsPage(
+                  //               bankId: bankList[index].key,
+                  //               bankName: bank['name'],
+                  //             ),
+                  //           ),
+                  //         );
+                  //       },
+                  //     ),
+                  //   );
+                  // },
+                  // Update the ListView.builder's itemBuilder to include Dismissible
                   itemBuilder: (context, index) {
-                    final bank = bankList[index].value;
+                    final bankEntry = bankList[index];
+                    final bankKey = bankEntry.key;
+                    final bank = bankEntry.value as Map<dynamic, dynamic>;
                     final bankName = bank['name'];
 
                     Bank? matchedBank = pakistaniBanks.firstWhere(
                           (b) => b.name == bankName,
                       orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
                     );
-                    return Card(
-                      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+
+                    return Dismissible(
+                      key: Key(bankKey),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        color: Colors.red,
+                        alignment: Alignment.centerRight,
+                        padding: EdgeInsets.only(right: 20),
+                        child: Icon(Icons.delete, color: Colors.white),
                       ),
-                      child: ListTile(
-                        leading: Image.asset(
-                          matchedBank.iconPath,
-                          height: 50,
-                          width: 50,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(Icons.account_balance, size: 50);
+                      confirmDismiss: (direction) async {
+                        return await showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            final languageProvider = Provider.of<LanguageProvider>(context);
+                            return AlertDialog(
+                              title: Text(languageProvider.isEnglish
+                                  ? 'Delete Bank'
+                                  : 'بینک حذف کریں'),
+                              content: Text(languageProvider.isEnglish
+                                  ? 'Are you sure you want to delete this bank?'
+                                  : 'کیا آپ واقعی اس بینک کو حذف کرنا چاہتے ہیں؟'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(false),
+                                  child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(true),
+                                  child: Text(
+                                    languageProvider.isEnglish ? 'Delete' : 'حذف کریں',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                      onDismissed: (direction) {
+                        _deleteBank(bankKey);
+                      },
+                      child: Card(
+                        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListTile(
+                          leading: Image.asset(
+                            matchedBank.iconPath,
+                            height: 50,
+                            width: 50,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(Icons.account_balance, size: 50);
+                            },
+                          ),
+                          title: Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(
+                            '${languageProvider.isEnglish ? "Remaining Balance" : "بقیہ بیلنس"}: ${bank['balance']} Rs',
+                            style: TextStyle(color: Colors.grey.shade700),
+                          ),
+                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.blue.shade800),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BankTransactionsPage(
+                                  bankId: bankKey,
+                                  bankName: bank['name'],
+                                ),
+                              ),
+                            );
                           },
                         ),
-                        title: Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(
-                            '${languageProvider.isEnglish ? "Remaining Balance" : "بقیہ بیلنس"}: ${bank['balance']} Rs',
-                            style: TextStyle(color: Colors.grey.shade700)),
-                        trailing: Icon(Icons.arrow_forward_ios, color: Colors.blue.shade800),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BankTransactionsPage(
-                                bankId: bankList[index].key,
-                                bankName: bank['name'],
-                              ),
-                            ),
-                          );
-                        },
                       ),
                     );
                   },
