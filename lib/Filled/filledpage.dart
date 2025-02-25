@@ -289,6 +289,7 @@ class _filledpageState extends State<filledpage> {
               pw.SizedBox(height: 20),
 
               // Footer Section (Remaining Balance)
+              // In the PDF layout
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -404,40 +405,45 @@ class _filledpageState extends State<filledpage> {
 
   Future<double> _getRemainingBalance(String customerId) async {
     try {
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      double invoiceBalance = 0.0;
+      double filledBalance = 0.0;
 
-      final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
-
-      if (snapshot.snapshot.exists) {
-        final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-
-        final lastEntryKey = ledgerEntries.keys.first;
-        final lastEntry = ledgerEntries[lastEntryKey];
-
-        if (lastEntry != null && lastEntry is Map) {
-          // Safely handle the conversion to double
-          final remainingBalanceValue = lastEntry['remainingBalance'];
-
-          // Check if the value is an int or a double and convert accordingly
-          double remainingBalance = 0.0;
-          if (remainingBalanceValue is int) {
-            remainingBalance = remainingBalanceValue.toDouble();
-          } else if (remainingBalanceValue is double) {
-            remainingBalance = remainingBalanceValue;
+      // Fetch from 'ledger' (invoice balance)
+      final ledgerRef = _db.child('ledger').child(customerId);
+      final ledgerSnapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).once();
+      if (ledgerSnapshot.snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+        if (ledgerData != null) {
+          final lastEntryKey = ledgerData.keys.first;
+          final lastEntry = ledgerData[lastEntryKey] as Map<dynamic, dynamic>?;
+          if (lastEntry != null) {
+            final dynamic balanceValue = lastEntry['remainingBalance'];
+            invoiceBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
           }
-
-          print("Remaining Balance: $remainingBalance"); // Debug print
-          return remainingBalance;
         }
       }
 
-      return 0.0; // If no data is found, return 0.0
+      // Fetch from 'filledledger' (filled balance)
+      final filledLedgerRef = _db.child('filledledger').child(customerId);
+      final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      if (filledSnapshot.snapshot.exists) {
+        final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+        if (filledData != null) {
+          final lastEntryKey = filledData.keys.first;
+          final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
+          if (lastEntry != null) {
+            final dynamic balanceValue = lastEntry['remainingBalance'];
+            filledBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+          }
+        }
+      }
+
+      return invoiceBalance + filledBalance;
     } catch (e) {
-      print("Error fetching remaining balance: $e"); // Debug error message
-      return 0.0; // Return 0 if there's an error
+      print("Error fetching remaining balance: $e");
+      return 0.0;
     }
   }
-
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
     final DatabaseEvent snapshot = await itemsRef.once();
