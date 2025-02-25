@@ -43,6 +43,26 @@ class _filledpageState extends State<filledpage> {
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _rateController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
+  double _remainingBalance = 0.0; // Add this variable to store the remaining balance
+
+
+  Future<void> _fetchRemainingBalance() async {
+    if (_selectedCustomerId != null) {
+      try {
+        final balance = await _getRemainingBalance(_selectedCustomerId!);
+        setState(() {
+          _remainingBalance = balance;
+        });
+      } catch (e) {
+        setState(() {
+          _remainingBalance = 0.0; // Set a default value in case of error
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to fetch remaining balance: $e')),
+        );
+      }
+    }
+  }
 
 
   // Method to show the date picker
@@ -530,6 +550,8 @@ class _filledpageState extends State<filledpage> {
   void initState() {
     super.initState();
     _fetchItems();
+    _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
+
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     customerProvider.fetchCustomers().then((_) {
       if (widget.filled != null) {
@@ -730,6 +752,7 @@ class _filledpageState extends State<filledpage> {
                         _selectedCustomerName = selectedCustomer.name;
                         _customerController.text = selectedCustomer.name;
                       });
+                      _fetchRemainingBalance(); // Fetch the remaining balance when a customer is selected
                     },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
                         Iterable<Customer> options) {
@@ -762,7 +785,10 @@ class _filledpageState extends State<filledpage> {
                       'Selected Customer: $_selectedCustomerName',
                       style: TextStyle(color: Colors.teal.shade600),
                     ),
-
+                  Text(
+                    'Remaining Balance: ${_remainingBalance.toStringAsFixed(2)}',
+                    style: TextStyle(color: Colors.teal.shade600),
+                  ),
                   // Add a TextField for the date
                   TextField(
                     controller: _dateController,

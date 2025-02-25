@@ -32,7 +32,7 @@ class _CustomerListState extends State<CustomerList> {
     List<Future<void>> fetchFutures = customers.map((customer) async {
       final invoiceBalance = await _getRemainingInvoiceBalance(customer.id);
       final filledBalance = await _getRemainingFillesBalance(customer.id);
-      _customerBalances[customer.id] = invoiceBalance + filledBalance;
+      _customerBalances[customer.id] = invoiceBalance + filledBalance; // Combined balance
     }).toList();
 
     await Future.wait(fetchFutures);
@@ -40,7 +40,7 @@ class _CustomerListState extends State<CustomerList> {
   }
 
   Future<double> _getRemainingInvoiceBalance(String customerId) async {
-    if (_ledgerCache.containsKey(customerId)) {
+    if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('invoiceBalance')) {
       return _ledgerCache[customerId]!['invoiceBalance'] ?? 0.0;
     }
 
@@ -64,7 +64,13 @@ class _CustomerListState extends State<CustomerList> {
         }
       }
 
-      _ledgerCache[customerId] = {'invoiceBalance': remainingBalance};
+      // Update the cache with the invoice balance
+      if (_ledgerCache.containsKey(customerId)) {
+        _ledgerCache[customerId]!['invoiceBalance'] = remainingBalance;
+      } else {
+        _ledgerCache[customerId] = {'invoiceBalance': remainingBalance};
+      }
+
       return remainingBalance;
     } catch (e) {
       return 0.0;
@@ -72,7 +78,7 @@ class _CustomerListState extends State<CustomerList> {
   }
 
   Future<double> _getRemainingFillesBalance(String customerId) async {
-    if (_ledgerCache.containsKey(customerId)) {
+    if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('filledBalance')) {
       return _ledgerCache[customerId]!['filledBalance'] ?? 0.0;
     }
 
@@ -96,7 +102,13 @@ class _CustomerListState extends State<CustomerList> {
         }
       }
 
-      _ledgerCache[customerId] = {'filledBalance': remainingBalance};
+      // Update the cache with the filled balance
+      if (_ledgerCache.containsKey(customerId)) {
+        _ledgerCache[customerId]!['filledBalance'] = remainingBalance;
+      } else {
+        _ledgerCache[customerId] = {'filledBalance': remainingBalance};
+      }
+
       return remainingBalance;
     } catch (e) {
       return 0.0;
@@ -294,7 +306,6 @@ class _CustomerListState extends State<CustomerList> {
                                       ),
                                     ],
                                   ),
-
                                 ),
                               );
                             },
@@ -311,6 +322,7 @@ class _CustomerListState extends State<CustomerList> {
       ),
     );
   }
+
   void _showDeleteConfirmationDialog(
       BuildContext context,
       Customer customer,
@@ -363,7 +375,6 @@ class _CustomerListState extends State<CustomerList> {
       ),
     );
   }
-
 
   void _showEditDialog(
       BuildContext context,
