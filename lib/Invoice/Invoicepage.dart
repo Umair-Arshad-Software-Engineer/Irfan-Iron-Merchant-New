@@ -187,6 +187,11 @@
       final buffer = bytes.buffer.asUint8List();
       final image = pw.MemoryImage(buffer);
 
+      // Load the image asset for the logo
+      final ByteData namebytes = await rootBundle.load('assets/images/name.png');
+      final namebuffer = namebytes.buffer.asUint8List();
+      final nameimage = pw.MemoryImage(namebuffer);
+
       // Load the footer logo if different
       final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
       final footerBuffer = footerBytes.buffer.asUint8List();
@@ -226,21 +231,30 @@
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Image(image, width: 80, height: 80), // Adjust logo size
-                   pw.Column(
+                    pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
+                    pw.Column(
                      children: [
                        pw.Text(
                          'Invoice',
-                         style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
                        ),
                        pw.Text(
-                         'Zulfiqar Ahmad: 0300-6316202',
-                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                         'Zulfiqar Ahmad: ',
+                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                        ),
                        pw.Text(
-                         'Muhammad Irfan: 0300-8167446',
-                         style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                         '0300-6316202',
+                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                        ),
-                     ]//s
+                       pw.Text(
+                         'Muhammad Irfan: ',
+                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                       ),
+                       pw.Text(
+                         '0300-8167446',
+                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                       ),
+                     ]
                    )
                   ],
                 ),

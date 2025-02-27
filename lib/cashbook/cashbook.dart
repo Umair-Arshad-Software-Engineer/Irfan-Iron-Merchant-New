@@ -93,125 +93,125 @@ class _CashbookPageState extends State<CashbookPage> {
     return byteData!.buffer.asUint8List();
   }
 
-  Future<Uint8List> _generatePdfBytes(List<CashbookEntry> entries) async {
-    final pdf = pw.Document();
-    final totals = _calculateTotals(entries); // Add this line
+  // Future<Uint8List> _generatePdfBytes(List<CashbookEntry> entries) async {
+  //   final pdf = pw.Document();
+  //   final totals = _calculateTotals(entries); // Add this line
+  //
+  //   // Pre-generate all description images
+  //   List<Uint8List> descriptionImages = [];
+  //   for (var entry in entries) {
+  //     final imageData = await _createTextImage(entry.description);
+  //     descriptionImages.add(imageData);
+  //   }
+  //
+  //   pdf.addPage(
+  //     pw.Page(
+  //       build: (pw.Context context) {
+  //         return pw.Column(
+  //           children: [
+  //             pw.Text('Cashbook Report',
+  //                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+  //             pw.SizedBox(height: 20),
+  //             pw.Table(
+  //               border: pw.TableBorder.all(),
+  //               columnWidths: {
+  //                 0: const pw.FlexColumnWidth(2), // Date column
+  //                 1: const pw.FlexColumnWidth(3), // Description (image) column
+  //                 2: const pw.FlexColumnWidth(1.5), // Type column
+  //                 3: const pw.FlexColumnWidth(1.5), // Amount column
+  //               },
+  //               children: [
+  //                 pw.TableRow(
+  //                   decoration: pw.BoxDecoration(color: PdfColors.grey300),
+  //                   children: [
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                   ],
+  //                 ),
+  //                 ...entries.asMap().entries.map((entry) {
+  //                   final index = entry.key;
+  //                   final cashEntry = entry.value;
+  //                   return pw.TableRow(
+  //                     verticalAlignment: pw.TableCellVerticalAlignment.middle,
+  //                     children: [
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Text(DateFormat('yyyy-MM-dd HH:mm').format(cashEntry.dateTime)),
+  //                       ),
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Image(
+  //                           pw.MemoryImage(descriptionImages[index]),
+  //                           height: 30, // Fixed height for consistency
+  //                           fit: pw.BoxFit.contain,
+  //                         ),
+  //                       ),
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Text(cashEntry.type),
+  //                       ),
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Text(cashEntry.amount.toString()),
+  //                       ),
+  //                       pw.SizedBox(height: 20),
+  //                       _buildPdfTotalRow('Total Cash In', totals['cashIn']!),
+  //                       _buildPdfTotalRow('Total Cash Out', totals['cashOut']!),
+  //                       _buildPdfTotalRow('Remaining Cash', totals['remaining']!,
+  //                           isHighlighted: true),
+  //                     ],
+  //                   );
+  //                 }),
+  //               ],
+  //             ),
+  //           ],
+  //         );
+  //       },
+  //     ),
+  //   );
+  //
+  //   return pdf.save();
+  // }
 
-    // Pre-generate all description images
-    List<Uint8List> descriptionImages = [];
-    for (var entry in entries) {
-      final imageData = await _createTextImage(entry.description);
-      descriptionImages.add(imageData);
-    }
-
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            children: [
-              pw.Text('Cashbook Report',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              pw.Table(
-                border: pw.TableBorder.all(),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(2), // Date column
-                  1: const pw.FlexColumnWidth(3), // Description (image) column
-                  2: const pw.FlexColumnWidth(1.5), // Type column
-                  3: const pw.FlexColumnWidth(1.5), // Amount column
-                },
-                children: [
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: PdfColors.grey300),
-                    children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  ...entries.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final cashEntry = entry.value;
-                    return pw.TableRow(
-                      verticalAlignment: pw.TableCellVerticalAlignment.middle,
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(DateFormat('yyyy-MM-dd HH:mm').format(cashEntry.dateTime)),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Image(
-                            pw.MemoryImage(descriptionImages[index]),
-                            height: 30, // Fixed height for consistency
-                            fit: pw.BoxFit.contain,
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(cashEntry.type),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(cashEntry.amount.toString()),
-                        ),
-                        pw.SizedBox(height: 20),
-                        _buildPdfTotalRow('Total Cash In', totals['cashIn']!),
-                        _buildPdfTotalRow('Total Cash Out', totals['cashOut']!),
-                        _buildPdfTotalRow('Remaining Cash', totals['remaining']!,
-                            isHighlighted: true),
-                      ],
-                    );
-                  }),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    return pdf.save();
-  }
-
-  pw.Widget _buildPdfTotalRow(String label, double value,
-      {bool isHighlighted = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontWeight: isHighlighted ? pw.FontWeight.bold : pw.FontWeight.normal,
-              color: isHighlighted ? PdfColors.blue : PdfColors.black,
-            ),
-          ),
-          pw.Text(
-            '${value.toStringAsFixed(2)}Pkr',
-            style: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: isHighlighted ? PdfColors.green : PdfColors.black,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // pw.Widget _buildPdfTotalRow(String label, double value,
+  //     {bool isHighlighted = false}) {
+  //   return pw.Padding(
+  //     padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
+  //     child: pw.Row(
+  //       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //       children: [
+  //         pw.Text(
+  //           label,
+  //           style: pw.TextStyle(
+  //             fontWeight: isHighlighted ? pw.FontWeight.bold : pw.FontWeight.normal,
+  //             color: isHighlighted ? PdfColors.blue : PdfColors.black,
+  //           ),
+  //         ),
+  //         pw.Text(
+  //           '${value.toStringAsFixed(2)}Pkr',
+  //           style: pw.TextStyle(
+  //             fontWeight: pw.FontWeight.bold,
+  //             color: isHighlighted ? PdfColors.green : PdfColors.black,
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Future<void> _printPdf() async {
     final entries = await _getFilteredEntries();
@@ -246,7 +246,7 @@ class _CashbookPageState extends State<CashbookPage> {
     );
   }
 
-// Method to fetch filtered entries
+  // Method to fetch filtered entries
   Future<List<CashbookEntry>> _getFilteredEntries() async {
     DataSnapshot snapshot = await _databaseRef.get();
     List<CashbookEntry> entries = [];
@@ -579,6 +579,256 @@ class _CashbookPageState extends State<CashbookPage> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: isHighlighted ? Colors.green : Colors.black,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  // Future<Uint8List> _generatePdfBytes(List<CashbookEntry> entries) async {
+  //   final pdf = pw.Document();
+  //   final totals = _calculateTotals(entries);
+  //
+  //   // Pre-generate all description images
+  //   List<Uint8List> descriptionImages = [];
+  //   for (var entry in entries) {
+  //     final imageData = await _createTextImage(entry.description);
+  //     descriptionImages.add(imageData);
+  //   }
+  //
+  //   pdf.addPage(
+  //     pw.Page(
+  //       build: (pw.Context context) {
+  //         return pw.Column(
+  //           crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //           children: [
+  //             pw.Text('Cashbook Report',
+  //                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+  //             pw.SizedBox(height: 20),
+  //             pw.Table(
+  //               border: pw.TableBorder.all(),
+  //               columnWidths: {
+  //                 0: const pw.FlexColumnWidth(2), // Date column
+  //                 1: const pw.FlexColumnWidth(3), // Description (image) column
+  //                 2: const pw.FlexColumnWidth(1.5), // Type column
+  //                 3: const pw.FlexColumnWidth(1.5), // Amount column
+  //               },
+  //               children: [
+  //                 pw.TableRow(
+  //                   decoration: pw.BoxDecoration(color: PdfColors.grey300),
+  //                   children: [
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(8),
+  //                       child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+  //                     ),
+  //                   ],
+  //                 ),
+  //                 ...entries.asMap().entries.map((entry) {
+  //                   final index = entry.key;
+  //                   final cashEntry = entry.value;
+  //                   return pw.TableRow(
+  //                     verticalAlignment: pw.TableCellVerticalAlignment.middle,
+  //                     children: [
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Text(DateFormat('yyyy-MM-dd HH:mm').format(cashEntry.dateTime)),
+  //                       ),
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Image(
+  //                           pw.MemoryImage(descriptionImages[index]),
+  //                           height: 30, // Fixed height for consistency
+  //                           fit: pw.BoxFit.contain,
+  //                         ),
+  //                       ),
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Text(cashEntry.type),
+  //                       ),
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(8),
+  //                         child: pw.Text(cashEntry.amount.toString()),
+  //                       ),
+  //                     ],
+  //                   );
+  //                 }),
+  //               ],
+  //             ),
+  //             pw.SizedBox(height: 20),
+  //             _buildPdfTotalRow('Total Cash In', totals['cashIn']!),
+  //             _buildPdfTotalRow('Total Cash Out', totals['cashOut']!),
+  //             _buildPdfTotalRow('Remaining Cash', totals['remaining']!,
+  //                 isHighlighted: true),
+  //           ],
+  //         );
+  //       },
+  //     ),
+  //   );
+  //
+  //   return pdf.save();
+  // }
+  //
+  // pw.Widget _buildPdfTotalRow(String label, double value,
+  //     {bool isHighlighted = false}) {
+  //   return pw.Padding(
+  //     padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
+  //     child: pw.Row(
+  //       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //       children: [
+  //         pw.Text(
+  //           label,
+  //           style: pw.TextStyle(
+  //             fontWeight: isHighlighted ? pw.FontWeight.bold : pw.FontWeight.normal,
+  //             color: isHighlighted ? PdfColors.blue : PdfColors.black,
+  //           ),
+  //         ),
+  //         pw.Text(
+  //           '${value.toStringAsFixed(2)}Pkr',
+  //           style: pw.TextStyle(
+  //             fontWeight: pw.FontWeight.bold,
+  //             color: isHighlighted ? PdfColors.green : PdfColors.black,
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+  Future<Uint8List> _generatePdfBytes(List<CashbookEntry> entries) async {
+    final pdf = pw.Document();
+    final totals = _calculateTotals(entries);
+
+    // Pre-generate all description images
+    List<Uint8List> descriptionImages = [];
+    for (var entry in entries) {
+      final imageData = await _createTextImage(entry.description);
+      descriptionImages.add(imageData);
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        build: (pw.Context context) {
+          return [
+            // Title and Header
+            pw.Header(
+              level: 0,
+              child: pw.Text('Cashbook Report',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            ),
+            pw.SizedBox(height: 20),
+
+            // Table for Entries
+            pw.Table(
+              border: pw.TableBorder.all(),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2), // Date column
+                1: const pw.FlexColumnWidth(3), // Description (image) column
+                2: const pw.FlexColumnWidth(1.5), // Type column
+                3: const pw.FlexColumnWidth(1.5), // Amount column
+              },
+              children: [
+                // Table Header
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: PdfColors.grey300),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                // Table Rows for Entries
+                ...entries.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final cashEntry = entry.value;
+                  return pw.TableRow(
+                    verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(DateFormat('yyyy-MM-dd HH:mm').format(cashEntry.dateTime)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Image(
+                          pw.MemoryImage(descriptionImages[index]),
+                          height: 30, // Fixed height for consistency
+                          fit: pw.BoxFit.contain,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(cashEntry.type),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(cashEntry.amount.toString()),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ],
+            ),
+
+            // Totals Section
+            pw.SizedBox(height: 20),
+            _buildPdfTotalRow('Total Cash In', totals['cashIn']!),
+            _buildPdfTotalRow('Total Cash Out', totals['cashOut']!),
+            _buildPdfTotalRow('Remaining Cash', totals['remaining']!,
+                isHighlighted: true),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  pw.Widget _buildPdfTotalRow(String label, double value,
+      {bool isHighlighted = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontWeight: isHighlighted ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: isHighlighted ? PdfColors.blue : PdfColors.black,
+            ),
+          ),
+          pw.Text(
+            '${value.toStringAsFixed(2)}Pkr',
+            style: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: isHighlighted ? PdfColors.green : PdfColors.black,
             ),
           ),
         ],
