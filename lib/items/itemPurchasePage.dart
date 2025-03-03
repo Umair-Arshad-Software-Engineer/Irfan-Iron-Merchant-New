@@ -119,6 +119,7 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
       });
     }
   }
+
   void savePurchase() async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
@@ -148,14 +149,17 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         return;
       }
 
-      int purchasedQty = int.tryParse(_quantityController.text) ?? 0;
+      // int purchasedQty = int.tryParse(_quantityController.text) ?? 0;
+      double purchasedQty = double.tryParse(_quantityController.text) ?? 0.0;
+
       double purchasePrice = double.tryParse(_purchasePriceController.text) ?? 0.0;
       double total = purchasedQty * purchasePrice; // Calculate total
 
-      int currentQty = (snapshot.value as Map)['qtyOnHand'] ?? 0;
+      // int currentQty = (snapshot.value as Map)['qtyOnHand'] ?? 0;
+      double currentQty = (snapshot.value as Map)['qtyOnHand']?.toDouble() ?? 0.0;
 
       await database.child('items').child(itemKey).update({
-        'qtyOnHand': currentQty + purchasedQty,
+        'qtyOnHand': currentQty + purchasedQty, // Ensure this is an integer
         'costPrice': purchasePrice,
       });
 
@@ -166,7 +170,6 @@ class _ItemPurchasePageState extends State<ItemPurchasePage> {
         'quantity': purchasedQty,
         'purchasePrice': purchasePrice,
         'total': total, // Add total field
-        // 'timestamp': DateTime.now().toString(),
         'timestamp': _selectedDateTime.toString(),
         'type': 'credit',
       };

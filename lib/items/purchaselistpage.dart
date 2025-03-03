@@ -105,10 +105,45 @@ class _PurchaseListPageState extends State<PurchaseListPage> {
   }
 
   void deletePurchase(String key) async {
-    await FirebaseDatabase.instance.ref('purchases/$key').remove();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Purchase deleted successfully')),
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Confirm Delete' : 'حذف کی تصدیق کریں'),
+          content: Text(languageProvider.isEnglish
+              ? 'Are you sure you want to delete this purchase?'
+              : 'کیا آپ واقعی اس خریداری کو حذف کرنا چاہتے ہیں؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false), // No
+              child: Text(languageProvider.isEnglish ? 'No' : 'نہیں'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true), // Yes
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, // Red color for delete action
+              ),
+              child: Text(languageProvider.isEnglish ? 'Yes' : 'ہاں'),
+            ),
+          ],
+        );
+      },
     );
+
+    // If user confirms, delete the purchase
+    if (confirmed == true) {
+      await FirebaseDatabase.instance.ref('purchases/$key').remove();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(languageProvider.isEnglish
+              ? 'Purchase deleted successfully'
+              : 'خریداری کامیابی سے حذف ہو گئی'),
+        ),
+      );
+    }
   }
 
   @override
