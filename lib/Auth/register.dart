@@ -32,6 +32,7 @@ class _RegisterPageState extends State<RegisterPage> {
         await _database.child('users').child(userCredential.user!.uid).set({
           'name': _name,
           'email': _email,
+          'password':_password
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Registration successful!'),
