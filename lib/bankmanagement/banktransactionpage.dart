@@ -726,7 +726,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                             color: transaction.value['type'] == 'cash_in' ? Colors.green : Colors.red,
                           ),
                         ),//s
-                        subtitle: Text('${transaction.value['amount']} Rs - ${transaction.value['description']} - ${transaction.value['amount']} Rs - ${transaction.value['description']}\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(transaction.value['timestamp']))}'),
+                        subtitle: Text('${transaction.value['amount']} Rs - ${transaction.value['description']} \n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(transaction.value['timestamp']))}'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

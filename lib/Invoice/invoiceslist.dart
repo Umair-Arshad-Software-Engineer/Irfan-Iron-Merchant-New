@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   final TextEditingController _paymentController = TextEditingController();
   DateTimeRange? _selectedDateRange;
   List<Map<String, dynamic>> _filteredInvoices = [];
+  String? _selectedBankId;
+  String? _selectedBankName;
+
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +106,60 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       ),
     );
   }
+
+  // Add this method for bank selection
+  Future<void> _selectBank(BuildContext context) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+
+    if (bankSnapshot.snapshot.value == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(languageProvider.isEnglish
+            ? 'No banks available'
+            : 'کوئی بینک دستیاب نہیں')),
+      );
+      return;
+    }
+
+    final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+    final bankList = banks.entries.map((e) {
+      return {
+        'id': e.key,
+        'name': e.value['name'],
+        'balance': e.value['balance'],
+      };
+    }).toList();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: bankList.length,
+            itemBuilder: (context, index) {
+              final bank = bankList[index];
+              return ListTile(
+                title: Text(bank['name']),
+                subtitle: Text('${bank['balance']} Rs'),
+                onTap: () {
+                  setState(() {
+                    _selectedBankId = bank['id'];
+                    _selectedBankName = bank['name'];
+                  });
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+
 // Add to _InvoiceListPageState
   Future<void> _showFullScreenImage(Uint8List imageBytes) async {
     await showDialog(
@@ -270,8 +328,14 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
                 return Card(
                   child: ListTile(
+                    // title: Text(
+                    //   '${payment['method']}: Rs ${payment['amount']}',
+                    //   style: const TextStyle(fontWeight: FontWeight.bold),
+                    // ),
                     title: Text(
-                      '${payment['method']}: Rs ${payment['amount']}',
+                      '${payment['method'] == 'Bank'
+                          ? '${payment['bankName'] ?? 'Bank'}'
+                          : payment['method']}: Rs ${payment['amount']}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Column(
@@ -422,7 +486,17 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
           // Table with payment history
           pw.Table.fromTextArray(
             headers: ['Method', 'Amount', 'Date', 'Description'],
-            data: tableData,
+            // data: tableData,
+            data: payments.map((payment) {
+              return [
+                payment['method'] == 'Bank'
+                    ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+                    : payment['method'],
+                'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
+                DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
+                payment['description'] ?? 'N/A',
+              ];
+            }).toList(),
             border: pw.TableBorder.all(),
             headerStyle: pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
@@ -651,7 +725,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Add this widget to the payment dialog content
                     ListTile(
                       title: Text(languageProvider.isEnglish
                           ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
@@ -698,10 +771,18 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                           value: 'Check',
                           child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
                         ),
+                        DropdownMenuItem(
+                          value: 'Bank',
+                          child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
+                        ),
                       ],
                       onChanged: (value) {
                         setState(() {
                           selectedPaymentMethod = value;
+                          if (value != 'Bank') {
+                            _selectedBankId = null;
+                            _selectedBankName = null;
+                          }
                         });
                       },
                       decoration: InputDecoration(
@@ -709,6 +790,21 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
+                    // Bank selection UI
+                    if (selectedPaymentMethod == 'Bank')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Card(
+                          child: ListTile(
+                            title: Text(_selectedBankName ??
+                                (languageProvider.isEnglish
+                                    ? 'Select Bank'
+                                    : 'بینک منتخب کریں')),
+                            trailing: const Icon(Icons.arrow_drop_down),
+                            onTap: () => _selectBank(context),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _paymentController,
@@ -769,7 +865,20 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                     setState(() {
                       _isPaymentButtonPressed = true;
                     });
-
+                    // Validate bank selection if payment method is Bank
+                    if (selectedPaymentMethod == 'Bank' && _selectedBankId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(languageProvider.isEnglish
+                              ? 'Please select a bank'
+                              : 'براہ کرم ایک بینک منتخب کریں'),
+                        ),
+                      );
+                      setState(() {
+                        _isPaymentButtonPressed = false;
+                      });
+                      return;
+                    }
                     if (selectedPaymentMethod == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -793,7 +902,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         selectedPaymentMethod!,
                         description: _description,
                         imageBytes: _imageBytes,
-                        paymentDate: _selectedPaymentDate, // Pass selected date
+                        paymentDate: _selectedPaymentDate,
+                        bankId: _selectedBankId,
+                        bankName: _selectedBankName,
                       );
                       Navigator.of(context).pop();
                     } else {

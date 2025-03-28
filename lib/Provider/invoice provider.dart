@@ -383,6 +383,8 @@ class InvoiceProvider with ChangeNotifier {
         String? description,
         Uint8List? imageBytes,
         required DateTime paymentDate, // Add this parameter
+        String? bankId,
+        String? bankName,
 
       }) async {
     try {
@@ -412,7 +414,23 @@ class InvoiceProvider with ChangeNotifier {
           }
         }
       }
+      if (paymentMethod == 'Bank' && bankId != null) {
+        final bankRef = _db.child('banks/$bankId/transactions');
+        final transactionData = {
+          'amount': paymentAmount,
+          'description': description ?? 'Invoice Payment: ${invoice['invoiceNumber']}',
+          'type': 'cash_in',
+          'timestamp': paymentDate.millisecondsSinceEpoch,
+          'invoiceId': invoiceId,
+          'bankName': bankName,
+        };
+        await bankRef.push().set(transactionData);
 
+        // Update bank balance
+        final bankBalanceRef = _db.child('banks/$bankId/balance');
+        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+        await bankBalanceRef.set(currentBalance + paymentAmount);
+      }
       // Retrieve and parse all necessary values
       final remainingBalance = _parseToDouble(invoice['remainingBalance']);
       final currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
@@ -421,14 +439,6 @@ class InvoiceProvider with ChangeNotifier {
 
       // Calculate the total paid so far
       final totalPaid = currentCashPaid + currentOnlinePaid;
-
-      // Check if the new payment exceeds the remaining balance
-      // if (paymentAmount > (grandTotal - totalPaid)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text("Payment exceeds the remaining invoice balance.")),
-      //   );
-      //   throw Exception("Payment exceeds the remaining invoice balance.");
-      // }
 
       // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
@@ -441,12 +451,15 @@ class InvoiceProvider with ChangeNotifier {
         'date': paymentDate.toIso8601String(), // Use selected date
         'paymentMethod': paymentMethod,
         'description': description,
+        'bankId': bankId,
+        'bankName': bankName,
       };
 
       // If an image is provided, encode it to base64 and add it to the payment data
       if (imageBytes != null) {
         paymentData['image'] = base64Encode(imageBytes);
       }
+
 
       // Save the payment data in the appropriate child node based on the payment method
       DatabaseReference paymentRef;
@@ -459,6 +472,8 @@ class InvoiceProvider with ChangeNotifier {
       } else if (paymentMethod == 'Check') {
         updatedCheckPaid += paymentAmount;
         paymentRef = _db.child('invoices').child(invoiceId).child('checkPayments').push();
+      } else if (paymentMethod == 'Bank') {
+        paymentRef = _db.child('invoices').child(invoiceId).child('bankPayments').push();
       } else {
         throw Exception("Invalid payment method.");
       }
@@ -540,6 +555,7 @@ class InvoiceProvider with ChangeNotifier {
       await fetchPayments('cash');
       await fetchPayments('online');
       await fetchPayments('check');
+      await fetchPayments('bank'); // Add this line
 
       payments.sort((a, b) => b['date'].compareTo(a['date']));
       return payments;
