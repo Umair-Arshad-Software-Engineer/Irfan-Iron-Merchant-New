@@ -713,6 +713,60 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     String? _description;
     Uint8List? _imageBytes;
     DateTime _selectedPaymentDate = DateTime.now();
+    // Move these inside the dialog state
+    String? _selectedBankId;
+    String? _selectedBankName;
+
+    // Function to select bank (now local to the dialog)
+    Future<void> _selectBank(BuildContext context) async {
+      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+
+      if (bankSnapshot.snapshot.value == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(languageProvider.isEnglish
+              ? 'No banks available'
+              : 'کوئی بینک دستیاب نہیں')),
+        );
+        return;
+      }
+
+      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+      final bankList = banks.entries.map((e) {
+        return {
+          'id': e.key,
+          'name': e.value['name'],
+          'balance': e.value['balance'],
+        };
+      }).toList();
+
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: bankList.length,
+              itemBuilder: (context, index) {
+                final bank = bankList[index];
+                return ListTile(
+                  title: Text(bank['name']),
+                  subtitle: Text('${bank['balance']} Rs'),
+                  onTap: () {
+                    setState(() {
+                      _selectedBankId = bank['id'];
+                      _selectedBankName = bank['name'];
+                    });
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    }
 
     await showDialog(
       context: context,
@@ -774,6 +828,10 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         DropdownMenuItem(
                           value: 'Bank',
                           child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Slip',
+                          child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
                         ),
                       ],
                       onChanged: (value) {

@@ -228,6 +228,10 @@ class InvoiceProvider with ChangeNotifier {
             'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'grandTotal' is a double
             'paymentType': value['paymentType'],
             'paymentMethod': value['paymentMethod'],
+            'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0, // Add this li
             'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0, // Ensuring 'debitAmount' is a double
             'debitAt': value['debitAt'],
             'items': List<Map<String, dynamic>>.from(
@@ -436,6 +440,7 @@ class InvoiceProvider with ChangeNotifier {
       final currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
       final currentOnlinePaid = _parseToDouble(invoice['onlinePaidAmount']);
       final grandTotal = _parseToDouble(invoice['grandTotal']);
+      final currentSlipPaid = _parseToDouble(invoice['slipPaidAmount'] ?? 0.0); // Add this line
 
       // Calculate the total paid so far
       final totalPaid = currentCashPaid + currentOnlinePaid;
@@ -444,6 +449,7 @@ class InvoiceProvider with ChangeNotifier {
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
       double updatedCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
+      double updatedSlipPaid = currentSlipPaid; // Add this line
 
       // Create a payment object to store in the database
       final paymentData = {
@@ -474,6 +480,8 @@ class InvoiceProvider with ChangeNotifier {
         paymentRef = _db.child('invoices').child(invoiceId).child('checkPayments').push();
       } else if (paymentMethod == 'Bank') {
         paymentRef = _db.child('invoices').child(invoiceId).child('bankPayments').push();
+      }else if (paymentMethod == 'Slip') {
+        paymentRef = _db.child('invoices').child(invoiceId).child('slipPayments').push();
       } else {
         throw Exception("Invalid payment method.");
       }
@@ -496,6 +504,8 @@ class InvoiceProvider with ChangeNotifier {
         'checkPaidAmount': updatedCheckPaid,
         'debitAmount': updatedDebit, // Make sure this is updated correctly
         'debitAt': debitAt,
+        'slipPaidAmount': updatedSlipPaid, // Add this line
+
       });
       // Update the local state without fetching all invoices
       final invoiceIndex = _invoices.indexWhere((inv) => inv['id'] == invoiceId);
@@ -556,6 +566,7 @@ class InvoiceProvider with ChangeNotifier {
       await fetchPayments('online');
       await fetchPayments('check');
       await fetchPayments('bank'); // Add this line
+      await fetchPayments('slip'); // Add this line for slip payments
 
       payments.sort((a, b) => b['date'].compareTo(a['date']));
       return payments;
@@ -594,6 +605,7 @@ class InvoiceProvider with ChangeNotifier {
       double currentOnlinePaid = _parseToDouble(invoice['onlinePaidAmount']);
       double currentCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
       double currentDebit = _parseToDouble(invoice['debitAmount']);
+      double currentSlipPaid = _parseToDouble(invoice['slipPaidAmount'] ?? 0.0); // Add this line
 
       // Deduct the payment amount from the respective payment method
       switch (paymentMethod.toLowerCase()) {
@@ -605,6 +617,9 @@ class InvoiceProvider with ChangeNotifier {
           break;
         case 'check':
           currentCheckPaid -= paymentAmount;
+          break;
+        case 'slip':
+          currentSlipPaid -= paymentAmount;
           break;
         default:
           throw Exception("Invalid payment method.");
@@ -619,6 +634,7 @@ class InvoiceProvider with ChangeNotifier {
         'onlinePaidAmount': currentOnlinePaid,
         'checkPaidAmount': currentCheckPaid,
         'debitAmount': updatedDebit,
+        'slipPaidAmount': currentSlipPaid, // Add this line
       });
 
       // Step 4: Fetch the latest ledger entry for the customer

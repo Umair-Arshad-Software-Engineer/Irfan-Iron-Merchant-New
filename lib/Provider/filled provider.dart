@@ -222,6 +222,10 @@ class FilledProvider with ChangeNotifier {
             'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'grandTotal' is a double
             'paymentType': value['paymentType'],
             'paymentMethod': value['paymentMethod'],
+            'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0, // Add this li
             'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0, // Ensuring 'debitAmount' is a double
             'debitAt': value['debitAt'],
             'items': List<Map<String, dynamic>>.from(
@@ -379,6 +383,8 @@ class FilledProvider with ChangeNotifier {
         String? description,
         Uint8List? imageBytes,
         required DateTime paymentDate, // Add this parameter
+        String? bankId,
+        String? bankName,
 
       }) async {
     try {
@@ -409,11 +415,30 @@ class FilledProvider with ChangeNotifier {
         }
       }
 
+      if (paymentMethod == 'Bank' && bankId != null) {
+        final bankRef = _db.child('banks/$bankId/transactions');
+        final transactionData = {
+          'amount': paymentAmount,
+          'description': description ?? 'Filled Payment: ${filled['filledNumber']}',
+          'type': 'cash_in',
+          'timestamp': paymentDate.millisecondsSinceEpoch,
+          'filledId': filledId,
+          'bankName': bankName,
+        };
+        await bankRef.push().set(transactionData);
+
+        // Update bank balance
+        final bankBalanceRef = _db.child('banks/$bankId/balance');
+        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+        await bankBalanceRef.set(currentBalance + paymentAmount);
+      }
+
       // Retrieve and parse all necessary values
       final remainingBalance = _parseToDouble(filled['remainingBalance']);
       final currentCashPaid = _parseToDouble(filled['cashPaidAmount']);
       final currentOnlinePaid = _parseToDouble(filled['onlinePaidAmount']);
       final grandTotal = _parseToDouble(filled['grandTotal']);
+      final currentSlipPaid = _parseToDouble(filled['slipPaidAmount'] ?? 0.0); // Add this line
 
       // Calculate the total paid so far
       final totalPaid = currentCashPaid + currentOnlinePaid;
@@ -421,6 +446,7 @@ class FilledProvider with ChangeNotifier {
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
       double updatedCheckPaid = _parseToDouble(filled['checkPaidAmount']);
+      double updatedSlipPaid = currentSlipPaid; // Add this line
 
       // Create a payment object to store in the database
       final paymentData = {
@@ -428,6 +454,8 @@ class FilledProvider with ChangeNotifier {
         'date': paymentDate.toIso8601String(), // Use selected date
         'paymentMethod': paymentMethod,
         'description': description,
+        'bankId': bankId,
+        'bankName': bankName,
       };
 
       // If an image is provided, encode it to base64 and add it to the payment data
@@ -446,6 +474,10 @@ class FilledProvider with ChangeNotifier {
       } else if (paymentMethod == 'Check') {
         updatedCheckPaid += paymentAmount;
         paymentRef = _db.child('filled').child(filledId).child('checkPayments').push();
+      }else if (paymentMethod == 'Bank') {
+        paymentRef = _db.child('filled').child(filledId).child('bankPayments').push();
+      }else if (paymentMethod == 'Slip') {
+        paymentRef = _db.child('filled').child(filledId).child('slipPayments').push();
       } else {
         throw Exception("Invalid payment method.");
       }
@@ -468,16 +500,18 @@ class FilledProvider with ChangeNotifier {
         'checkPaidAmount': updatedCheckPaid,
         'debitAmount': updatedDebit, // Make sure this is updated correctly
         'debitAt': debitAt,
+        'slipPaidAmount': updatedSlipPaid, // Add this line
+
       });
 
-      // Update the local state without fetching all invoices
-      final invoiceIndex = _filled.indexWhere((inv) => inv['id'] == filledId);
-      if (invoiceIndex != -1) {
-        _filled[invoiceIndex]['cashPaidAmount'] = updatedCashPaid;
-        _filled[invoiceIndex]['onlinePaidAmount'] = updatedOnlinePaid;
-        _filled[invoiceIndex]['checkPaidAmount'] = updatedCheckPaid;
-        _filled[invoiceIndex]['debitAmount'] = updatedDebit;
-        _filled[invoiceIndex]['debitAt'] = debitAt;
+      // Update the local state without fetching all filled
+      final filledIndex = _filled.indexWhere((inv) => inv['id'] == filledId);
+      if (filledIndex != -1) {
+        _filled[filledIndex]['cashPaidAmount'] = updatedCashPaid;
+        _filled[filledIndex]['onlinePaidAmount'] = updatedOnlinePaid;
+        _filled[filledIndex]['checkPaidAmount'] = updatedCheckPaid;
+        _filled[filledIndex]['debitAmount'] = updatedDebit;
+        _filled[filledIndex]['debitAt'] = debitAt;
         notifyListeners(); // Trigger UI update
       }
       // Update the ledger with the calculated remaining balance
@@ -504,20 +538,55 @@ class FilledProvider with ChangeNotifier {
   }
 
 
+  // Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
+  //   try {
+  //     List<Map<String, dynamic>> payments = [];
+  //     final filledRef = _db.child('filled').child(filledId);
+  //
+  //     // Helper function to fetch payments
+  //     Future<void> fetchPayments(String method) async {
+  //       DataSnapshot snapshot = await filledRef.child('${method}Payments').get();
+  //       if (snapshot.exists) {
+  //         Map<dynamic, dynamic> methodPayments = snapshot.value as Map<dynamic, dynamic>;
+  //         methodPayments.forEach((key, value) {
+  //           payments.add({
+  //             'method': method,
+  //             ...Map<String, dynamic>.from(value),
+  //             'date': DateTime.parse(value['date']),
+  //           });
+  //         });
+  //       }
+  //     }
+  //
+  //     await fetchPayments('cash');
+  //     await fetchPayments('online');
+  //     await fetchPayments('check');
+  //     await fetchPayments('bank'); // Add this line
+  //     await fetchPayments('slip'); // Add this line for slip payments
+  //     // Sort by date descending
+  //     payments.sort((a, b) => b['date'].compareTo(a['date']));
+  //
+  //     return payments;
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch payments: $e');
+  //   }
+  // }
   Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
     try {
       List<Map<String, dynamic>> payments = [];
       final filledRef = _db.child('filled').child(filledId);
 
-      // Helper function to fetch payments
       Future<void> fetchPayments(String method) async {
         DataSnapshot snapshot = await filledRef.child('${method}Payments').get();
         if (snapshot.exists) {
           Map<dynamic, dynamic> methodPayments = snapshot.value as Map<dynamic, dynamic>;
           methodPayments.forEach((key, value) {
+            final paymentData = Map<String, dynamic>.from(value);
+            // Convert 'amount' to double explicitly
+            paymentData['amount'] = (paymentData['amount'] as num).toDouble();
             payments.add({
               'method': method,
-              ...Map<String, dynamic>.from(value),
+              ...paymentData,
               'date': DateTime.parse(value['date']),
             });
           });
@@ -527,15 +596,16 @@ class FilledProvider with ChangeNotifier {
       await fetchPayments('cash');
       await fetchPayments('online');
       await fetchPayments('check');
+      await fetchPayments('bank'); // Add this line
+      await fetchPayments('slip'); // Add this line for slip payments
 
-      // Sort by date descending
       payments.sort((a, b) => b['date'].compareTo(a['date']));
-
       return payments;
     } catch (e) {
       throw Exception('Failed to fetch payments: $e');
     }
   }
+
 
   Future<void> deletePaymentEntry({
     required BuildContext context,
@@ -565,6 +635,7 @@ class FilledProvider with ChangeNotifier {
       double currentOnlinePaid = _parseToDouble(filled['onlinePaidAmount']);
       double currentCheckPaid = _parseToDouble(filled['checkPaidAmount']);
       double currentDebit = _parseToDouble(filled['debitAmount']);
+      double currentSlipPaid = _parseToDouble(filled['slipPaidAmount'] ?? 0.0); // Add this line
 
       // Deduct the payment amount from the respective payment method
       switch (paymentMethod.toLowerCase()) {
@@ -576,6 +647,9 @@ class FilledProvider with ChangeNotifier {
           break;
         case 'check':
           currentCheckPaid -= paymentAmount;
+          break;
+        case 'slip':
+          currentSlipPaid -= paymentAmount;
           break;
         default:
           throw Exception("Invalid payment method.");
