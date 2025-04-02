@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
@@ -188,8 +189,36 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
     );
   }
 
+  // Future<Uint8List?> _pickImage() async {
+  //   Uint8List? imageBytes;
+  //
+  //   if (kIsWeb) {
+  //     // For web, use file_picker
+  //     FilePickerResult? result = await FilePicker.platform.pickFiles(
+  //       type: FileType.image,
+  //       allowMultiple: false,
+  //     );
+  //
+  //     if (result != null && result.files.isNotEmpty) {
+  //       imageBytes = result.files.first.bytes;
+  //     }
+  //   } else {
+  //     // For mobile, use image_picker
+  //     final ImagePicker _picker = ImagePicker();
+  //     XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+  //
+  //     if (pickedFile != null) {
+  //       final file = File(pickedFile.path);
+  //       imageBytes = await file.readAsBytes();
+  //     }
+  //   }
+  //
+  //   return imageBytes;
+  // }
+
   Future<Uint8List?> _pickImage() async {
     Uint8List? imageBytes;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     if (kIsWeb) {
       // For web, use file_picker
@@ -202,10 +231,30 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
         imageBytes = result.files.first.bytes;
       }
     } else {
-      // For mobile, use image_picker
+      // For mobile, show source selection dialog
       final ImagePicker _picker = ImagePicker();
-      XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
 
+      // Show dialog to choose source
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
+          actions: [
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
+              onPressed: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
+              onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      );
+
+      if (source == null) return null; // User canceled
+
+      XFile? pickedFile = await _picker.pickImage(source: source);
       if (pickedFile != null) {
         final file = File(pickedFile.path);
         imageBytes = await file.readAsBytes();
@@ -402,38 +451,160 @@ class _ViewVendorsPageState extends State<ViewVendorsPage> {
     );
   }
 
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    // Use default text for empty input
+    final String displayText = text.isEmpty ? "N/A" : text;
+
+    // Scale factor to increase resolution
+    const double scaleFactor = 1.5;
+
+    // Create a custom painter with the Urdu text
+    final recorder = PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        Offset(0, 0),
+        Offset(500 * scaleFactor, 50 * scaleFactor),
+      ),
+    );
+
+    // Define text style with scaling
+    final textStyle = TextStyle(
+      fontSize: 12 * scaleFactor,
+      fontFamily: 'JameelNoori', // Ensure this font is registered
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    // Create the text span and text painter
+    final textSpan = TextSpan(text: displayText, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left, // Adjust as needed for alignment
+      textDirection: TextDirection.rtl, // Use RTL for Urdu text
+    );
+
+    // Layout the text painter
+    textPainter.layout();
+
+    // Validate dimensions
+    final double width = textPainter.width * scaleFactor;
+    final double height = textPainter.height * scaleFactor;
+
+    if (width <= 0 || height <= 0) {
+      throw Exception("Invalid text dimensions: width=$width, height=$height");
+    }
+
+    // Paint the text onto the canvas
+    textPainter.paint(canvas, Offset(0, 0));
+
+    // Create an image from the canvas
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width.toInt(), height.toInt());
+
+    // Convert the image to PNG
+    final byteData = await img.toByteData(format: ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    // Return the image as a MemoryImage
+    return pw.MemoryImage(buffer);
+  }
+
+
+  // Future<void> _generatePDF() async {
+  //   final pdf = pw.Document();
+  //
+  //   pdf.addPage(pw.Page(
+  //     build: (pw.Context context) {
+  //       return pw.Column(
+  //         crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //         children: [
+  //           pw.Text('Vendors List', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+  //           pw.SizedBox(height: 10),
+  //           ..._filteredVendors.map((vendor) {
+  //             return pw.Column(
+  //               crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //               children: [
+  //                 pw.Text('Vendor Name: ${vendor["name"]}'),
+  //                 pw.Text('Opening Balance: ${vendor["openingBalance"]} Rs'),
+  //                 pw.Text('Opening Balance Date: ${vendor["openingBalanceDate"]}'),
+  //                 pw.Text('Paid Amount: ${vendor["paidAmount"]} Rs'),
+  //                 pw.SizedBox(height: 10),
+  //               ],
+  //             );
+  //           }).toList(),
+  //         ],
+  //       );
+  //     },
+  //   ));
+  //
+  //
+  //   await Printing.layoutPdf(onLayout: (PdfPageFormat format) async {
+  //     return pdf.save();
+  //   });
+  // }
+
   Future<void> _generatePDF() async {
     final pdf = pw.Document();
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
-    pdf.addPage(pw.Page(
-      build: (pw.Context context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text('Vendors List', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 10),
-            ..._filteredVendors.map((vendor) {
+    // Generate images for vendor names
+    final List<pw.MemoryImage> vendorNameImages = [];
+    for (final vendor in _filteredVendors) {
+      final image = await _createTextImage(vendor["name"]);
+      vendorNameImages.add(image);
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) {
+          return [
+            pw.Center(
+              child: pw.Text(
+                languageProvider.isEnglish ? 'Vendors List' : 'فروشوں کی فہرست',
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
+            pw.SizedBox(height: 30),
+            ...List.generate(_filteredVendors.length, (index) {
+              final vendor = _filteredVendors[index];
               return pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('Vendor Name: ${vendor["name"]}'),
-                  pw.Text('Opening Balance: ${vendor["openingBalance"]} Rs'),
-                  pw.Text('Opening Balance Date: ${vendor["openingBalanceDate"]}'),
-                  pw.Text('Paid Amount: ${vendor["paidAmount"]} Rs'),
+                  pw.Image(vendorNameImages[index]),
                   pw.SizedBox(height: 10),
+                  pw.Text(
+                    '${languageProvider.isEnglish ? 'Opening Balance' : 'اوپننگ بیلنس'}: '
+                        '${vendor["openingBalance"].toStringAsFixed(2)} Rs',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                  pw.Text(
+                    '${languageProvider.isEnglish ? 'Opening Date' : 'تاریخ افتتاح'}: '
+                        '${vendor["openingBalanceDate"]}',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                  pw.Text(
+                    '${languageProvider.isEnglish ? 'Paid Amount' : 'ادا شدہ رقم'}: '
+                        '${vendor["paidAmount"].toStringAsFixed(2)} Rs',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                  pw.SizedBox(height: 20),
+                  pw.Divider(),
                 ],
               );
-            }).toList(),
-          ],
-        );
-      },
-    ));
+            }),
+          ];
+        },
+      ),
+    );
 
-
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async {
-      return pdf.save();
-    });
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
   }
+
 
   void _showPaymentHistory(String vendorId) {
     Navigator.push(
