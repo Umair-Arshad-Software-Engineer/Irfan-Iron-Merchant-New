@@ -82,10 +82,21 @@
       }
     }
 
-    String generateInvoiceNumber() {
-      // Generate a timestamp as invoice number (in milliseconds)
-      return DateTime.now().millisecondsSinceEpoch.toString();
-    }
+    // String generateInvoiceNumber() {
+    //   // Generate a timestamp as invoice number (in milliseconds)
+    //   return DateTime.now().millisecondsSinceEpoch.toString();
+    // }
+
+    // Add this method to get the next sequential invoice number
+    // Future<String> getNextInvoiceNumber() async {
+    //   final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+    //   return (await invoiceProvider.getNextInvoiceNumber()).toString();
+    // }
+
+    // Keep this for existing timestamp-based invoices
+    // String generateTimestampInvoiceNumber() {
+    //   return DateTime.now().millisecondsSinceEpoch.toString();
+    // }
 
     void _addNewRow() {
       setState(() {
@@ -365,7 +376,23 @@
       return pdf.save();
     }
 
-    Future<void> _generateAndPrintPDF(String invoiceNumber) async {
+    // Future<void> _generateAndPrintPDF(String invoiceNumber) async {
+    //   try {
+    //     final bytes = await _generatePDFBytes(invoiceNumber);
+    //     await Printing.layoutPdf(onLayout: (format) => bytes);
+    //   } catch (e) {
+    //     print("Error printing: $e");
+    //   }
+    // }
+    Future<void> _generateAndPrintPDF() async {
+      String invoiceNumber;
+      if (widget.invoice != null) {
+        invoiceNumber = widget.invoice!['invoiceNumber'];
+      } else {
+        final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+        invoiceNumber = (await invoiceProvider.getNextInvoiceNumber()).toString();
+      }
+
       try {
         final bytes = await _generatePDFBytes(invoiceNumber);
         await Printing.layoutPdf(onLayout: (format) => bytes);
@@ -574,6 +601,9 @@
       _fetchItems();
       _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
 
+      if (widget.invoice != null) {
+        _invoiceId = widget.invoice!['invoiceNumber'];
+      }
       // Initialize customer provider and fetch customers
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
       customerProvider.fetchCustomers().then((_) {
@@ -684,7 +714,17 @@
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.white), // Three-dot menu icon
                   onSelected: (String value) async {
-                    final invoiceNumber = _invoiceId ?? generateInvoiceNumber();
+                    // final invoiceNumber = _invoiceId ?? generateInvoiceNumber();
+                    // Get the appropriate invoice number
+                    String invoiceNumber;
+                    if (widget.invoice != null) {
+                      // For existing invoices, use their original number
+                      invoiceNumber = widget.invoice!['invoiceNumber'];
+                    } else {
+                      // For new invoices, get the next sequential number
+                      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+                      invoiceNumber = (await invoiceProvider.getNextInvoiceNumber()).toString();
+                    }
 
                     switch (value) {
                       case 'print':
@@ -702,7 +742,9 @@
                             );
                             return;
                           }
-                          await _generateAndPrintPDF(invoiceNumber);
+                          // await _generateAndPrintPDF(invoiceNumber);
+                          await _generateAndPrintPDF();
+
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -757,13 +799,47 @@
                     ),
                   ],
                 ),
+                // Padding(
+                //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                //   child: Text(
+                //     widget.invoice == null
+                //         ? '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${generateInvoiceNumber()}'
+                //         : '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${widget.invoice!['invoiceNumber']}',
+                //     style: const TextStyle(color: Colors.white, fontSize: 14),
+                //   ),
+                // ),
+                // In your AppBar's title widget:
+                // Padding(
+                //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                //   child: FutureBuilder<String>(
+                //     future: widget.invoice == null
+                //         // ? getNextInvoiceNumber()
+                //         ? getNextInvoiceNumber().then((num) => num.toString())
+                //         : Future.value(widget.invoice!['invoiceNumber']),
+                //     builder: (context, snapshot) {
+                //       return Text(
+                //         widget.invoice == null
+                //             ? '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}'
+                //             : '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${widget.invoice!['invoiceNumber']}',
+                //         style: const TextStyle(color: Colors.white, fontSize: 14),
+                //       );
+                //     },
+                //   ),
+                // ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Text(
-                    widget.invoice == null
-                        ? '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${generateInvoiceNumber()}'
-                        : '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${widget.invoice!['invoiceNumber']}',
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  child: FutureBuilder<String>(
+                    future: widget.invoice == null
+                        ? Provider.of<InvoiceProvider>(context, listen: false)
+                        .getNextInvoiceNumber()
+                        .then((num) => num.toString())
+                        : Future.value(widget.invoice!['invoiceNumber']),
+                    builder: (context, snapshot) {
+                      return Text(
+                        '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -1366,8 +1442,24 @@
                                 }
 
 
-                                final invoiceNumber = _invoiceId ?? generateInvoiceNumber();
+                                // final invoiceNumber = _invoiceId ?? generateInvoiceNumber();
                                 final grandTotal = _calculateGrandTotal();
+
+
+
+                                // Determine invoice number
+                                String invoiceNumber;
+                                if (widget.invoice != null) {
+                                  // For updates, keep the original number
+                                  invoiceNumber = widget.invoice!['invoiceNumber'];
+                                } else {
+                                  // For new invoices, use sequential numbering
+                                  // invoiceNumber = await getNextInvoiceNumber();
+                                  // For new invoices, get the next sequential number
+                                  final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+                                  invoiceNumber = (await invoiceProvider.getNextInvoiceNumber()).toString();
+                                }
+
 
                                 // Try saving the invoice
                                 if (_invoiceId != null) {

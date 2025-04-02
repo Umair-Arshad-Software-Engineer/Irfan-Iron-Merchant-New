@@ -12,9 +12,63 @@ class InvoiceProvider with ChangeNotifier {
   List<Item> get items => _items; // Add a getter for _items
   List<Map<String, dynamic>> get invoices => _invoices;
 
+
+
+  // // Add to InvoiceProvider class
+  // Future<int> getNextInvoiceNumber() async {
+  //   final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
+  //   int maxNumber = 0;
+  //
+  //   if (snapshot.snapshot.exists) {
+  //     final allInvoices = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
+  //
+  //     allInvoices.forEach((key, value) {
+  //       final invoiceData = value as Map<dynamic, dynamic>;
+  //       if (invoiceData['numberType'] == 'sequential') {
+  //         final invoiceNumber = int.tryParse(invoiceData['invoiceNumber']?.toString() ?? '');
+  //         if (invoiceNumber != null && invoiceNumber > maxNumber) {
+  //           maxNumber = invoiceNumber;
+  //         }
+  //       }
+  //     });
+  //   }
+  //
+  //   return maxNumber + 1;
+  // }
+  Future<int> getNextInvoiceNumber() async {
+    final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
+    int maxNumber = 0;
+
+    if (snapshot.snapshot.exists) {
+      final allInvoices = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
+
+      allInvoices.forEach((key, value) {
+        final invoiceData = value as Map<dynamic, dynamic>;
+        if (invoiceData['numberType'] == 'sequential') {
+          final invoiceNumber = int.tryParse(invoiceData['invoiceNumber']?.toString() ?? '');
+
+          // Ensure the invoice number is valid and not a 13-digit number
+          if (invoiceNumber != null && invoiceNumber > maxNumber && invoiceNumber.toString().length < 13) {
+            maxNumber = invoiceNumber;
+          }
+        }
+      });
+    }
+
+    return maxNumber + 1;
+  }
+
+
+  bool _isTimestampNumber(String number) {
+    // Only consider numbers longer than 10 digits as timestamps
+    return number.length > 10 && int.tryParse(number) != null;
+  }
+
+
+
   Future<void> saveInvoice({
     required String invoiceId, // Accepts the invoice ID (instead of using push)
-    required String invoiceNumber,
+    required String invoiceNumber, // Can be timestamp or sequential
     required String customerId,
     required String customerName, // Accept the customer name as a parameter
     required double subtotal,
@@ -48,11 +102,8 @@ class InvoiceProvider with ChangeNotifier {
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
-        // 'createdAt': DateTime.now().toIso8601String(),
-        // 'createdAt': _dateController.text.isNotEmpty
-        //     ? DateTime.parse(_dateController.text).toIso8601String()
-        //     : DateTime.now().toIso8601String(), // Use selected date or current date
         'createdAt': createdAt, // Use the provided date
+        'numberType': _isTimestampNumber(invoiceNumber) ? 'timestamp' : 'sequential',
 
       };
       // Save the invoice at the specified invoiceId path
@@ -102,6 +153,7 @@ class InvoiceProvider with ChangeNotifier {
       if (oldInvoice == null) {
         throw Exception('Invoice not found.');
       }
+      final isTimestamp = oldInvoice['numberType'] == 'timestamp';
 
       // Get the old grand total
       final double oldGrandTotal = (oldInvoice['grandTotal'] as num).toDouble();
@@ -109,17 +161,6 @@ class InvoiceProvider with ChangeNotifier {
       // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
 
-      // Clean the items data
-      // final cleanedItems = items.map((item) {
-      //   return {
-      //     'itemName': item['itemName'],
-      //     'rate': item['rate'] ?? 0.0,
-      //     'qty': item['qty'] ?? 0.0,
-      //     'initialQty': item['initialQty'] ?? 0.0, // Include initialQty
-      //     'description': item['description'] ?? '',
-      //     'total': item['total'],
-      //   };
-      // }).toList();
       final cleanedItems = items.map((item) {
         return {
           'itemName': item['itemName'],
@@ -144,7 +185,9 @@ class InvoiceProvider with ChangeNotifier {
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'updatedAt': DateTime.now().toIso8601String(),
-        'createdAt': createdAt
+        'createdAt': createdAt,
+        'numberType': isTimestamp ? 'timestamp' : 'sequential',
+
       };
 
       // Update the invoice in the database

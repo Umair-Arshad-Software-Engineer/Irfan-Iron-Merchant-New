@@ -80,10 +80,10 @@ class _filledpageState extends State<filledpage> {
     }
   }
 
-  String generateFilledNumber() {
-    // Generate a timestamp as filled number (in millsiseconds)
-    return DateTime.now().millisecondsSinceEpoch.toString();
-  }
+  // String generateFilledNumber() {
+  //   // Generate a timestamp as filled number (in millsiseconds)
+  //   return DateTime.now().millisecondsSinceEpoch.toString();
+  // }
 
   void _addNewRow() {
     setState(() {
@@ -139,14 +139,14 @@ class _filledpageState extends State<filledpage> {
     // final DateTime now = DateTime.now();
     // final String formattedDate = '${now.day}/${now.month}/${now.year}';
     // final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
-    DateTime invoiceDate;
+    DateTime filledDate;
     if (widget.filled != null) {
-      invoiceDate = DateTime.parse(widget.filled!['createdAt']);
+      filledDate = DateTime.parse(widget.filled!['createdAt']);
     } else {
       if (_dateController.text.isNotEmpty) {
         DateTime selectedDate = DateTime.parse(_dateController.text);
         DateTime now = DateTime.now();
-        invoiceDate = DateTime(
+        filledDate = DateTime(
           selectedDate.year,
           selectedDate.month,
           selectedDate.day,
@@ -155,12 +155,12 @@ class _filledpageState extends State<filledpage> {
           now.second,
         );
       } else {
-        invoiceDate = DateTime.now();
+        filledDate = DateTime.now();
       }
     }
 
-    final String formattedDate = '${invoiceDate.day}/${invoiceDate.month}/${invoiceDate.year}';
-    final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
+    final String formattedDate = '${filledDate.day}/${filledDate.month}/${filledDate.year}';
+    final String formattedTime = '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
 
     // Get the remaining balance from the ledger
     double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
@@ -348,7 +348,24 @@ class _filledpageState extends State<filledpage> {
     return pdf.save();
   }
 
-  Future<void> _generateAndPrintPDF(String filledNumber) async {
+  // Future<void> _generateAndPrintPDF(String filledNumber) async {
+  //   try {
+  //     final bytes = await _generatePDFBytes(filledNumber);
+  //     await Printing.layoutPdf(onLayout: (format) => bytes);
+  //   } catch (e) {
+  //     print("Error printing: $e");
+  //   }
+  // }
+
+  Future<void> _generateAndPrintPDF() async {
+    String filledNumber;
+    if (widget.filled != null) {
+      filledNumber = widget.filled!['filledNumber'];
+    } else {
+      final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+      filledNumber = (await filledProvider.getNextFilledNumber()).toString();
+    }
+
     try {
       final bytes = await _generatePDFBytes(filledNumber);
       await Printing.layoutPdf(onLayout: (format) => bytes);
@@ -356,6 +373,7 @@ class _filledpageState extends State<filledpage> {
       print("Error printing: $e");
     }
   }
+
 
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Use default text for empty input
@@ -457,6 +475,7 @@ class _filledpageState extends State<filledpage> {
       return 0.0;
     }
   }
+
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
     final DatabaseEvent snapshot = await itemsRef.once();
@@ -655,10 +674,49 @@ class _filledpageState extends State<filledpage> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onSelected: (String value) async {
-              final filledNumber = _filledId ?? generateFilledNumber();
+              // final filledNumber = _filledId ?? generateFilledNumber();
+
+              String filledNumber;
+              if (widget.filled != null) {
+                // For existing filled, use their original number
+                filledNumber = widget.filled!['filledNumber'];
+              } else {
+                // For new filled, get the next sequential number
+                final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                filledNumber = (await filledProvider.getNextFilledNumber()).toString();
+              }
+
               switch (value) {
                 case 'print':
-                  _generateAndPrintPDF(filledNumber);
+                  // _generateAndPrintPDF(filledNumber);
+                  try {
+                    // Add customer selection check
+                    if (_selectedCustomerId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              languageProvider.isEnglish
+                                  ? 'Please select a customer first'
+                                  : 'براہ کرم پہلے ایک گاہک منتخب کریں'
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    // await _generateAndPrintPDF(filledNumber);
+                    await _generateAndPrintPDF();
+
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            languageProvider.isEnglish
+                                ? 'Error generating PDF: ${e.toString()}'
+                                : 'PDF بنانے میں خرابی: ${e.toString()}'
+                        ),
+                      ),
+                    );
+                  }
                   break;
                 case 'save':
                   await _savePDF(filledNumber);
@@ -701,13 +759,29 @@ class _filledpageState extends State<filledpage> {
               ),
             ],
           ),
+          // Padding(
+          //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          //   child: Text(
+          //     widget.filled == null
+          //         ? '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${generateFilledNumber()}'
+          //         : '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${widget.filled!['filledNumber']}',
+          //     style: TextStyle(color: Colors.white, fontSize: 14),
+          //   ),
+          // ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Text(
-              widget.filled == null
-                  ? '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${generateFilledNumber()}'
-                  : '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${widget.filled!['filledNumber']}',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+            child: FutureBuilder<String>(
+              future: widget.filled == null
+                  ? Provider.of<FilledProvider>(context, listen: false)
+                  .getNextFilledNumber()
+                  .then((num) => num.toString())
+                  : Future.value(widget.filled!['filledNumber']),
+              builder: (context, snapshot) {
+                return Text(
+                  '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                );
+              },
             ),
           ),
         ],      ),
@@ -812,7 +886,7 @@ class _filledpageState extends State<filledpage> {
                   TextField(
                     controller: _dateController,
                     decoration: InputDecoration(
-                      labelText: 'Invoice Date',
+                      labelText: 'Filled Date',
                       suffixIcon: IconButton(
                         icon: Icon(Icons.calendar_today),
                         onPressed: () => _selectDate(context),
@@ -1271,8 +1345,22 @@ class _filledpageState extends State<filledpage> {
                             }
                           }
 
-                          final filledNumber = _filledId ?? generateFilledNumber();
+                          // final filledNumber = _filledId ?? generateFilledNumber();
                           final grandTotal = _calculateGrandTotal();
+
+
+                          // Determine invoice number
+                          String filledNumber;
+                          if (widget.filled != null) {
+                            // For updates, keep the original number
+                            filledNumber = widget.filled!['filledNumber'];
+                          } else {
+                            // For new invoices, use sequential numbering
+                            // invoiceNumber = await getNextInvoiceNumber();
+                            // For new invoices, get the next sequential number
+                            final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                            filledNumber = (await filledProvider.getNextFilledNumber()).toString();
+                          }
 
                           // Try saving the filled
                           if (_filledId != null) {

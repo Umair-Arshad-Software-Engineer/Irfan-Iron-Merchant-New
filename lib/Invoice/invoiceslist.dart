@@ -1225,7 +1225,8 @@ class InvoiceList extends StatelessWidget {
               child: ListTile(
                 contentPadding: const EdgeInsets.all(8),
                 title: Text(
-                  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']}',
+                  // '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']}',
+                   '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
                   style: TextStyle(
                     fontSize: isWideScreen ? 18 : 16,
                     fontWeight: FontWeight.bold,

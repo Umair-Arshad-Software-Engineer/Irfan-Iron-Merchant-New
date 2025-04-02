@@ -13,6 +13,37 @@ class FilledProvider with ChangeNotifier {
 
   List<Map<String, dynamic>> get filled => _filled;
 
+
+  Future<int> getNextFilledNumber() async {
+    final snapshot = await FirebaseDatabase.instance.ref('filled').once();
+    int maxNumber = 0;
+
+    if (snapshot.snapshot.exists) {
+      final allFilled = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
+
+      allFilled.forEach((key, value) {
+        final filledData = value as Map<dynamic, dynamic>;
+        if (filledData['numberType'] == 'sequential') {
+          final filledNumber = int.tryParse(filledData['filledNumber']?.toString() ?? '');
+
+          // Ensure the filled number is valid and not a 13-digit number
+          if (filledNumber != null && filledNumber > maxNumber && filledNumber.toString().length < 13) {
+            maxNumber = filledNumber;
+          }
+        }
+      });
+    }
+
+    return maxNumber + 1;
+  }
+
+
+  bool _isTimestampNumber(String number) {
+    // Only consider numbers longer than 10 digits as timestamps
+    return number.length > 10 && int.tryParse(number) != null;
+  }
+
+
   Future<void> saveFilled({
     required String filledId, // Accepts the filled ID (instead of using push)
     required String filledNumber,
@@ -50,6 +81,8 @@ class FilledProvider with ChangeNotifier {
         'items': cleanedItems,
         // 'createdAt': DateTime.now().toIso8601String(),
         'createdAt': createdAt, // Use the provided date
+        'numberType': _isTimestampNumber(filledNumber) ? 'timestamp' : 'sequential',
+
 
       };
       // Save the filled at the specified filledId path
@@ -99,7 +132,7 @@ class FilledProvider with ChangeNotifier {
       if (oldFilled == null) {
         throw Exception('Filled not found.');
       }
-
+      final isTimestamp = oldFilled['numberType'] == 'timestamp';
       // Get the old grand total
       final double oldGrandTotal = (oldFilled['grandTotal'] as num).toDouble();
 
@@ -130,7 +163,9 @@ class FilledProvider with ChangeNotifier {
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'updatedAt': DateTime.now().toIso8601String(),
-        'createdAt': createdAt
+        'createdAt': createdAt,
+        'numberType': isTimestamp ? 'timestamp' : 'sequential',
+
       };
 
       // Update the filled in the database
