@@ -33,6 +33,20 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {}); // Trigger rebuild on text change
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final invoiceProvider = Provider.of<InvoiceProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -64,6 +78,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.active) {
                   return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
                 }
                 _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
                 if (_filteredInvoices.isEmpty) {
@@ -702,11 +719,300 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     return imageBytes;
   }
   // Show payment dialog
+  // Future<void> _showInvoicePaymentDialog(
+  //     Map<String, dynamic> invoice,
+  //     InvoiceProvider invoiceProvider,
+  //     LanguageProvider languageProvider,
+  //     )
+  // async {
+  //   String? selectedPaymentMethod;
+  //   _paymentController.clear();
+  //   bool _isPaymentButtonPressed = false;
+  //   String? _description;
+  //   Uint8List? _imageBytes;
+  //   DateTime _selectedPaymentDate = DateTime.now();
+  //   // Move these inside the dialog state
+  //   String? _selectedBankId;
+  //   String? _selectedBankName;
+  //
+  //   // Function to select bank (now local to the dialog)
+  //   Future<void> _selectBank(BuildContext context) async {
+  //     final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+  //
+  //     if (bankSnapshot.snapshot.value == null) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text(languageProvider.isEnglish
+  //             ? 'No banks available'
+  //             : 'کوئی بینک دستیاب نہیں')),
+  //       );
+  //       return;
+  //     }
+  //
+  //     final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+  //     final bankList = banks.entries.map((e) {
+  //       return {
+  //         'id': e.key,
+  //         'name': e.value['name'],
+  //         'balance': e.value['balance'],
+  //       };
+  //     }).toList();
+  //
+  //     await showDialog(
+  //       context: context,
+  //       builder: (context) => AlertDialog(
+  //         title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+  //         content: SizedBox(
+  //           width: double.maxFinite,
+  //           child: ListView.builder(
+  //             shrinkWrap: true,
+  //             itemCount: bankList.length,
+  //             itemBuilder: (context, index) {
+  //               final bank = bankList[index];
+  //               return ListTile(
+  //                 title: Text(bank['name']),
+  //                 subtitle: Text('${bank['balance']} Rs'),
+  //                 onTap: () {
+  //                   setState(() {
+  //                     _selectedBankId = bank['id'];
+  //                     _selectedBankName = bank['name'];
+  //                   });
+  //                   Navigator.pop(context);
+  //                 },
+  //               );
+  //             },
+  //           ),
+  //         ),
+  //       ),
+  //     );
+  //   }
+  //
+  //   await showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return StatefulBuilder(
+  //         builder: (context, setState) {
+  //           return AlertDialog(
+  //             title: Text(languageProvider.isEnglish ? 'Pay Invoice' : 'انوائس کی رقم ادا کریں'),
+  //             content: SingleChildScrollView(
+  //               child: Column(
+  //                 mainAxisSize: MainAxisSize.min,
+  //                 children: [
+  //                   ListTile(
+  //                     title: Text(languageProvider.isEnglish
+  //                         ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
+  //                         : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
+  //                     trailing: Icon(Icons.calendar_today),
+  //                     onTap: () async {
+  //                       final pickedDate = await showDatePicker(
+  //                         context: context,
+  //                         initialDate: _selectedPaymentDate,
+  //                         firstDate: DateTime(2000),
+  //                         lastDate: DateTime.now().add(const Duration(days: 365)),
+  //                       );
+  //                       if (pickedDate != null) {
+  //                         final pickedTime = await showTimePicker(
+  //                           context: context,
+  //                           initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
+  //                         );
+  //                         if (pickedTime != null) {
+  //                           setState(() {
+  //                             _selectedPaymentDate = DateTime(
+  //                               pickedDate.year,
+  //                               pickedDate.month,
+  //                               pickedDate.day,
+  //                               pickedTime.hour,
+  //                               pickedTime.minute,
+  //                             );
+  //                           });
+  //                         }
+  //                       }
+  //                     },
+  //                   ),
+  //                   DropdownButtonFormField<String>(
+  //                     value: selectedPaymentMethod,
+  //                     items: [
+  //                       DropdownMenuItem(
+  //                         value: 'Cash',
+  //                         child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Online',
+  //                         child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Check',
+  //                         child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Bank',
+  //                         child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Slip',
+  //                         child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+  //                       ),
+  //                     ],
+  //                     onChanged: (value) {
+  //                       setState(() {
+  //                         selectedPaymentMethod = value;
+  //                         if (value != 'Bank') {
+  //                           _selectedBankId = null;
+  //                           _selectedBankName = null;
+  //                         }
+  //                       });
+  //                     },
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   // Bank selection UI
+  //                   if (selectedPaymentMethod == 'Bank')
+  //                     Padding(
+  //                       padding: const EdgeInsets.only(top: 8.0),
+  //                       child: Card(
+  //                         child: ListTile(
+  //                           title: Text(_selectedBankName ??
+  //                               (languageProvider.isEnglish
+  //                                   ? 'Select Bank'
+  //                                   : 'بینک منتخب کریں')),
+  //                           trailing: const Icon(Icons.arrow_drop_down),
+  //                           onTap: () => _selectBank(context),
+  //                         ),
+  //                       ),
+  //                     ),
+  //                   const SizedBox(height: 16),
+  //                   TextField(
+  //                     controller: _paymentController,
+  //                     keyboardType: TextInputType.number,
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   TextField(
+  //                     onChanged: (value) {
+  //                       setState(() {
+  //                         _description = value;
+  //                       });
+  //                     },
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   ElevatedButton(
+  //                     onPressed: () async {
+  //                       Uint8List? imageBytes = await _pickImage();
+  //                       if (imageBytes != null && imageBytes.isNotEmpty) {
+  //                         print('Image selected with ${imageBytes.length} bytes'); // Debug log
+  //                         setState(() {
+  //                           _imageBytes = imageBytes;
+  //                         });
+  //                       } else {
+  //                         print('No image selected or empty bytes'); // Debug log
+  //                       }
+  //                     },
+  //                     child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
+  //                   ),
+  //                   // Display selected image
+  //                   if (_imageBytes != null)
+  //                     Container(
+  //                       margin: const EdgeInsets.only(top: 16),
+  //                       height: 100,
+  //                       width: 100,
+  //                       child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
+  //                     ),
+  //
+  //                 ],
+  //               ),
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.of(context).pop(),
+  //                 child: Text(languageProvider.isEnglish ? 'Cancel' : 'انکار'),
+  //               ),
+  //               TextButton(
+  //                 onPressed: _isPaymentButtonPressed
+  //                     ? null
+  //                     : () async {
+  //                   setState(() {
+  //                     _isPaymentButtonPressed = true;
+  //                   });
+  //                   // Validate bank selection if payment method is Bank
+  //                   if (selectedPaymentMethod == 'Bank' && _selectedBankId == null) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(
+  //                         content: Text(languageProvider.isEnglish
+  //                             ? 'Please select a bank'
+  //                             : 'براہ کرم ایک بینک منتخب کریں'),
+  //                       ),
+  //                     );
+  //                     setState(() {
+  //                       _isPaymentButtonPressed = false;
+  //                     });
+  //                     return;
+  //                   }
+  //                   if (selectedPaymentMethod == null) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(
+  //                         content: Text(languageProvider.isEnglish
+  //                             ? 'Please select a payment method.'
+  //                             : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
+  //                       ),
+  //                     );
+  //                     setState(() {
+  //                       _isPaymentButtonPressed = false;
+  //                     });
+  //                     return;
+  //                   }
+  //
+  //                   final amount = double.tryParse(_paymentController.text);
+  //                   if (amount != null && amount > 0) {
+  //                     await invoiceProvider.payInvoiceWithSeparateMethod(
+  //                       context,
+  //                       invoice['id'],
+  //                       amount,
+  //                       selectedPaymentMethod!,
+  //                       description: _description,
+  //                       imageBytes: _imageBytes,
+  //                       paymentDate: _selectedPaymentDate,
+  //                       bankId: _selectedBankId,
+  //                       bankName: _selectedBankName,
+  //                     );
+  //                     Navigator.of(context).pop();
+  //                   } else {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(
+  //                         content: Text(languageProvider.isEnglish
+  //                             ? 'Please enter a valid payment amount.'
+  //                             : 'براہ کرم ایک درست رقم درج کریں۔'),
+  //                       ),
+  //                     );
+  //                   }
+  //
+  //                   setState(() {
+  //                     _isPaymentButtonPressed = false;
+  //                   });
+  //                 },
+  //                 child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
+  //               ),
+  //             ],
+  //           );
+  //         },
+  //       );
+  //     },
+  //   );
+  // }
+
   Future<void> _showInvoicePaymentDialog(
       Map<String, dynamic> invoice,
       InvoiceProvider invoiceProvider,
       LanguageProvider languageProvider,
-      ) async {
+      )
+  async {
     String? selectedPaymentMethod;
     _paymentController.clear();
     bool _isPaymentButtonPressed = false;
@@ -717,7 +1023,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     String? _selectedBankId;
     String? _selectedBankName;
 
-    // Function to select bank (now local to the dialog)
     Future<void> _selectBank(BuildContext context) async {
       final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
 
@@ -768,6 +1073,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       );
     }
 
+
     await showDialog(
       context: context,
       builder: (context) {
@@ -779,6 +1085,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Add this widget to the payment dialog content
                     ListTile(
                       title: Text(languageProvider.isEnglish
                           ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
@@ -907,7 +1214,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         width: 100,
                         child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
                       ),
-
                   ],
                 ),
               ),
@@ -923,20 +1229,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                     setState(() {
                       _isPaymentButtonPressed = true;
                     });
-                    // Validate bank selection if payment method is Bank
-                    if (selectedPaymentMethod == 'Bank' && _selectedBankId == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(languageProvider.isEnglish
-                              ? 'Please select a bank'
-                              : 'براہ کرم ایک بینک منتخب کریں'),
-                        ),
-                      );
-                      setState(() {
-                        _isPaymentButtonPressed = false;
-                      });
-                      return;
-                    }
+
                     if (selectedPaymentMethod == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -960,7 +1253,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         selectedPaymentMethod!,
                         description: _description,
                         imageBytes: _imageBytes,
-                        paymentDate: _selectedPaymentDate,
+                        paymentDate: _selectedPaymentDate, // Pass selected date
                         bankId: _selectedBankId,
                         bankName: _selectedBankName,
                       );
@@ -1266,14 +1559,14 @@ class SearchAndFilterSection extends StatelessWidget {
           child: TextField(
             controller: searchController,
             decoration: InputDecoration(
-              labelText: languageProvider.isEnglish ? 'Search By Invoice ID' : 'انوائس آئی ڈی سے تالاش کریں',
+              labelText: languageProvider.isEnglish
+                  ? 'Search by Invoice ID or Customer Name'
+                  : 'انوائس آئی ڈی یا کسٹمر کے نام سے تلاش کریں',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: searchController.text.isNotEmpty
                   ? IconButton(
                 icon: const Icon(Icons.clear),
-                onPressed: () {
-                  searchController.clear();
-                },
+                onPressed: () => searchController.clear(),
               )
                   : null,
               border: const OutlineInputBorder(),

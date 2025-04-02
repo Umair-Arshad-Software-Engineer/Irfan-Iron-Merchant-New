@@ -113,11 +113,16 @@ class _filledListpageState extends State<filledListpage> {
     );
   }
 
+
   List<Map<String, dynamic>> _filterFilled(List<Map<String, dynamic>> filled) {
     return filled.where((entry) {
       final searchQuery = _searchController.text.toLowerCase();
       final filledNumber = (entry['filledNumber'] ?? '').toString().toLowerCase();
-      final matchesSearch = filledNumber.contains(searchQuery);
+      final customerName = (entry['customerName'] ?? '').toString().toLowerCase();
+
+      // Check if search query matches either filledNumber or customerName
+      final matchesSearch = filledNumber.contains(searchQuery) ||
+          customerName.contains(searchQuery);
 
       if (_selectedDateRange != null) {
         final dateStr = entry['createdAt'];
@@ -648,7 +653,8 @@ class _filledListpageState extends State<filledListpage> {
       Map<String, dynamic> filled,
       FilledProvider filledProvider,
       LanguageProvider languageProvider,
-      ) async {
+      )
+  async {
     String? selectedPaymentMethod;
     _paymentController.clear();
     bool _isPaymentButtonPressed = false;
@@ -947,7 +953,9 @@ class SearchAndFilterSection extends StatelessWidget {
           child: TextField(
             controller: searchController,
             decoration: InputDecoration(
-              labelText: searchLabel,
+              labelText: languageProvider.isEnglish
+                  ? 'Search by Filled ID or Customer Name'
+                  : 'فلڈ آئی ڈی یا کسٹمر کے نام سے تلاش کریں',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: searchController.text.isNotEmpty
                   ? IconButton(
