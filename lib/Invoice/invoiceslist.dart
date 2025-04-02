@@ -353,7 +353,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                       '${payment['method'] == 'Bank'
                           ? '${payment['bankName'] ?? 'Bank'}'
                           : payment['method']}: Rs ${payment['amount']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -692,8 +691,36 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   }
 
 
-  Future<Uint8List?> _pickImage() async {
+  // Future<Uint8List?> _pickImage() async {
+  //   Uint8List? imageBytes;
+  //
+  //   if (kIsWeb) {
+  //     // For web, use file_picker
+  //     FilePickerResult? result = await FilePicker.platform.pickFiles(
+  //       type: FileType.image,
+  //       allowMultiple: false,
+  //     );
+  //
+  //     if (result != null && result.files.isNotEmpty) {
+  //       imageBytes = result.files.first.bytes;
+  //     }
+  //   } else {
+  //     // For mobile, use image_picker
+  //     final ImagePicker _picker = ImagePicker();
+  //     XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+  //
+  //     if (pickedFile != null) {
+  //       final file = File(pickedFile.path);
+  //       imageBytes = await file.readAsBytes();
+  //     }
+  //   }
+  //
+  //   return imageBytes;
+  // }
+
+  Future<Uint8List?> _pickImage(BuildContext context) async {
     Uint8List? imageBytes;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     if (kIsWeb) {
       // For web, use file_picker
@@ -706,10 +733,30 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
         imageBytes = result.files.first.bytes;
       }
     } else {
-      // For mobile, use image_picker
+      // For mobile, show source selection dialog
       final ImagePicker _picker = ImagePicker();
-      XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
 
+      // Show dialog to choose camera or gallery
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
+          actions: [
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
+              onPressed: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
+              onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      );
+
+      if (source == null) return null; // User canceled
+
+      XFile? pickedFile = await _picker.pickImage(source: source);
       if (pickedFile != null) {
         final file = File(pickedFile.path);
         imageBytes = await file.readAsBytes();
@@ -718,6 +765,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
     return imageBytes;
   }
+
 
   Future<void> _showInvoicePaymentDialog(
       Map<String, dynamic> invoice,
@@ -906,7 +954,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () async {
-                        Uint8List? imageBytes = await _pickImage();
+                        Uint8List? imageBytes = await _pickImage(context);
                         if (imageBytes != null && imageBytes.isNotEmpty) {
                           print('Image selected with ${imageBytes.length} bytes'); // Debug log
                           setState(() {

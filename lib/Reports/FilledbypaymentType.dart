@@ -63,92 +63,130 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
   // Fetch report data based on filters
   Future<void> _fetchReportData() async {
     try {
-      DatabaseReference _invoicesRef = _db.ref('filled'); // Reference to 'filled' node
+      DatabaseReference _filledsRef = _db.ref('filled'); // Reference to 'filled' node
 
-      final invoicesSnapshot = await _invoicesRef.get(); // Fetch data
+      final filledsSnapshot = await _filledsRef.get(); // Fetch data
 
-      if (!invoicesSnapshot.exists) {
-        throw Exception("No invoices found.");
+      if (!filledsSnapshot.exists) {
+        throw Exception("No filled found.");
       }
 
       List<Map<String, dynamic>> reportData = [];
 
-      // Iterate through all invoices
-      for (var invoiceSnapshot in invoicesSnapshot.children) {
-        final invoiceId = invoiceSnapshot.key;
-        final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
+      // Iterate through all filled
+      for (var filledsSnapshot in filledsSnapshot.children) {
+        final filledId = filledsSnapshot.key;
+        final filled = Map<String, dynamic>.from(filledsSnapshot.value as Map);
 
         // Filter by customer ID if selected
-        if (_selectedCustomerId != null && invoice['customerId'] != _selectedCustomerId) {
+        if (_selectedCustomerId != null && filled['customerId'] != _selectedCustomerId) {
           continue;
         }
 
         // Filter by payment type if selected
-        if (_selectedPaymentType != 'all' && invoice['paymentType'] != _selectedPaymentType) {
+        if (_selectedPaymentType != 'all' && filled['paymentType'] != _selectedPaymentType) {
           continue;
         }
 
         // Filter by date range if selected
         if (_selectedDateRange != null) {
-          DateTime invoiceDate = DateTime.parse(invoice['createdAt']);
-          if (invoiceDate.isBefore(_selectedDateRange!.start) || invoiceDate.isAfter(_selectedDateRange!.end)) {
+          DateTime filledDate = DateTime.parse(filled['createdAt']);
+          if (filledDate.isBefore(_selectedDateRange!.start) || filledDate.isAfter(_selectedDateRange!.end)) {
             continue;
           }
         }
 
         // Fetch and process cash payments if the selected payment method includes 'cash'
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'cash') {
-          final cashPayments = invoice['cashPayments'] != null
-              ? Map<String, dynamic>.from(invoice['cashPayments'])
+          final cashPayments = filled['cashPayments'] != null
+              ? Map<String, dynamic>.from(filled['cashPayments'])
               : {};
           for (var payment in cashPayments.values) {
             reportData.add({
-              'invoiceId': invoiceId,
-              'customerId': invoice['customerId'],
-              'customerName': invoice['customerName'],
-              'paymentType': invoice['paymentType'],
+              'filledId': filledId,
+              'customerId': filled['customerId'],
+              'customerName': filled['customerName'],
+              'paymentType': filled['paymentType'],
               'paymentMethod': 'Cash',
               'amount': payment['amount'],
               'date': payment['date'],
-              'createdAt': invoice['createdAt'],
+              'createdAt': filled['createdAt'],
             });
           }
         }
 
         // Fetch and process online payments if the selected payment method includes 'online'
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'online') {
-          final onlinePayments = invoice['onlinePayments'] != null
-              ? Map<String, dynamic>.from(invoice['onlinePayments'])
+          final onlinePayments = filled['onlinePayments'] != null
+              ? Map<String, dynamic>.from(filled['onlinePayments'])
               : {};
           for (var payment in onlinePayments.values) {
             reportData.add({
-              'invoiceId': invoiceId,
-              'customerId': invoice['customerId'],
-              'customerName': invoice['customerName'],
-              'paymentType': invoice['paymentType'],
+              'filledId': filledId,
+              'customerId': filled['customerId'],
+              'customerName': filled['customerName'],
+              'paymentType': filled['paymentType'],
               'paymentMethod': 'Online',
               'amount': payment['amount'],
               'date': payment['date'],
-              'createdAt': invoice['createdAt'],
+              'createdAt': filled['createdAt'],
             });
           }
         }
 
         // Fetch and process check payments if the selected payment method includes 'check'
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'check') {
-          final checkPayments = invoice['checkPayments'] != null
-              ? Map<String, dynamic>.from(invoice['checkPayments'])
+          final checkPayments = filled['checkPayments'] != null
+              ? Map<String, dynamic>.from(filled['checkPayments'])
               : {};
           for (var payment in checkPayments.values) {
             reportData.add({
-              'invoiceId': invoiceId,
-              'customerId': invoice['customerId'],
-              'customerName': invoice['customerName'],
-              'paymentType': invoice['paymentType'],
+              'filledId': filledId,
+              'customerId': filled['customerId'],
+              'customerName': filled['customerName'],
+              'paymentType': filled['paymentType'],
               'paymentMethod': 'Check',
               'amount': payment['amount'],
               'date': payment['date'],
-              'createdAt': invoice['createdAt'],
+              'createdAt': filled['createdAt'],
+            });
+          }
+        }
+        // Bank Payments
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'bank') {
+          final bankPayments = filled['bankPayments'] != null
+              ? Map<String, dynamic>.from(filled['bankPayments'])
+              : {};
+          for (var payment in bankPayments.values) {
+            reportData.add({
+              'filledId': filledId,
+              'customerId': filled['customerId'],
+              'customerName': filled['customerName'],
+              'paymentType': filled['paymentType'],
+              'paymentMethod': 'Bank',
+              'bankName': payment['bankName'], // Add bank name
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': filled['createdAt'],
+            });
+          }
+        }
+
+// Slip Payments
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'slip') {
+          final slipPayments = filled['slipPayments'] != null
+              ? Map<String, dynamic>.from(filled['slipPayments'])
+              : {};
+          for (var payment in slipPayments.values) {
+            reportData.add({
+              'filledId': filledId,
+              'customerId': filled['customerId'],
+              'customerName': filled['customerName'],
+              'paymentType': filled['paymentType'],
+              'paymentMethod': 'Slip',
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': filled['createdAt'],
             });
           }
         }
@@ -239,8 +277,8 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
   }
 // Method to calculate the total amount
   double _calculateTotalAmount() {
-    return _reportData.fold(0.0, (sum, invoice) {
-      return sum + (invoice['amount'] ?? 0.0); // Use 'amount' field for total calculation
+    return _reportData.fold(0.0, (sum, filled) {
+      return sum + (filled['amount'] ?? 0.0); // Use 'amount' field for total calculation
     });
   }
 
@@ -389,13 +427,13 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                   'Amount',
                   'Date',
                 ],
-                ..._reportData.map((invoice) {
+                ..._reportData.map((filled) {
                   return [
                     pw.Image(customerNameImage, width: 50, height: 20),
-                    invoice['paymentType'] ?? 'N/A',
-                    invoice['paymentMethod'] ?? 'N/A',
-                    'Rs ${invoice['amount']}',
-                    DateFormat.yMMMd().format(DateTime.parse(invoice['createdAt'])),
+                    filled['paymentType'] ?? 'N/A',
+                    filled['paymentMethod'] ?? 'N/A',
+                    'Rs ${filled['amount']}',
+                    DateFormat.yMMMd().format(DateTime.parse(filled['createdAt'])),
                   ];
                 }).toList(),
               ],
@@ -561,7 +599,8 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                               ),
                             ],
                           ),
-                          child: DropdownButton<String>(
+                          child:
+                          DropdownButton<String>(
                             isExpanded: true,
                             value: _selectedPaymentMethod,
                             onChanged: (value) {
@@ -570,7 +609,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                               });
                               _fetchReportData();
                             },
-                            items: <String>['all', 'online', 'cash', 'check'] // Add 'check' here
+                            items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip']
                                 .map<DropdownMenuItem<String>>((String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
@@ -580,7 +619,11 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                                     ? 'Online'
                                     : value == 'cash'
                                     ? 'Cash'
-                                    : 'Check'), // Add 'Check' option
+                                    : value == 'check'
+                                    ? 'Check'
+                                    : value == 'bank'
+                                    ? 'Bank'
+                                    : 'Slip'),
                               );
                             }).toList(),
                           ),
@@ -632,7 +675,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                           ),
                           DataColumn(
                             label: Text(
-                              'Invoice ID',
+                              'Filled ID',
                               style: TextStyle(color: Colors.teal.shade800),
                             ),
                           ),
@@ -655,15 +698,20 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                             ),
                           ),
                         ],
-                        rows: _reportData.map((invoice) {
+                        rows: _reportData.map((filled) {
                           return DataRow(
                             cells: [
-                              DataCell(Text(invoice['customerName'] ?? 'N/A')),
-                              DataCell(Text(invoice['paymentType'] ?? 'N/A')),
-                              DataCell(Text(invoice['invoiceId'] ?? 'N/A')),
-                              DataCell(Text(invoice['paymentMethod'] ?? 'N/A')),
-                              DataCell(Text(invoice['amount'].toString())),
-                              DataCell(Text(DateFormat.yMMMd().format(DateTime.parse(invoice['date'])))),
+                              DataCell(Text(filled['customerName'] ?? 'N/A')),
+                              DataCell(Text(filled['paymentType'] ?? 'N/A')),
+                              DataCell(Text(filled['filledId'] ?? 'N/A')),
+                              // DataCell(Text(filled['paymentMethod'] ?? 'N/A')),
+                              DataCell(Text(
+                                  (filled['paymentMethod'] == 'Bank' && filled['bankName'] != null)
+                                      ? '${filled['paymentMethod']} (${filled['bankName']})'
+                                      : filled['paymentMethod'] ?? 'N/A'
+                              )),
+                              DataCell(Text(filled['amount'].toString())),
+                              DataCell(Text(DateFormat.yMMMd().format(DateTime.parse(filled['date'])))),
                             ],
                           );
                         }).toList(),

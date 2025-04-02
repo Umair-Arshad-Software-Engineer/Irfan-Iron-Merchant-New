@@ -151,7 +151,47 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
             });
           }
         }
+        // Bank Payments
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'bank') {
+          final bankPayments = invoice['bankPayments'] != null
+              ? Map<String, dynamic>.from(invoice['bankPayments'])
+              : {};
+          for (var payment in bankPayments.values) {
+            reportData.add({
+              'invoiceId': invoiceId,
+              'customerId': invoice['customerId'],
+              'customerName': invoice['customerName'],
+              'paymentType': invoice['paymentType'],
+              'paymentMethod': 'Bank',
+              'bankName': payment['bankName'], // Add bank name
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': invoice['createdAt'],
+            });
+          }
+        }
+
+// Slip Payments
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'slip') {
+          final slipPayments = invoice['slipPayments'] != null
+              ? Map<String, dynamic>.from(invoice['slipPayments'])
+              : {};
+          for (var payment in slipPayments.values) {
+            reportData.add({
+              'invoiceId': invoiceId,
+              'customerId': invoice['customerId'],
+              'customerName': invoice['customerName'],
+              'paymentType': invoice['paymentType'],
+              'paymentMethod': 'Slip',
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': invoice['createdAt'],
+            });
+          }
+        }
       }
+
+
 
       // Update the report data with the fetched information
       setState(() {
@@ -161,6 +201,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to fetch report: $e')));
     }
   }
+
   Future<void> _selectDateRange(BuildContext context) async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -225,7 +266,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
   }
 
   // Clear all filters and fetch default report
-  void _clearFilters() {
+  void _clearFilters()  {
     setState(() {
       _selectedPaymentType = 'all';
       _selectedCustomerId = null;
@@ -390,7 +431,11 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                   return [
                     pw.Image(customerNameImage, width: 50, height: 20), // Add the customer name image to the table
                     invoice['paymentType'] ?? 'N/A',
-                    invoice['paymentMethod'] ?? 'N/A',
+                    // invoice['paymentMethod'] ?? 'N/A',
+                    // 'Rs ${invoice['amount']}',
+                    (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
+                        ? '${invoice['paymentMethod']} (${invoice['bankName']})'
+                        : invoice['paymentMethod'] ?? 'N/A',
                     'Rs ${invoice['amount']}',
                     DateFormat.yMMMd().format(DateTime.parse(invoice['createdAt'])),
                   ];
@@ -557,7 +602,8 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                               ),
                             ],
                           ),
-                          child: DropdownButton<String>(
+                          child:
+                          DropdownButton<String>(
                             isExpanded: true,
                             value: _selectedPaymentMethod,
                             onChanged: (value) {
@@ -566,7 +612,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                               });
                               _fetchReportData();
                             },
-                            items: <String>['all', 'online', 'cash', 'check'] // Add 'check' here
+                            items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip']
                                 .map<DropdownMenuItem<String>>((String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
@@ -576,7 +622,11 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                                     ? 'Online'
                                     : value == 'cash'
                                     ? 'Cash'
-                                    : 'Check'), // Add 'Check' option
+                                    : value == 'check'
+                                    ? 'Check'
+                                    : value == 'bank'
+                                    ? 'Bank'
+                                    : 'Slip'),
                               );
                             }).toList(),
                           ),
@@ -625,7 +675,12 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                             DataCell(Text(invoice['customerName'] ?? 'N/A')),
                             DataCell(Text(invoice['paymentType'] ?? 'N/A')),
                             DataCell(Text(invoice['invoiceId'] ?? 'N/A')),
-                            DataCell(Text(invoice['paymentMethod'] ?? 'N/A')),
+                            // DataCell(Text(invoice['paymentMethod'] ?? 'N/A')),
+                            DataCell(Text(
+                                (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
+                                    ? '${invoice['paymentMethod']} (${invoice['bankName']})'
+                                    : invoice['paymentMethod'] ?? 'N/A'
+                            )),
                             DataCell(Text(invoice['amount'].toString())),
                             DataCell(Text(DateFormat.yMMMd().format(DateTime.parse(invoice['date'])))),
                           ]);
