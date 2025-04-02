@@ -8,7 +8,7 @@
 
     <application
 
-        android:label="Zulfiqar Iron Merchant"
+        android:label="Irfan Iron Merchant"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -174,6 +174,14 @@ class _filledpageState extends State<filledpage> {
     final ByteData namebytes = await rootBundle.load('assets/images/name.png');
     final namebuffer = namebytes.buffer.asUint8List();
     final nameimage = pw.MemoryImage(namebuffer);
+    // Load the image asset for the logo
+    final ByteData addressbytes = await rootBundle.load('assets/images/address.png');
+    final addressbuffer = addressbytes.buffer.asUint8List();
+    final addressimage = pw.MemoryImage(addressbuffer);
+    // Load the image asset for the logo
+    final ByteData linebytes = await rootBundle.load('assets/images/line.png');
+    final linebuffer = linebytes.buffer.asUint8List();
+    final lineimage = pw.MemoryImage(linebuffer);
 
     // Load the footer logo if different
     final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
@@ -214,7 +222,12 @@ class _filledpageState extends State<filledpage> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Image(image, width: 80, height: 80), // Adjust logo size
-                  pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
+                  pw.Column(
+                      children: [
+                        pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
+                        pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
+                      ]
+                  ),
                   pw.Column(
                       children: [
                         pw.Text(
@@ -310,7 +323,7 @@ class _filledpageState extends State<filledpage> {
                   pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                 ],
               ),
-              pw.SizedBox(height: 30),
+              pw.SizedBox(height: 60),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
@@ -324,7 +337,9 @@ class _filledpageState extends State<filledpage> {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+                  pw.Image(footerLogo, width: 30, height: 20), // Footer logo
+                  pw.Image(lineimage,width: 150,height: 50),
+
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [

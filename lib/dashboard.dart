@@ -133,7 +133,7 @@ class Dashboard extends StatelessWidget {
               ),
             ),
             accountName: Text(
-              languageProvider.isEnglish ? 'Zulfiqar Iron Merchant' : 'ذوالفقار آئرن مرچنت',
+              languageProvider.isEnglish ? 'Zulfiqar Iron Merchant' : 'عرفان آئرن مرچنت',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             accountEmail: null, // You can add an email or remove this line
