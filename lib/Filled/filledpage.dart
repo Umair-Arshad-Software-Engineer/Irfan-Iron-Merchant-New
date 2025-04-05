@@ -1,8 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:iron_project_new/Provider/filled%20provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -44,6 +49,7 @@ class _filledpageState extends State<filledpage> {
   final TextEditingController _rateController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   double _remainingBalance = 0.0; // Add this variable to store the remaining balance
+  final TextEditingController _paymentController = TextEditingController();
 
 
   Future<void> _fetchRemainingBalance() async {
@@ -64,7 +70,6 @@ class _filledpageState extends State<filledpage> {
     }
   }
 
-
   // Method to show the date picker
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -79,11 +84,6 @@ class _filledpageState extends State<filledpage> {
       });
     }
   }
-
-  // String generateFilledNumber() {
-  //   // Generate a timestamp as filled number (in millsiseconds)
-  //   return DateTime.now().millisecondsSinceEpoch.toString();
-  // }
 
   void _addNewRow() {
     setState(() {
@@ -269,7 +269,7 @@ class _filledpageState extends State<filledpage> {
                 headers: [
                   pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
+                  // pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
@@ -280,7 +280,7 @@ class _filledpageState extends State<filledpage> {
                     [
                       pw.Image(itemnameImages[index], dpi: 1000),
                       pw.Image(descriptionImages[index], dpi: 1000),
-                      pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+                      // pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
@@ -363,15 +363,6 @@ class _filledpageState extends State<filledpage> {
     return pdf.save();
   }
 
-  // Future<void> _generateAndPrintPDF(String filledNumber) async {
-  //   try {
-  //     final bytes = await _generatePDFBytes(filledNumber);
-  //     await Printing.layoutPdf(onLayout: (format) => bytes);
-  //   } catch (e) {
-  //     print("Error printing: $e");
-  //   }
-  // }
-
   Future<void> _generateAndPrintPDF() async {
     String filledNumber;
     if (widget.filled != null) {
@@ -389,7 +380,6 @@ class _filledpageState extends State<filledpage> {
     }
   }
 
-
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Use default text for empty input
     final String displayText = text.isEmpty ? "N/A" : text;
@@ -402,13 +392,13 @@ class _filledpageState extends State<filledpage> {
     final canvas = Canvas(
       recorder,
       Rect.fromPoints(
-        Offset(0, 0),
-        Offset(500 * scaleFactor, 50 * scaleFactor),
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
       ),
     );
 
     // Define text style with scaling
-    final textStyle = TextStyle(
+    final textStyle = const TextStyle(
       fontSize: 12 * scaleFactor,
       fontFamily: 'JameelNoori', // Ensure this font is registered
       color: Colors.black,
@@ -435,7 +425,7 @@ class _filledpageState extends State<filledpage> {
     }
 
     // Paint the text onto the canvas
-    textPainter.paint(canvas, Offset(0, 0));
+    textPainter.paint(canvas, const Offset(0, 0));
 
     // Create an image from the canvas
     final picture = recorder.endRecording();
@@ -512,7 +502,6 @@ class _filledpageState extends State<filledpage> {
     });
   }
 
-
   Future<void> _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
     try {
       for (var item in validItems) {
@@ -585,6 +574,744 @@ class _filledpageState extends State<filledpage> {
     }
   }
 
+  double _parseToDouble(dynamic value) {
+    if (value is int) {
+      return value.toDouble();
+    } else if (value is double) {
+      return value;
+    } else if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    } else {
+      return 0.0;
+    }
+  }
+
+  Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
+    final pdf = pw.Document();
+    // Load the image asset for the logo
+    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    final buffer = bytes.buffer.asUint8List();
+    final image = pw.MemoryImage(buffer);
+
+    // Load the footer logo if different
+    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    final footerBuffer = footerBytes.buffer.asUint8List();
+    final footerLogo = pw.MemoryImage(footerBuffer);
+    // Generate all description images asynchronously
+    final List<List<dynamic>> tableData = await Future.wait(
+      payments.map((payment) async {
+        final paymentAmount = _parseToDouble(payment['amount']);
+        final paymentDate = _parsePaymentDate(payment['date']);
+        final description = payment['description'] ?? 'N/A';
+
+        // Generate image from description text
+        final descriptionImage = await _createTexttoImage(description);
+
+        return [
+          payment['method'],
+          'Rs ${paymentAmount.toStringAsFixed(2)}',
+          DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
+          pw.Image(descriptionImage), // Use the generated image
+        ];
+      }),
+    );
+
+    // Add a multi-page layout to handle multiple payments
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) => [
+          // Header section
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(image, width: 80, height: 80), // Adjust logo size
+              pw.Text('Payment History',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+
+          // Table with payment history
+          pw.Table.fromTextArray(
+            headers: ['Method', 'Amount', 'Date', 'Description'],
+            data: tableData,
+            border: pw.TableBorder.all(),
+            headerStyle: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 14, // Increased header font size
+            ),
+            cellStyle: const pw.TextStyle(
+              fontSize: 12, // Increased cell font size from 10 to 12
+            ),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellPadding: const pw.EdgeInsets.all(6),
+          ),
+
+          pw.SizedBox(height: 20),
+          pw.Divider(),
+          pw.Spacer(),
+          // Footer section
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    'Dev Valley Software House',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(
+                    'Contact: 0303-4889663',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          ),
+        ],
+      ),
+    );
+
+    // Print the PDF
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+  }
+
+  DateTime _parsePaymentDate(dynamic date) {
+    if (date is String) {
+      // If the date is a string, try parsing it directly
+      return DateTime.tryParse(date) ?? DateTime.now();
+    } else if (date is int) {
+      // If the date is a timestamp (in milliseconds), convert it to DateTime
+      return DateTime.fromMillisecondsSinceEpoch(date);
+    } else if (date is DateTime) {
+      // If the date is already a DateTime object, return it directly
+      return date;
+    } else {
+      // Fallback to the current date if the format is unknown
+      return DateTime.now();
+    }
+  }
+
+  Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    try {
+      final payments = await filledProvider.getFilledPayments(filled['id']);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
+          content: Container(
+            width: double.maxFinite,
+            child: payments.isEmpty
+                ? Text(languageProvider.isEnglish ? 'No payments found' : 'کوئی ادائیگی نہیں ملی')
+                : Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: payments.length,
+                    itemBuilder: (context, index) {
+                      final payment = payments[index];
+                      final paymentAmount = _parseToDouble(payment['amount']);
+                      Uint8List? imageBytes;
+                      if (payment['image'] != null) {
+                        imageBytes = base64Decode(payment['image']);
+                      }
+
+                      return Card(
+                        child: ListTile(
+                          // title: Text(
+                          //   '${payment['method']}: Rs $paymentAmount',
+                          //   style: const TextStyle(fontWeight: FontWeight.bold),
+                          // ),
+                          title: Text(
+                            '${payment['method'] == 'Bank'
+                                ? '${payment['bankName'] ?? 'Bank'}'
+                                : payment['method']}: Rs ${payment['amount']}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // In payment history list
+                              Text(DateFormat('yyyy-MM-dd – HH:mm')
+                                  .format(payment['date'])),
+                              // Text(DateFormat('yyyy-MM-dd – HH:mm').format(payment['date'])),
+                              if (payment['description'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(payment['description']),
+                                ),
+                              if (imageBytes != null)
+                                Column(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => _showFullScreenImage(imageBytes!),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Hero(
+                                          tag: 'paymentImage$index',
+                                          child: Image.memory(
+                                            imageBytes,
+                                            width: 100,
+                                            height: 100,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _showFullScreenImage(imageBytes!),
+                                      child: Text(
+                                        Provider.of<LanguageProvider>(context, listen: false)
+                                            .isEnglish
+                                            ? 'View Full Image'
+                                            : 'مکمل تصویر دیکھیں',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    )
+                                  ],
+                                )
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                onPressed: () => _showDeletePaymentConfirmationDialog(
+                                  context,
+                                  filled['id'],
+                                  payment['key'],
+                                  payment['method'],
+                                  paymentAmount,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () => _printPaymentHistoryPDF(payments, context),
+                  child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.memory(imageBytes, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDeletePaymentConfirmationDialog(
+      BuildContext context,
+      String filledId,
+      String paymentKey,
+      String paymentMethod,
+      double paymentAmount,
+      )
+  async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
+          content: Text(languageProvider.isEnglish
+              ? 'Are you sure you want to delete this payment?'
+              : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
+            ),
+            TextButton(
+              onPressed: () async {
+                try {
+                  await Provider.of<FilledProvider>(context, listen: false).deletePaymentEntry(
+                    context: context, // Pass the context here
+                    filledId: filledId,
+                    paymentKey: paymentKey,
+                    paymentMethod: paymentMethod,
+                    paymentAmount: paymentAmount,
+                  );
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Payment deleted successfully.')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+                  );
+                }
+              },
+              child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<pw.MemoryImage> _createTexttoImage(String text) async {
+    const double scaleFactor = 1.5;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
+      ),
+    );
+
+    final textStyle = const TextStyle(
+      fontSize: 13 * scaleFactor,
+      fontFamily: 'JameelNoori',
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    final textSpan = TextSpan(text: text, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    textPainter.layout();
+    textPainter.paint(canvas, const Offset(0, 0));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(
+      (textPainter.width * scaleFactor).toInt(),
+      (textPainter.height * scaleFactor).toInt(),
+    );
+
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    return pw.MemoryImage(buffer);
+  }
+
+  Future<void> _showFilledPaymentDialog(
+      Map<String, dynamic> filled,
+      FilledProvider filledProvider,
+      LanguageProvider languageProvider,
+      )
+  async  {
+    String? selectedPaymentMethod;
+    _paymentController.clear();
+    bool _isPaymentButtonPressed = false;
+    String? _description;
+    Uint8List? _imageBytes;
+    DateTime _selectedPaymentDate = DateTime.now();
+    // Move these inside the dialog state
+    String? _selectedBankId;
+    String? _selectedBankName;
+
+    Future<void> _selectBank(BuildContext context) async {
+      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+
+      if (bankSnapshot.snapshot.value == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(languageProvider.isEnglish
+              ? 'No banks available'
+              : 'کوئی بینک دستیاب نہیں')),
+        );
+        return;
+      }
+
+      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+      final bankList = banks.entries.map((e) {
+        return {
+          'id': e.key,
+          'name': e.value['name'],
+          'balance': e.value['balance'],
+        };
+      }).toList();
+
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: bankList.length,
+              itemBuilder: (context, index) {
+                final bank = bankList[index];
+                return ListTile(
+                  title: Text(bank['name']),
+                  subtitle: Text('${bank['balance']} Rs'),
+                  onTap: () {
+                    setState(() {
+                      _selectedBankId = bank['id'];
+                      _selectedBankName = bank['name'];
+                    });
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'انوائس کی رقم ادا کریں'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Add this widget to the payment dialog content
+                    ListTile(
+                      title: Text(languageProvider.isEnglish
+                          ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
+                          : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedPaymentDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (pickedDate != null) {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
+                          );
+                          if (pickedTime != null) {
+                            setState(() {
+                              _selectedPaymentDate = DateTime(
+                                pickedDate.year,
+                                pickedDate.month,
+                                pickedDate.day,
+                                pickedTime.hour,
+                                pickedTime.minute,
+                              );
+                            });
+                          }
+                        }
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      value: selectedPaymentMethod,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'Cash',
+                          child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Online',
+                          child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Check',
+                          child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Bank',
+                          child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Slip',
+                          child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedPaymentMethod = value;
+                          if (value != 'Bank') {
+                            _selectedBankId = null;
+                            _selectedBankName = null;
+                          }
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    // Bank selection UI
+                    if (selectedPaymentMethod == 'Bank')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Card(
+                          child: ListTile(
+                            title: Text(_selectedBankName ??
+                                (languageProvider.isEnglish
+                                    ? 'Select Bank'
+                                    : 'بینک منتخب کریں')),
+                            trailing: const Icon(Icons.arrow_drop_down),
+                            onTap: () => _selectBank(context),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _paymentController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      onChanged: (value) {
+                        setState(() {
+                          _description = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Uint8List? imageBytes = await _pickImage(context);
+                        if (imageBytes != null && imageBytes.isNotEmpty) {
+                          print('Image selected with ${imageBytes.length} bytes'); // Debug log
+                          setState(() {
+                            _imageBytes = imageBytes;
+                          });
+                        } else {
+                          print('No image selected or empty bytes'); // Debug log
+                        }
+                      },
+                      child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
+                    ),
+                    // Display selected image
+                    if (_imageBytes != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        height: 100,
+                        width: 100,
+                        child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(languageProvider.isEnglish ? 'Cancel' : 'انکار'),
+                ),
+                TextButton(
+                  onPressed: _isPaymentButtonPressed
+                      ? null
+                      : () async {
+                    setState(() {
+                      _isPaymentButtonPressed = true;
+                    });
+
+                    if (selectedPaymentMethod == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(languageProvider.isEnglish
+                              ? 'Please select a payment method.'
+                              : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
+                        ),
+                      );
+                      setState(() {
+                        _isPaymentButtonPressed = false;
+                      });
+                      return;
+                    }
+
+                    final amount = double.tryParse(_paymentController.text);
+                    if (amount != null && amount > 0) {
+                      await filledProvider.payFilledWithSeparateMethod(
+                        context,
+                        filled['id'],
+                        amount,
+                        selectedPaymentMethod!,
+                        description: _description,
+                        imageBytes: _imageBytes,
+                        paymentDate: _selectedPaymentDate, // Pass selected date
+                        bankId: _selectedBankId,
+                        bankName: _selectedBankName,
+                      );
+
+                      // Add cash book entry if payment method is cash
+                      // if (selectedPaymentMethod?.toLowerCase() == 'cash') {
+                      //   try {
+                      //     await filledProvider.addCashBookEntry(
+                      //       description: _description ?? 'Filled Payment ${filled['filledNumber']}',
+                      //       amount: amount,
+                      //       dateTime: _selectedPaymentDate,
+                      //       type: 'cash_in',
+                      //     );
+                      //   } catch (e) {
+                      //     print("Error adding cash book entry: $e");
+                      //     // Show error if cash book entry fails but payment succeeded
+                      //     if (mounted) {
+                      //       ScaffoldMessenger.of(context).showSnackBar(
+                      //         SnackBar(
+                      //           content: Text(
+                      //             languageProvider.isEnglish
+                      //                 ? 'Payment processed but cash book update failed'
+                      //                 : 'ادائیگی پراسیس ہو گئی لیکن کیش بک اپ ڈیٹ نہیں ہو سکی',
+                      //           ),
+                      //         ),
+                      //       );
+                      //     }
+                      //     Navigator.of(context).pop();
+                      //     return;
+                      //   }
+                      // }
+
+                      // Show success message
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              languageProvider.isEnglish
+                                  ? 'Payment processed and cash book updated'
+                                  : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
+                            ),
+                          ),
+                        );
+                      }
+                      Navigator.of(context).pop();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(languageProvider.isEnglish
+                              ? 'Please enter a valid payment amount.'
+                              : 'براہ کرم ایک درست رقم درج کریں۔'),
+                        ),
+                      );
+                    }
+
+                    setState(() {
+                      _isPaymentButtonPressed = false;
+                    });
+                  },
+                  child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<Uint8List?> _pickImage(BuildContext context) async {
+    Uint8List? imageBytes;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    if (kIsWeb) {
+      // For web, use file_picker
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        imageBytes = result.files.first.bytes;
+      }
+    } else {
+      // For mobile, show source selection dialog
+      final ImagePicker _picker = ImagePicker();
+
+      // Show dialog to choose camera or gallery
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
+          actions: [
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
+              onPressed: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
+              onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      );
+
+      if (source == null) return null; // User canceled
+
+      XFile? pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        imageBytes = await file.readAsBytes();
+      }
+    }
+
+    return imageBytes;
+  }
+
+  void onPaymentPressed(Map<String, dynamic> filled) {
+    // At the start of both methods
+    if (filled == null) return;
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    _showFilledPaymentDialog(filled, filledProvider, languageProvider);
+  }
+
+  void onViewPayments(Map<String, dynamic> filled) {
+    // At the start of both methods
+    if (filled == null) return;
+    _showPaymentDetails(filled);
+  }
 
   @override
   void dispose() {
@@ -680,7 +1407,7 @@ class _filledpageState extends State<filledpage> {
           _isReadOnly
               ? (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ بنائیں')
               : (languageProvider.isEnglish ? 'Create Filled' : 'انوائس کو اپ ڈیٹ کریں'),
-          style: TextStyle(color: Colors.white,
+          style: const TextStyle(color: Colors.white,
           ),
         ),
         backgroundColor: Colors.teal,
@@ -903,7 +1630,7 @@ class _filledpageState extends State<filledpage> {
                     decoration: InputDecoration(
                       labelText: 'Filled Date',
                       suffixIcon: IconButton(
-                        icon: Icon(Icons.calendar_today),
+                        icon: const Icon(Icons.calendar_today),
                         onPressed: () => _selectDate(context),
                       ),
                     ),
@@ -1194,291 +1921,305 @@ class _filledpageState extends State<filledpage> {
                     ),
                   ),
                   // if (!_isReadOnly)
-                    ElevatedButton(
-                      onPressed: _isButtonPressed
-                          ? null
-                          : () async {
-                        setState(() {
-                          _isButtonPressed = true; // Disable the button when pressed
-                        });
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: _isButtonPressed
+                              ? null
+                              : () async {
+                            setState(() {
+                              _isButtonPressed = true; // Disable the button when pressed
+                            });
 
-                        try {
-                          // Validate customer selection
-                          if (_selectedCustomerId == null || _selectedCustomerName == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  languageProvider.isEnglish
-                                      ? 'Please select a customer'
-                                      : 'براہ کرم کسٹمر منتخب کریں',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
+                            try {
+                              // Validate customer selection
+                              if (_selectedCustomerId == null || _selectedCustomerName == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Please select a customer'
+                                          : 'براہ کرم کسٹمر منتخب کریں',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
 
-                          // Validate payment type
-                          if (_paymentType == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  languageProvider.isEnglish
-                                      ? 'Please select a payment type'
-                                      : 'براہ کرم ادائیگی کی قسم منتخب کریں',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
+                              // Validate payment type
+                              if (_paymentType == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Please select a payment type'
+                                          : 'براہ کرم ادائیگی کی قسم منتخب کریں',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
 
-                          // Validate instant payment method if "Instant Payment" is selected
-                          if (_paymentType == 'instant' && _instantPaymentMethod == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  languageProvider.isEnglish
-                                      ? 'Please select an instant payment method'
-                                      : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
+                              // Validate instant payment method if "Instant Payment" is selected
+                              if (_paymentType == 'instant' && _instantPaymentMethod == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Please select an instant payment method'
+                                          : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
 
-                          // Validate rate fields
-                          for (var row in _filledRows) {
-                            if (row['rate'] == null || row['rate'] <= 0) {
+                              // Validate rate fields
+                              for (var row in _filledRows) {
+                                if (row['rate'] == null || row['rate'] <= 0) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Rate cannot be zero or less'
+                                            : 'ریٹ صفر یا اس سے کم نہیں ہو سکتا',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                              }
+                              // Validate rate fields
+                              for (var row in _filledRows) {
+                                if (row['qty'] == null || row['qty'] <= 0) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Qty cannot be zero or less'
+                                            : 'تعداد صفر یا اس سے کم نہیں ہو سکتا',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                              }
+
+                              // Validate discount amount
+                              final subtotal = _calculateSubtotal();
+                              if (_discount >= subtotal) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Discount amount cannot be greater than or equal to the subtotal'
+                                          : 'ڈسکاؤنٹ کی رقم سب ٹوٹل سے زیادہ یا اس کے برابر نہیں ہو سکتی',
+                                    ),
+                                  ),
+                                );
+                                return; // Do not save or print if discount is invalid
+                              }
+
+                              // Check for insufficient stock
+                              List<Map<String, dynamic>> insufficientItems = [];
+                              for (var row in _filledRows) {
+                                String itemName = row['itemName'];
+                                if (itemName.isEmpty) continue;
+
+                                Item? item = _items.firstWhere(
+                                      (i) => i.itemName == itemName,
+                                  orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+                                );
+
+                                if (item.id.isEmpty) continue;
+
+                                double currentQty = item.qtyOnHand;
+                                double qty = row['qty'] ?? 0.0;
+                                double delta;
+
+                                if (widget.filled != null) {
+                                  double initialQty = row['initialQty'] ?? 0.0;
+                                  delta = initialQty - qty;
+                                } else {
+                                  delta = -qty;
+                                }
+
+                                double newQty = currentQty + delta;
+
+                                if (newQty < 0) {
+                                  insufficientItems.add({
+                                    'item': item,
+                                    'delta': delta,
+                                  });
+                                }
+                              }
+
+                              if (insufficientItems.isNotEmpty) {
+                                bool proceed = await showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                        ? 'Insufficient Stock'
+                                        : 'اسٹاک ناکافی'),
+                                    content: Text(
+                                      Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                          ? 'The following items will have negative stock. Do you want to proceed?'
+                                          : 'مندرجہ ذیل اشیاء کا اسٹاک منفی ہو جائے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                            ? 'Cancel'
+                                            : 'منسوخ کریں'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                            ? 'Proceed'
+                                            : 'آگے بڑھیں'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (!proceed) {
+                                  setState(() => _isButtonPressed = false);
+                                  return;
+                                }
+                              }
+
+                              // final filledNumber = _filledId ?? generateFilledNumber();
+                              final grandTotal = _calculateGrandTotal();
+
+
+                              // Determine filled number
+                              String filledNumber;
+                              if (widget.filled != null) {
+                                // For updates, keep the original number
+                                filledNumber = widget.filled!['filledNumber'];
+                              } else {
+                                final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                                filledNumber = (await filledProvider.getNextFilledNumber()).toString();
+                              }
+
+                              // Try saving the filled
+                              if (_filledId != null) {
+                                // Update existing filled
+                                await Provider.of<FilledProvider>(context, listen: false).updateFilled(
+                                  filledId: _filledId!, // Pass the correct ID for updating
+                                  filledNumber: filledNumber,
+                                  customerId: _selectedCustomerId!,
+                                  customerName: _selectedCustomerName!,
+                                  subtotal: subtotal,
+                                  discount: _discount,
+                                  grandTotal: grandTotal,
+                                  paymentType: _paymentType,
+                                  paymentMethod: _instantPaymentMethod,
+                                  items: _filledRows,
+                                  createdAt: _dateController.text.isNotEmpty
+                                      ? DateTime(
+                                    DateTime.parse(_dateController.text).year,
+                                    DateTime.parse(_dateController.text).month,
+                                    DateTime.parse(_dateController.text).day,
+                                    DateTime.now().hour,
+                                    DateTime.now().minute,
+                                    DateTime.now().second,
+                                  ).toIso8601String()
+                                      : DateTime.now().toIso8601String(),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Filled updated successfully'
+                                          : 'فلڈ کامیابی سے تبدیل ہوگئی',
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                // Save new filled
+                                await Provider.of<FilledProvider>(context, listen: false).saveFilled(
+                                  filledId: filledNumber, // Pass the filled number (or generated ID)
+                                  filledNumber: filledNumber,
+                                  customerId: _selectedCustomerId!,
+                                  customerName: _selectedCustomerName!,
+                                  subtotal: subtotal,
+                                  discount: _discount,
+                                  grandTotal: grandTotal,
+                                  paymentType: _paymentType,
+                                  paymentMethod: _instantPaymentMethod,
+                                  items: _filledRows,
+                                  createdAt: _dateController.text.isNotEmpty
+                                      ? DateTime(
+                                    DateTime.parse(_dateController.text).year,
+                                    DateTime.parse(_dateController.text).month,
+                                    DateTime.parse(_dateController.text).day,
+                                    DateTime.now().hour,
+                                    DateTime.now().minute,
+                                    DateTime.now().second,
+                                  ).toIso8601String()
+                                      : DateTime.now().toIso8601String(),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Filled saved successfully'
+                                          : 'فلڈ کامیابی سے محفوظ ہوگئی',
+                                    ),
+                                  ),
+                                );
+                              }
+                              // Update qtyOnHand after saving/updating the filled
+                              _updateQtyOnHand(_filledRows);
+                              // Navigate to the filled list page
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (context) => filledListpage()),
+                              );
+                            } catch (e) {
+                              // Show error message
+                              print(e);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
                                     languageProvider.isEnglish
-                                        ? 'Rate cannot be zero or less'
-                                        : 'ریٹ صفر یا اس سے کم نہیں ہو سکتا',
+                                        ? 'Failed to save filled'
+                                        : 'فلڈ محفوظ کرنے میں ناکام',
                                   ),
                                 ),
                               );
-                              return;
-                            }
-                          }
-                          // Validate rate fields
-                          for (var row in _filledRows) {
-                            if (row['qty'] == null || row['qty'] <= 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    languageProvider.isEnglish
-                                        ? 'Qty cannot be zero or less'
-                                        : 'تعداد صفر یا اس سے کم نہیں ہو سکتا',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                          }
-
-                          // Validate discount amount
-                          final subtotal = _calculateSubtotal();
-                          if (_discount >= subtotal) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  languageProvider.isEnglish
-                                      ? 'Discount amount cannot be greater than or equal to the subtotal'
-                                      : 'ڈسکاؤنٹ کی رقم سب ٹوٹل سے زیادہ یا اس کے برابر نہیں ہو سکتی',
-                                ),
-                              ),
-                            );
-                            return; // Do not save or print if discount is invalid
-                          }
-
-                          // Check for insufficient stock
-                          List<Map<String, dynamic>> insufficientItems = [];
-                          for (var row in _filledRows) {
-                            String itemName = row['itemName'];
-                            if (itemName.isEmpty) continue;
-
-                            Item? item = _items.firstWhere(
-                                  (i) => i.itemName == itemName,
-                              orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
-                            );
-
-                            if (item.id.isEmpty) continue;
-
-                            double currentQty = item.qtyOnHand;
-                            double qty = row['qty'] ?? 0.0;
-                            double delta;
-
-                            if (widget.filled != null) {
-                              double initialQty = row['initialQty'] ?? 0.0;
-                              delta = initialQty - qty;
-                            } else {
-                              delta = -qty;
-                            }
-
-                            double newQty = currentQty + delta;
-
-                            if (newQty < 0) {
-                              insufficientItems.add({
-                                'item': item,
-                                'delta': delta,
+                            } finally {
+                              setState(() {
+                                _isButtonPressed = false; // Re-enable button after the operation is complete
                               });
                             }
-                          }
-
-                          if (insufficientItems.isNotEmpty) {
-                            bool proceed = await showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                    ? 'Insufficient Stock'
-                                    : 'اسٹاک ناکافی'),
-                                content: Text(
-                                  Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                      ? 'The following items will have negative stock. Do you want to proceed?'
-                                      : 'مندرجہ ذیل اشیاء کا اسٹاک منفی ہو جائے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
-                                    child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                        ? 'Cancel'
-                                        : 'منسوخ کریں'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
-                                    child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                        ? 'Proceed'
-                                        : 'آگے بڑھیں'),
-                                  ),
-                                ],
+                          },
+                          child: Text(
+                            widget.filled == null
+                                ? (languageProvider.isEnglish ? 'Save Filled' : 'فلڈ محفوظ کریں')
+                                : (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal.shade400, // Button background color
+                          ),
+                        ),
+                        if (widget.filled != null)
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.payment),
+                                onPressed: () => onPaymentPressed(widget.filled!),
                               ),
-                            );
-
-                            if (!proceed) {
-                              setState(() => _isButtonPressed = false);
-                              return;
-                            }
-                          }
-
-                          // final filledNumber = _filledId ?? generateFilledNumber();
-                          final grandTotal = _calculateGrandTotal();
-
-
-                          // Determine invoice number
-                          String filledNumber;
-                          if (widget.filled != null) {
-                            // For updates, keep the original number
-                            filledNumber = widget.filled!['filledNumber'];
-                          } else {
-                            // For new invoices, use sequential numbering
-                            // invoiceNumber = await getNextInvoiceNumber();
-                            // For new invoices, get the next sequential number
-                            final filledProvider = Provider.of<FilledProvider>(context, listen: false);
-                            filledNumber = (await filledProvider.getNextFilledNumber()).toString();
-                          }
-
-                          // Try saving the filled
-                          if (_filledId != null) {
-                            // Update existing filled
-                            await Provider.of<FilledProvider>(context, listen: false).updateFilled(
-                              filledId: _filledId!, // Pass the correct ID for updating
-                              filledNumber: filledNumber,
-                              customerId: _selectedCustomerId!,
-                              customerName: _selectedCustomerName!,
-                              subtotal: subtotal,
-                              discount: _discount,
-                              grandTotal: grandTotal,
-                              paymentType: _paymentType,
-                              paymentMethod: _instantPaymentMethod,
-                              items: _filledRows,
-                              createdAt: _dateController.text.isNotEmpty
-                                  ? DateTime(
-                                DateTime.parse(_dateController.text).year,
-                                DateTime.parse(_dateController.text).month,
-                                DateTime.parse(_dateController.text).day,
-                                DateTime.now().hour,
-                                DateTime.now().minute,
-                                DateTime.now().second,
-                              ).toIso8601String()
-                                  : DateTime.now().toIso8601String(),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  languageProvider.isEnglish
-                                      ? 'Filled updated successfully'
-                                      : 'فلڈ کامیابی سے تبدیل ہوگئی',
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.history),
+                                onPressed: () => onViewPayments(widget.filled!),
                               ),
-                            );
-                          } else {
-                            // Save new filled
-                            await Provider.of<FilledProvider>(context, listen: false).saveFilled(
-                              filledId: filledNumber, // Pass the filled number (or generated ID)
-                              filledNumber: filledNumber,
-                              customerId: _selectedCustomerId!,
-                              customerName: _selectedCustomerName!,
-                              subtotal: subtotal,
-                              discount: _discount,
-                              grandTotal: grandTotal,
-                              paymentType: _paymentType,
-                              paymentMethod: _instantPaymentMethod,
-                              items: _filledRows,
-                              createdAt: _dateController.text.isNotEmpty
-                                  ? DateTime(
-                                DateTime.parse(_dateController.text).year,
-                                DateTime.parse(_dateController.text).month,
-                                DateTime.parse(_dateController.text).day,
-                                DateTime.now().hour,
-                                DateTime.now().minute,
-                                DateTime.now().second,
-                              ).toIso8601String()
-                                  : DateTime.now().toIso8601String(),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  languageProvider.isEnglish
-                                      ? 'Filled saved successfully'
-                                      : 'فلڈ کامیابی سے محفوظ ہوگئی',
-                                ),
-                              ),
-                            );
-                          }
-                          // Update qtyOnHand after saving/updating the filled
-                          _updateQtyOnHand(_filledRows);
-                          // Navigate to the filled list page
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => filledListpage()),
-                          );
-                        } catch (e) {
-                          // Show error message
-                          print(e);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                languageProvider.isEnglish
-                                    ? 'Failed to save filled'
-                                    : 'فلڈ محفوظ کرنے میں ناکام',
-                              ),
-                            ),
-                          );
-                        } finally {
-                          setState(() {
-                            _isButtonPressed = false; // Re-enable button after the operation is complete
-                          });
-                        }
-                      },
-                      child: Text(
-                        widget.filled == null
-                            ? (languageProvider.isEnglish ? 'Save Filled' : 'فلڈ محفوظ کریں')
-                            : (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade400, // Button background color
-                      ),
+                            ],
+                          ),
+                      ],
                     )
                 ],
               ),

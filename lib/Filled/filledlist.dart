@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -423,7 +424,8 @@ class _filledListpageState extends State<filledListpage> {
       String paymentKey,
       String paymentMethod,
       double paymentAmount,
-      ) async {
+      )
+  async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     await showDialog(
       context: context,
@@ -471,7 +473,8 @@ class _filledListpageState extends State<filledListpage> {
       Map<String, dynamic> filled,
       FilledProvider filledProvider,
       LanguageProvider languageProvider,
-      ) async {
+      )
+  async {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -495,33 +498,6 @@ class _filledListpageState extends State<filledListpage> {
       ),
     );
   }
-
-  // Future<Uint8List?> _pickImage() async {
-  //   Uint8List? imageBytes;
-  //
-  //   if (kIsWeb) {
-  //     // For web, use file_picker
-  //     FilePickerResult? result = await FilePicker.platform.pickFiles(
-  //       type: FileType.image,
-  //       allowMultiple: false,
-  //     );
-  //
-  //     if (result != null && result.files.isNotEmpty) {
-  //       imageBytes = result.files.first.bytes;
-  //     }
-  //   } else {
-  //     // For mobile, use image_picker
-  //     final ImagePicker _picker = ImagePicker();
-  //     XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-  //
-  //     if (pickedFile != null) {
-  //       final file = File(pickedFile.path);
-  //       imageBytes = await file.readAsBytes();
-  //     }
-  //   }
-  //
-  //   return imageBytes;
-  // }
 
   Future<Uint8List?> _pickImage(BuildContext context) async {
     Uint8List? imageBytes;
@@ -570,8 +546,6 @@ class _filledListpageState extends State<filledListpage> {
 
     return imageBytes;
   }
-
-
 
   Future<void> _printFilled() async {
     final pdf = pw.Document();
@@ -1125,18 +1099,18 @@ class FilledList extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
-                          onPressed: () => onPaymentPressed(filled),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
-                          onPressed: () => onViewPayments(filled),
-                        ),
-                      ],
-                    )
+                    // Row(
+                    //   children: [
+                    //     IconButton(
+                    //       icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
+                    //       onPressed: () => onPaymentPressed(filled),
+                    //     ),
+                    //     IconButton(
+                    //       icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
+                    //       onPressed: () => onViewPayments(filled),
+                    //     ),
+                    //   ],
+                    // )
                   ],
                 ),
                 trailing: Column(

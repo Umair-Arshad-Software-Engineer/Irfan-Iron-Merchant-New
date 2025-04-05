@@ -124,58 +124,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     );
   }
 
-  // Add this method for bank selection
-  Future<void> _selectBank(BuildContext context) async {
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
-
-    if (bankSnapshot.snapshot.value == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(languageProvider.isEnglish
-            ? 'No banks available'
-            : 'کوئی بینک دستیاب نہیں')),
-      );
-      return;
-    }
-
-    final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
-    final bankList = banks.entries.map((e) {
-      return {
-        'id': e.key,
-        'name': e.value['name'],
-        'balance': e.value['balance'],
-      };
-    }).toList();
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: bankList.length,
-            itemBuilder: (context, index) {
-              final bank = bankList[index];
-              return ListTile(
-                title: Text(bank['name']),
-                subtitle: Text('${bank['balance']} Rs'),
-                onTap: () {
-                  setState(() {
-                    _selectedBankId = bank['id'];
-                    _selectedBankName = bank['name'];
-                  });
-                  Navigator.pop(context);
-                },
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
 
 // Add to _InvoiceListPageState
   Future<void> _showFullScreenImage(Uint8List imageBytes) async {
@@ -260,7 +208,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       Map<String, dynamic> invoice,
       InvoiceProvider invoiceProvider,
       LanguageProvider languageProvider,
-      ) async {
+      )
+  async {
     await showDialog(
       context: context,
       builder: (context) {
@@ -691,33 +640,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   }
 
 
-  // Future<Uint8List?> _pickImage() async {
-  //   Uint8List? imageBytes;
-  //
-  //   if (kIsWeb) {
-  //     // For web, use file_picker
-  //     FilePickerResult? result = await FilePicker.platform.pickFiles(
-  //       type: FileType.image,
-  //       allowMultiple: false,
-  //     );
-  //
-  //     if (result != null && result.files.isNotEmpty) {
-  //       imageBytes = result.files.first.bytes;
-  //     }
-  //   } else {
-  //     // For mobile, use image_picker
-  //     final ImagePicker _picker = ImagePicker();
-  //     XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-  //
-  //     if (pickedFile != null) {
-  //       final file = File(pickedFile.path);
-  //       imageBytes = await file.readAsBytes();
-  //     }
-  //   }
-  //
-  //   return imageBytes;
-  // }
-
   Future<Uint8List?> _pickImage(BuildContext context) async {
     Uint8List? imageBytes;
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -1049,7 +971,8 @@ Future<void> _showDeletePaymentConfirmationDialog(
     String paymentKey,
     String paymentMethod,
     double paymentAmount,
-    ) async {
+    )
+async {
   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
   await showDialog(
@@ -1103,7 +1026,8 @@ Future<void> _showEditPaymentDialog(
     String oldDescription,
     Uint8List? oldImageBytes,
     Future<Uint8List?> Function() pickImage, // Add this parameter
-    ) async {
+    )
+async {
   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
   final TextEditingController _amountController = TextEditingController(text: oldPaymentAmount.toString());
   final TextEditingController _descriptionController = TextEditingController(text: oldDescription);
@@ -1249,18 +1173,18 @@ class InvoiceList extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
-                          onPressed: () => onPaymentPressed(invoice),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
-                          onPressed: () => onViewPayments(invoice),
-                        ),
-                      ],
-                    ),
+                    // Row(
+                    //   children: [
+                    //     IconButton(
+                    //       icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
+                    //       onPressed: () => onPaymentPressed(invoice),
+                    //     ),
+                    //     IconButton(
+                    //       icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
+                    //       onPressed: () => onViewPayments(invoice),
+                    //     ),
+                    //   ],
+                    // ),
                   ],
                 ),
                 trailing: Column(
