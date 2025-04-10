@@ -76,6 +76,7 @@ class InvoiceProvider with ChangeNotifier {
     required double discount,
     required double grandTotal,
     required String paymentType,
+    required String referenceNumber, // Add this
     String? paymentMethod, // For instant payments
     required String createdAt, // Add this parameter
 
@@ -94,6 +95,7 @@ class InvoiceProvider with ChangeNotifier {
       }).toList();
 
       final invoiceData = {
+        'referenceNumber': referenceNumber, // Add this
         'invoiceNumber': invoiceNumber,
         'customerId': customerId,
         'customerName': customerName, // Save customer name here
@@ -145,6 +147,7 @@ class InvoiceProvider with ChangeNotifier {
     required double grandTotal,
     required String paymentType,
     String? paymentMethod,
+    required String referenceNumber, // Add this
     required List<Map<String, dynamic>> items,
     required String createdAt,
   }) async {
@@ -176,6 +179,7 @@ class InvoiceProvider with ChangeNotifier {
 
       // Prepare the updated invoice data
       final invoiceData = {
+        'referenceNumber': referenceNumber, // Add this
         'invoiceNumber': invoiceNumber,
         'customerId': customerId,
         'customerName': customerName,
@@ -284,6 +288,8 @@ class InvoiceProvider with ChangeNotifier {
             ).toList() ?? [],
             'createdAt': invoiceData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
             'remainingBalance': (invoiceData['remainingBalance'] as num?)?.toDouble() ?? 0.0,
+            // In the fetchInvoices method, add this to the invoice data map
+            'referenceNumber': invoiceData['referenceNumber']?.toString() ?? '',
           });
         });
         notifyListeners();

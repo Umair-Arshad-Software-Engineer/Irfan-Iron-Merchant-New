@@ -55,6 +55,8 @@ class FilledProvider with ChangeNotifier {
     required double grandTotal,
     required String paymentType,
     String? paymentMethod, // For instant payments
+    required String referenceNumber, // Add this
+
     required List<Map<String, dynamic>> items,
     required String createdAt, // Add this parameter
   })
@@ -72,6 +74,7 @@ class FilledProvider with ChangeNotifier {
       }).toList();
 
       final filledData = {
+        'referenceNumber': referenceNumber, // Add this
         'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName, // Save customer name here
@@ -124,6 +127,7 @@ class FilledProvider with ChangeNotifier {
     required double discount,
     required double grandTotal,
     required String paymentType,
+    required String referenceNumber, // Add this
     String? paymentMethod,
     required List<Map<String, dynamic>> items,
     required String createdAt,
@@ -157,6 +161,7 @@ class FilledProvider with ChangeNotifier {
       // Prepare the updated filled data
       final filledData = {
         'filledNumber': filledNumber,
+        'referenceNumber': referenceNumber, // Add this
         'customerId': customerId,
         'customerName': customerName,
         'subtotal': subtotal,
@@ -262,6 +267,7 @@ class FilledProvider with ChangeNotifier {
             'paymentMethod': value['paymentMethod'],
             'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
             'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
+            'referenceNumber': value['referenceNumber'],
             'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
             'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0, // Add this li
             'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0, // Ensuring 'debitAmount' is a double

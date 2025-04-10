@@ -50,6 +50,7 @@ class _filledpageState extends State<filledpage> {
   final TextEditingController _dateController = TextEditingController();
   double _remainingBalance = 0.0; // Add this variable to store the remaining balance
   final TextEditingController _paymentController = TextEditingController();
+  TextEditingController _referenceController = TextEditingController();
 
 
   Future<void> _fetchRemainingBalance() async {
@@ -260,7 +261,8 @@ class _filledpageState extends State<filledpage> {
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
               pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
               pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
-              pw.Text('FilledId: $_filledId', style: const pw.TextStyle(fontSize: 12)),
+              // pw.Text('FilledId: $_filledId', style: const pw.TextStyle(fontSize: 12)),
+              pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
 
               pw.SizedBox(height: 10),
 
@@ -1358,6 +1360,8 @@ class _filledpageState extends State<filledpage> {
       _filledId = filled['filledNumber'];
       _paymentType = filled['paymentType'];
       _instantPaymentMethod = filled['paymentMethod'];
+      _referenceController.text = filled['referenceNumber'] ?? '';
+
 
       // Initialize rows with calculated totals and initial quantities
       _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
@@ -1510,22 +1514,22 @@ class _filledpageState extends State<filledpage> {
           //     style: TextStyle(color: Colors.white, fontSize: 14),
           //   ),
           // ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: FutureBuilder<String>(
-              future: widget.filled == null
-                  ? Provider.of<FilledProvider>(context, listen: false)
-                  .getNextFilledNumber()
-                  .then((num) => num.toString())
-                  : Future.value(widget.filled!['filledNumber']),
-              builder: (context, snapshot) {
-                return Text(
-                  '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                );
-              },
-            ),
-          ),
+          // Padding(
+          //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          //   child: FutureBuilder<String>(
+          //     future: widget.filled == null
+          //         ? Provider.of<FilledProvider>(context, listen: false)
+          //         .getNextFilledNumber()
+          //         .then((num) => num.toString())
+          //         : Future.value(widget.filled!['filledNumber']),
+          //     builder: (context, snapshot) {
+          //       return Text(
+          //         '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
+          //         style: const TextStyle(color: Colors.white, fontSize: 14),
+          //       );
+          //     },
+          //   ),
+          // ),
         ],      ),
       body: SingleChildScrollView(
         child: Consumer<CustomerProvider>(
@@ -1543,6 +1547,16 @@ class _filledpageState extends State<filledpage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  TextField(
+                    controller: _referenceController,
+                    decoration: InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                      border: const OutlineInputBorder(),
+                      isDense: true, // Reduces vertical height
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Adjust padding
+                    ),
+                    style: const TextStyle(fontSize: 14), // Optional: smaller font size
+                  ),
                   // Dropdown to select customer
                   Text(
                     languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
@@ -2115,6 +2129,7 @@ class _filledpageState extends State<filledpage> {
                                   discount: _discount,
                                   grandTotal: grandTotal,
                                   paymentType: _paymentType,
+                                  referenceNumber: _referenceController.text, // Add this
                                   paymentMethod: _instantPaymentMethod,
                                   items: _filledRows,
                                   createdAt: _dateController.text.isNotEmpty
@@ -2149,6 +2164,7 @@ class _filledpageState extends State<filledpage> {
                                   grandTotal: grandTotal,
                                   paymentType: _paymentType,
                                   paymentMethod: _instantPaymentMethod,
+                                  referenceNumber: _referenceController.text, // Add this
                                   items: _filledRows,
                                   createdAt: _dateController.text.isNotEmpty
                                       ? DateTime(

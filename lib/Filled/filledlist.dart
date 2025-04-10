@@ -1078,7 +1078,9 @@ class FilledList extends StatelessWidget {
               child: ListTile(
                 contentPadding: const EdgeInsets.all(8),
                 title: Text(
-                  '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['filledNumber']}',
+                  // '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['referenceNumber']}',
+                  '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['referenceNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+
                   style: TextStyle(
                     fontSize: isWideScreen ? 18 : 16,
                     fontWeight: FontWeight.bold,
@@ -1097,6 +1099,13 @@ class FilledList extends StatelessWidget {
                       style: TextStyle(
                         fontSize: isWideScreen ? 14 : 12,
                         color: Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['filledNumber']}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     // Row(

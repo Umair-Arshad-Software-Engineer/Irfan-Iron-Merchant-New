@@ -1149,8 +1149,10 @@ class InvoiceList extends StatelessWidget {
               child: ListTile(
                 contentPadding: const EdgeInsets.all(8),
                 title: Text(
+                  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+
                   // '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']}',
-                   '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                  //  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
                   style: TextStyle(
                     fontSize: isWideScreen ? 18 : 16,
                     fontWeight: FontWeight.bold,
@@ -1171,6 +1173,16 @@ class InvoiceList extends StatelessWidget {
                       style: TextStyle(
                         fontSize: isWideScreen ? 14 : 12,
                         color: Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+
+                      // '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']}',
+                      //  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                      style: TextStyle(
+                        fontSize:12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     // Row(

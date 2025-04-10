@@ -53,6 +53,7 @@ import 'package:intl/intl.dart';
     final TextEditingController _dateController = TextEditingController();
     double _remainingBalance = 0.0; // Add this variable to store the remaining balance
     TextEditingController _paymentController = TextEditingController();
+    TextEditingController _referenceController = TextEditingController();
 
 
     Future<void> _fetchRemainingBalance() async {
@@ -291,7 +292,9 @@ import 'package:intl/intl.dart';
                 pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
                 pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
                 pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
-                pw.Text('InvoiceId: $_invoiceId', style: const pw.TextStyle(fontSize: 12)),
+                // pw.Text('InvoiceId: $_invoiceId', style: const pw.TextStyle(fontSize: 12)),
+                // In _generatePDFBytes method, add this somewhere in the header section
+                pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
 
                 pw.SizedBox(height: 10),
 
@@ -1342,6 +1345,8 @@ import 'package:intl/intl.dart';
 
       if (widget.invoice != null) {
         _invoiceId = widget.invoice!['invoiceNumber'];
+        _referenceController.text = widget.invoice!['referenceNumber'] ?? '';
+
       }
       // Initialize customer provider and fetch customers
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
@@ -1424,6 +1429,7 @@ import 'package:intl/intl.dart';
       _discountController.dispose(); // Dispose discount controller
       _customerController.dispose();
       _dateController.dispose();
+      _referenceController.dispose();
       super.dispose();
     }
 
@@ -1565,24 +1571,28 @@ import 'package:intl/intl.dart';
                 //     },
                 //   ),
                 // ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: FutureBuilder<String>(
-                    future: widget.invoice == null
-                        ? Provider.of<InvoiceProvider>(context, listen: false)
-                        .getNextInvoiceNumber()
-                        .then((num) => num.toString())
-                        : Future.value(widget.invoice!['invoiceNumber']),
-                    builder: (context, snapshot) {
-                      return Text(
-                        '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                      );
-                    },
-                  ),
-                ),
+                // Padding(
+                //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                //   child: FutureBuilder<String>(
+                //     future: widget.invoice == null
+                //         ? Provider.of<InvoiceProvider>(context, listen: false)
+                //         .getNextInvoiceNumber()
+                //         .then((num) => num.toString())
+                //         : Future.value(widget.invoice!['invoiceNumber']),
+                //     builder: (context, snapshot) {
+                //       return Text(
+                //         '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
+                //         style: const TextStyle(color: Colors.white, fontSize: 14),
+                //       );
+                //     },
+                //   ),
+                // ),
+                // Add this somewhere in your form, perhaps near the date field
+
               ],
             ),
+
+
             body: SingleChildScrollView(
               child: Consumer<CustomerProvider>(
                 builder: (context, customerProvider, child) {
@@ -1598,6 +1608,17 @@ import 'package:intl/intl.dart';
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        TextField(
+                          controller: _referenceController,
+                          decoration: InputDecoration(
+                            labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                            border: const OutlineInputBorder(),
+                            isDense: true, // Reduces vertical height
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Adjust padding
+                          ),
+                          style: const TextStyle(fontSize: 14), // Optional: smaller font size
+                        ),
+
                         // Dropdown to select customer
                         Text(
                           languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
@@ -2213,6 +2234,7 @@ import 'package:intl/intl.dart';
                                         discount: _discount,
                                         grandTotal: grandTotal,
                                         paymentType: _paymentType,
+                                        referenceNumber: _referenceController.text, // Add this
                                         paymentMethod: _instantPaymentMethod,
                                         items: _invoiceRows,
                                         createdAt: _dateController.text.isNotEmpty
@@ -2247,6 +2269,7 @@ import 'package:intl/intl.dart';
                                         grandTotal: grandTotal,
                                         paymentType: _paymentType,
                                         paymentMethod: _instantPaymentMethod,
+                                        referenceNumber: _referenceController.text, // Add this
                                         // createdAt: _dateController.text.isNotEmpty
                                         //     ? DateTime.parse(_dateController.text).toIso8601String()
                                         //     : DateTime.now().toIso8601String(), // Pass the selected date
