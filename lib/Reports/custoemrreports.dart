@@ -257,7 +257,7 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                 return [
                   DateFormat('dd MMM yyyy, hh:mm a')
                       .format(DateTime.parse(transaction['date'])),
-                  transaction['invoiceNumber'] ?? 'N/A',
+                  transaction['referenceNumber'] ?? transaction['invoiceNumber'],
                   transaction['credit'] != 0.0
                       ? 'Invoice'
                       : (transaction['debit'] != 0.0 ? 'Bill' : '-'),
@@ -441,7 +441,8 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
         rows: transactions.map((transaction) {
           return DataRow(cells: [
             DataCell(Text(DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])), style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text(transaction['invoiceNumber'] ?? 'N/A', style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            // DataCell(Text(transaction['invoiceNumber'] ?? 'N/A', style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            DataCell(Text(transaction['referenceNumber'] ?? transaction['invoiceNumber'], style: TextStyle(fontSize: isMobile ? 10 : 12))), // Changed to referenceNumber
             DataCell(Text(transaction['credit'] < 0.0 ? 'Filled (Edited)' :
             (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
                 style: TextStyle(fontSize: isMobile ? 10 : 12))),

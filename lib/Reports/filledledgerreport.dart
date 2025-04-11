@@ -265,7 +265,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
         rows: transactions.map((transaction) {
           return DataRow(cells: [
             DataCell(Text(DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])), style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text(transaction['filledNumber'] ?? 'N/A', style: TextStyle(fontSize: isMobile ? 10 : 12))),
+            DataCell(Text(transaction['referenceNumber'] ?? transaction['filledNumber'], style: TextStyle(fontSize: isMobile ? 10 : 12))),
             DataCell(Text(transaction['credit'] < 0.0 ? 'Filled (Edited)' :
             (transaction['credit'] != 0.0 ? 'Filled' : 'Bill'),
                 style: TextStyle(fontSize: isMobile ? 10 : 12))),
@@ -381,7 +381,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
                 return [
                   DateFormat('dd MMM yyyy, hh:mm a')
                       .format(DateTime.parse(transaction['date'])),
-                  transaction['filledNumber'] ?? 'N/A',
+                  transaction['referenceNumber'] ?? transaction['filledNumber'],
                   transaction['credit'] != 0.0
                       ? 'Filled'
                       : (transaction['debit'] != 0.0 ? 'Bill' : '-'),

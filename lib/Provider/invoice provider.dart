@@ -15,27 +15,6 @@ class InvoiceProvider with ChangeNotifier {
 
 
 
-  // // Add to InvoiceProvider class
-  // Future<int> getNextInvoiceNumber() async {
-  //   final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
-  //   int maxNumber = 0;
-  //
-  //   if (snapshot.snapshot.exists) {
-  //     final allInvoices = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
-  //
-  //     allInvoices.forEach((key, value) {
-  //       final invoiceData = value as Map<dynamic, dynamic>;
-  //       if (invoiceData['numberType'] == 'sequential') {
-  //         final invoiceNumber = int.tryParse(invoiceData['invoiceNumber']?.toString() ?? '');
-  //         if (invoiceNumber != null && invoiceNumber > maxNumber) {
-  //           maxNumber = invoiceNumber;
-  //         }
-  //       }
-  //     });
-  //   }
-  //
-  //   return maxNumber + 1;
-  // }
   Future<int> getNextInvoiceNumber() async {
     final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
     int maxNumber = 0;
@@ -81,7 +60,8 @@ class InvoiceProvider with ChangeNotifier {
     required String createdAt, // Add this parameter
 
     required List<Map<String, dynamic>> items,
-  }) async {
+  })
+  async {
     try {
       final cleanedItems = items.map((item) {
         return {
@@ -114,6 +94,7 @@ class InvoiceProvider with ChangeNotifier {
       print('invoice saved');
       // Now update the ledger for this customer
       await _updateCustomerLedger(
+        referenceNumber: referenceNumber,
         customerId,
         creditAmount: grandTotal, // The invoice total as a credit
         debitAmount: 0.0, // No payment yet
@@ -150,7 +131,8 @@ class InvoiceProvider with ChangeNotifier {
     required String referenceNumber, // Add this
     required List<Map<String, dynamic>> items,
     required String createdAt,
-  }) async {
+  })
+  async {
     try {
       // Fetch the old invoice data
       final oldInvoice = await getInvoiceById(invoiceId);
@@ -371,7 +353,9 @@ class InvoiceProvider with ChangeNotifier {
         required double debitAmount,
         required double remainingBalance,
         required String invoiceNumber,
-      }) async {
+        required String referenceNumber
+      })
+  async {
     try {
       final customerLedgerRef = _db.child('ledger').child(customerId);
 
@@ -392,6 +376,7 @@ class InvoiceProvider with ChangeNotifier {
 
       // Ledger data to be saved
       final ledgerData = {
+        'referenceNumber':referenceNumber,
         'invoiceNumber': invoiceNumber,
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
@@ -439,7 +424,8 @@ class InvoiceProvider with ChangeNotifier {
         String? bankId,
         String? bankName,
 
-      }) async {
+      })
+  async {
     try {
       // Fetch the current invoice data from the database
       final invoiceSnapshot = await _db.child('invoices').child(invoiceId).get();
@@ -609,6 +595,7 @@ class InvoiceProvider with ChangeNotifier {
         debitAmount: paymentAmount,
         remainingBalance: grandTotal - updatedDebit,
         invoiceNumber: invoice['invoiceNumber'],
+        referenceNumber: invoice['referenceNumber']
       );
 
       // Refresh the invoices list
@@ -669,7 +656,8 @@ class InvoiceProvider with ChangeNotifier {
     required String paymentKey,
     required String paymentMethod,
     required double paymentAmount,
-  }) async {
+  })
+  async {
     try {
       final invoiceRef = _db.child('invoices').child(invoiceId);
       print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
@@ -875,7 +863,8 @@ class InvoiceProvider with ChangeNotifier {
     required double newPaymentAmount,
     required String newDescription,
     required Uint8List? newImageBytes,
-  }) async {
+  })
+  async {
     try {
       final invoiceRef = _db.child('invoices').child(invoiceId);
 
@@ -907,6 +896,7 @@ class InvoiceProvider with ChangeNotifier {
         // Step 3: Update the customer ledger
         final customerId = invoice['customerId'];
         final invoiceNumber = invoice['invoiceNumber'];
+        final referenceNumber = invoice['referenceNumber'];
         final grandTotal = _parseToDouble(invoice['grandTotal']);
 
         await _updateCustomerLedger(
@@ -915,6 +905,7 @@ class InvoiceProvider with ChangeNotifier {
           debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
           remainingBalance: grandTotal - updatedDebit,
           invoiceNumber: invoiceNumber,
+          referenceNumber:referenceNumber,
         );
       }
 

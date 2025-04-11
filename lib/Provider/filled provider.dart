@@ -95,6 +95,7 @@ class FilledProvider with ChangeNotifier {
       print('filled saved');
       // Now update the ledger for this customer
       await _updateCustomerLedger(
+        referenceNumber: referenceNumber,
         customerId,
         creditAmount: grandTotal, // The filled total as a credit
         debitAmount: 0.0, // No payment yet
@@ -377,6 +378,8 @@ class FilledProvider with ChangeNotifier {
         required double debitAmount,
         required double remainingBalance,
         required String filledNumber,
+        required String referenceNumber
+
       })
   async {
     try {
@@ -399,6 +402,7 @@ class FilledProvider with ChangeNotifier {
 
       // Ledger data to be saved
       final ledgerData = {
+        'referenceNumber':referenceNumber,
         'filledNumber': filledNumber,
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
@@ -594,6 +598,7 @@ class FilledProvider with ChangeNotifier {
 
       // Update the ledger with the calculated remaining balance
       await _updateCustomerLedger(
+        referenceNumber: filled['referenceNumber'],
         filled['customerId'],
         creditAmount: 0.0,
         debitAmount: paymentAmount,
@@ -902,13 +907,16 @@ class FilledProvider with ChangeNotifier {
         final customerId = filled['customerId'];
         final filledNumber = filled['filledNumber'];
         final grandTotal = _parseToDouble(filled['grandTotal']);
+        final referenceNumber = filled['referenceNumber'];
 
         await _updateCustomerLedger(
+
           customerId,
           creditAmount: 0.0,
           debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
           remainingBalance: grandTotal - updatedDebit,
           filledNumber: filledNumber,
+          referenceNumber:referenceNumber,
         );
       }
 

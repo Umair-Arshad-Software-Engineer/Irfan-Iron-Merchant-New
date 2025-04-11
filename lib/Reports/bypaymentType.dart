@@ -103,6 +103,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
           for (var payment in cashPayments.values) {
             reportData.add({
               'invoiceId': invoiceId,
+              'referenceNumber':invoice['referenceNumber'],
               'customerId': invoice['customerId'],
               'customerName': invoice['customerName'],
               'paymentType': invoice['paymentType'],
@@ -674,7 +675,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                           return DataRow(cells: [
                             DataCell(Text(invoice['customerName'] ?? 'N/A')),
                             DataCell(Text(invoice['paymentType'] ?? 'N/A')),
-                            DataCell(Text(invoice['invoiceId'] ?? 'N/A')),
+                            DataCell(Text(invoice['referenceNumber'] ?? invoice['invoiceId'])),
                             // DataCell(Text(invoice['paymentMethod'] ?? 'N/A')),
                             DataCell(Text(
                                 (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)

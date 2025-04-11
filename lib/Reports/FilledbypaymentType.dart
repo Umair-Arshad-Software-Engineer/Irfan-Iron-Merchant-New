@@ -104,6 +104,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
           for (var payment in cashPayments.values) {
             reportData.add({
               'filledId': filledId,
+              'referenceNumber': filled['referenceNumber'],
               'customerId': filled['customerId'],
               'customerName': filled['customerName'],
               'paymentType': filled['paymentType'],

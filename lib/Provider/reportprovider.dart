@@ -176,6 +176,7 @@ class CustomerReportProvider with ChangeNotifier {
               'id': key,
               'date': value['createdAt'],
               'invoiceNumber': value['invoiceNumber'],
+              'referenceNumber': value['referenceNumber'],
               'debit': debit,
               'credit': credit,
             });
