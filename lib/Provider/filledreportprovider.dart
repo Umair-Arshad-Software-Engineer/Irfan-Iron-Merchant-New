@@ -116,6 +116,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
             'id': key,
             'date': value['createdAt'],
             'filledNumber': value['filledNumber'],
+            'referenceNumber': value['referenceNumber'],
             'debit': debit,
             'credit': credit,
           });

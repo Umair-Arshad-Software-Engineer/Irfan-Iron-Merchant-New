@@ -457,7 +457,7 @@ class InvoiceProvider with ChangeNotifier {
         final bankRef = _db.child('banks/$bankId/transactions');
         final transactionData = {
           'amount': paymentAmount,
-          'description': description ?? 'Invoice Payment: ${invoice['invoiceNumber']}',
+          'description': description ?? 'Invoice Payment: ${invoice['referenceNumber']}',
           'type': 'cash_in',
           'timestamp': paymentDate.millisecondsSinceEpoch,
           'invoiceId': invoiceId,
@@ -508,7 +508,7 @@ class InvoiceProvider with ChangeNotifier {
 
         final cashbookEntry = CashbookEntry(
           id: cashbookEntryId,
-          description: description ?? 'Invoice Payment ${invoice['invoiceNumber']}',
+          description: description ?? 'Invoice Payment ${invoice['referenceNumber']}',
           amount: paymentAmount,
           dateTime: paymentDate,
           type: 'cash_in',

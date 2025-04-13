@@ -61,6 +61,152 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
   }
 
   // Fetch report data based on filters
+//   Future<void> _fetchReportData() async {
+//     try {
+//       DatabaseReference _filledsRef = _db.ref('filled'); // Reference to 'filled' node
+//
+//       final filledsSnapshot = await _filledsRef.get(); // Fetch data
+//
+//       if (!filledsSnapshot.exists) {
+//         throw Exception("No filled found.");
+//       }
+//
+//       List<Map<String, dynamic>> reportData = [];
+//
+//       // Iterate through all filled
+//       for (var filledsSnapshot in filledsSnapshot.children) {
+//         final filledId = filledsSnapshot.key;
+//         final filled = Map<String, dynamic>.from(filledsSnapshot.value as Map);
+//
+//         // Filter by customer ID if selected
+//         if (_selectedCustomerId != null && filled['customerId'] != _selectedCustomerId) {
+//           continue;
+//         }
+//
+//         // Filter by payment type if selected
+//         if (_selectedPaymentType != 'all' && filled['paymentType'] != _selectedPaymentType) {
+//           continue;
+//         }
+//
+//         // Filter by date range if selected
+//         if (_selectedDateRange != null) {
+//           DateTime filledDate = DateTime.parse(filled['createdAt']);
+//           if (filledDate.isBefore(_selectedDateRange!.start) || filledDate.isAfter(_selectedDateRange!.end)) {
+//             continue;
+//           }
+//         }
+//
+//         // Fetch and process cash payments if the selected payment method includes 'cash'
+//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'cash') {
+//           final cashPayments = filled['cashPayments'] != null
+//               ? Map<String, dynamic>.from(filled['cashPayments'])
+//               : {};
+//           for (var payment in cashPayments.values) {
+//             reportData.add({
+//               'filledId': filledId,
+//               'referenceNumber': filled['referenceNumber'],
+//               'customerId': filled['customerId'],
+//               'customerName': filled['customerName'],
+//               'paymentType': filled['paymentType'],
+//               'paymentMethod': 'Cash',
+//               'amount': payment['amount'],
+//               'date': payment['date'],
+//               'createdAt': filled['createdAt'],
+//             });
+//           }
+//         }
+//
+//         // Fetch and process online payments if the selected payment method includes 'online'
+//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'online') {
+//           final onlinePayments = filled['onlinePayments'] != null
+//               ? Map<String, dynamic>.from(filled['onlinePayments'])
+//               : {};
+//           for (var payment in onlinePayments.values) {
+//             reportData.add({
+//               'filledId': filledId,
+//               'referenceNumber': filled['referenceNumber'],
+//               'customerId': filled['customerId'],
+//               'customerName': filled['customerName'],
+//               'paymentType': filled['paymentType'],
+//               'paymentMethod': 'Online',
+//               'amount': payment['amount'],
+//               'date': payment['date'],
+//               'createdAt': filled['createdAt'],
+//             });
+//           }
+//         }
+//
+//         // Fetch and process check payments if the selected payment method includes 'check'
+//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'check') {
+//           final checkPayments = filled['checkPayments'] != null
+//               ? Map<String, dynamic>.from(filled['checkPayments'])
+//               : {};
+//           for (var payment in checkPayments.values) {
+//             reportData.add({
+//               'filledId': filledId,
+//               'referenceNumber': filled['referenceNumber'],
+//               'customerId': filled['customerId'],
+//               'customerName': filled['customerName'],
+//               'paymentType': filled['paymentType'],
+//               'paymentMethod': 'Check',
+//               'amount': payment['amount'],
+//               'date': payment['date'],
+//               'createdAt': filled['createdAt'],
+//             });
+//           }
+//         }
+//         // Bank Payments
+//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'bank') {
+//           final bankPayments = filled['bankPayments'] != null
+//               ? Map<String, dynamic>.from(filled['bankPayments'])
+//               : {};
+//           for (var payment in bankPayments.values) {
+//             reportData.add({
+//               'filledId': filledId,
+//               'referenceNumber': filled['referenceNumber'],
+//               'customerId': filled['customerId'],
+//               'customerName': filled['customerName'],
+//               'paymentType': filled['paymentType'],
+//               'paymentMethod': 'Bank',
+//               'bankName': payment['bankName'], // Add bank name
+//               'amount': payment['amount'],
+//               'date': payment['date'],
+//               'createdAt': filled['createdAt'],
+//             });
+//           }
+//         }
+//
+// // Slip Payments
+//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'slip') {
+//           final slipPayments = filled['slipPayments'] != null
+//               ? Map<String, dynamic>.from(filled['slipPayments'])
+//               : {};
+//           for (var payment in slipPayments.values) {
+//             reportData.add({
+//               'filledId': filledId,
+//               'referenceNumber': filled['referenceNumber'],
+//               'customerId': filled['customerId'],
+//               'customerName': filled['customerName'],
+//               'paymentType': filled['paymentType'],
+//               'paymentMethod': 'Slip',
+//               'amount': payment['amount'],
+//               'date': payment['date'],
+//               'createdAt': filled['createdAt'],
+//             });
+//           }
+//         }
+//       }
+//
+//       // Update the report data with the fetched information
+//       setState(() {
+//         _reportData = reportData;
+//       });
+//     } catch (e) {
+//       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to fetch report: $e')));
+//     }
+//   }
+
+  // Fetch report data based on filters
   Future<void> _fetchReportData() async {
     try {
       DatabaseReference _filledsRef = _db.ref('filled'); // Reference to 'filled' node
@@ -88,20 +234,19 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
           continue;
         }
 
-        // Filter by date range if selected
-        if (_selectedDateRange != null) {
-          DateTime filledDate = DateTime.parse(filled['createdAt']);
-          if (filledDate.isBefore(_selectedDateRange!.start) || filledDate.isAfter(_selectedDateRange!.end)) {
-            continue;
-          }
-        }
-
         // Fetch and process cash payments if the selected payment method includes 'cash'
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'cash') {
           final cashPayments = filled['cashPayments'] != null
               ? Map<String, dynamic>.from(filled['cashPayments'])
               : {};
           for (var payment in cashPayments.values) {
+            // Check payment date against selected date range
+            DateTime paymentDate = DateTime.parse(payment['date']);
+            if (_selectedDateRange != null &&
+                (paymentDate.isBefore(_selectedDateRange!.start) ||
+                    paymentDate.isAfter(_selectedDateRange!.end))) {
+              continue;
+            }
             reportData.add({
               'filledId': filledId,
               'referenceNumber': filled['referenceNumber'],
@@ -122,8 +267,16 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
               ? Map<String, dynamic>.from(filled['onlinePayments'])
               : {};
           for (var payment in onlinePayments.values) {
+            // Check payment date against selected date range
+            DateTime paymentDate = DateTime.parse(payment['date']);
+            if (_selectedDateRange != null &&
+                (paymentDate.isBefore(_selectedDateRange!.start) ||
+                    paymentDate.isAfter(_selectedDateRange!.end))) {
+              continue;
+            }
             reportData.add({
               'filledId': filledId,
+              'referenceNumber': filled['referenceNumber'],
               'customerId': filled['customerId'],
               'customerName': filled['customerName'],
               'paymentType': filled['paymentType'],
@@ -141,8 +294,16 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
               ? Map<String, dynamic>.from(filled['checkPayments'])
               : {};
           for (var payment in checkPayments.values) {
+            // Check payment date against selected date range
+            DateTime paymentDate = DateTime.parse(payment['date']);
+            if (_selectedDateRange != null &&
+                (paymentDate.isBefore(_selectedDateRange!.start) ||
+                    paymentDate.isAfter(_selectedDateRange!.end))) {
+              continue;
+            }
             reportData.add({
               'filledId': filledId,
+              'referenceNumber': filled['referenceNumber'],
               'customerId': filled['customerId'],
               'customerName': filled['customerName'],
               'paymentType': filled['paymentType'],
@@ -153,19 +314,28 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
             });
           }
         }
+
         // Bank Payments
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'bank') {
           final bankPayments = filled['bankPayments'] != null
               ? Map<String, dynamic>.from(filled['bankPayments'])
               : {};
           for (var payment in bankPayments.values) {
+            // Check payment date against selected date range
+            DateTime paymentDate = DateTime.parse(payment['date']);
+            if (_selectedDateRange != null &&
+                (paymentDate.isBefore(_selectedDateRange!.start) ||
+                    paymentDate.isAfter(_selectedDateRange!.end))) {
+              continue;
+            }
             reportData.add({
               'filledId': filledId,
+              'referenceNumber': filled['referenceNumber'],
               'customerId': filled['customerId'],
               'customerName': filled['customerName'],
               'paymentType': filled['paymentType'],
               'paymentMethod': 'Bank',
-              'bankName': payment['bankName'], // Add bank name
+              'bankName': payment['bankName'],
               'amount': payment['amount'],
               'date': payment['date'],
               'createdAt': filled['createdAt'],
@@ -173,14 +343,22 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
           }
         }
 
-// Slip Payments
+        // Slip Payments
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'slip') {
           final slipPayments = filled['slipPayments'] != null
               ? Map<String, dynamic>.from(filled['slipPayments'])
               : {};
           for (var payment in slipPayments.values) {
+            // Check payment date against selected date range
+            DateTime paymentDate = DateTime.parse(payment['date']);
+            if (_selectedDateRange != null &&
+                (paymentDate.isBefore(_selectedDateRange!.start) ||
+                    paymentDate.isAfter(_selectedDateRange!.end))) {
+              continue;
+            }
             reportData.add({
               'filledId': filledId,
+              'referenceNumber': filled['referenceNumber'],
               'customerId': filled['customerId'],
               'customerName': filled['customerName'],
               'paymentType': filled['paymentType'],
@@ -286,10 +464,10 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
   Future<pw.MemoryImage> _createTextImage(String text) async {
     // Create a custom painter with the Urdu text
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromPoints(Offset(0, 0), Offset(500, 50)));
+    final canvas = Canvas(recorder, Rect.fromPoints(const Offset(0, 0), const Offset(500, 50)));
     final paint = Paint()..color = Colors.black;
 
-    final textStyle = TextStyle(fontSize: 18, fontFamily: 'JameelNoori',color: Colors.black,fontWeight: FontWeight.bold);  // Set custom font here if necessary
+    final textStyle = const TextStyle(fontSize: 18, fontFamily: 'JameelNoori',color: Colors.black,fontWeight: FontWeight.bold);  // Set custom font here if necessary
     final textSpan = TextSpan(text: text, style: textStyle);
     final textPainter = TextPainter(
       text: textSpan,
@@ -298,7 +476,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
     );
 
     textPainter.layout();
-    textPainter.paint(canvas, Offset(0, 0));
+    textPainter.paint(canvas, const Offset(0, 0));
 
     // Create image from the canvas
     final picture = recorder.endRecording();
@@ -418,7 +596,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
             // Table with larger font size
             pw.Table.fromTextArray(
               context: context,
-              cellStyle: pw.TextStyle(fontSize: 12), // Increase table font size
+              cellStyle: const pw.TextStyle(fontSize: 12), // Increase table font size
               headerStyle: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold), // Increase header font size
               data: [
                 [
@@ -469,10 +647,10 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
         actions: [
           IconButton(onPressed: (){
             _generateAndPrintPDF();
-          }, icon: Icon(Icons.picture_as_pdf,color: Colors.white,)),
+          }, icon: const Icon(Icons.picture_as_pdf,color: Colors.white,)),
           IconButton(onPressed: (){
             _sharePdf();
-          }, icon: Icon(Icons.share,color: Colors.white,))
+          }, icon: const Icon(Icons.share,color: Colors.white,))
         ],
         backgroundColor: Colors.teal,
       ),
@@ -704,7 +882,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                             cells: [
                               DataCell(Text(filled['customerName'] ?? 'N/A')),
                               DataCell(Text(filled['paymentType'] ?? 'N/A')),
-                              DataCell(Text(filled['filledId'] ?? 'N/A')),
+                              DataCell(Text(filled['referenceNumber'] ?? filled['filledId'])),
                               // DataCell(Text(filled['paymentMethod'] ?? 'N/A')),
                               DataCell(Text(
                                   (filled['paymentMethod'] == 'Bank' && filled['bankName'] != null)

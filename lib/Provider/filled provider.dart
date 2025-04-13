@@ -470,7 +470,7 @@ class FilledProvider with ChangeNotifier {
         final bankRef = _db.child('banks/$bankId/transactions');
         final transactionData = {
           'amount': paymentAmount,
-          'description': description ?? 'Filled Payment: ${filled['filledNumber']}',
+          'description': description ?? 'Filled Payment: ${filled['referenceNumber']}',
           'type': 'cash_in',
           'timestamp': paymentDate.millisecondsSinceEpoch,
           'filledId': filledId,
@@ -520,7 +520,7 @@ class FilledProvider with ChangeNotifier {
 
         final cashbookEntry = CashbookEntry(
           id: cashbookEntryId,
-          description: description ?? 'Filled Payment ${filled['filledNumber']}',
+          description: description ?? 'Filled Payment ${filled['referenceNumber']}',
           amount: paymentAmount,
           dateTime: paymentDate,
           type: 'cash_in',

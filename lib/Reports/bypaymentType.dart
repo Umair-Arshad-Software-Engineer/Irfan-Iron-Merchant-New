@@ -123,6 +123,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
           for (var payment in onlinePayments.values) {
             reportData.add({
               'invoiceId': invoiceId,
+              'referenceNumber':invoice['referenceNumber'],
               'customerId': invoice['customerId'],
               'customerName': invoice['customerName'],
               'paymentType': invoice['paymentType'],
@@ -142,6 +143,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
           for (var payment in checkPayments.values) {
             reportData.add({
               'invoiceId': invoiceId,
+              'referenceNumber':invoice['referenceNumber'],
               'customerId': invoice['customerId'],
               'customerName': invoice['customerName'],
               'paymentType': invoice['paymentType'],
@@ -160,6 +162,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
           for (var payment in bankPayments.values) {
             reportData.add({
               'invoiceId': invoiceId,
+              'referenceNumber':invoice['referenceNumber'],
               'customerId': invoice['customerId'],
               'customerName': invoice['customerName'],
               'paymentType': invoice['paymentType'],
@@ -180,6 +183,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
           for (var payment in slipPayments.values) {
             reportData.add({
               'invoiceId': invoiceId,
+              'referenceNumber':invoice['referenceNumber'],
               'customerId': invoice['customerId'],
               'customerName': invoice['customerName'],
               'paymentType': invoice['paymentType'],
@@ -467,7 +471,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
       appBar: AppBar(
          title: Text(
              // 'Payment Type Report'
-             languageProvider.isEnglish ? 'Payment Type Report' : 'ادائیگی کی قسم کی رپورٹ', // Dynamic text based on language
+             languageProvider.isEnglish ? 'Payment Type Report For Sarya' : 'ادائیگی کی قسم کی رپورٹ', // Dynamic text based on language
              style: const TextStyle(color: Colors.white)
          ),
         backgroundColor: Colors.teal,

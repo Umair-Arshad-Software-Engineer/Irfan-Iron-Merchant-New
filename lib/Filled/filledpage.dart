@@ -1217,17 +1217,17 @@ class _filledpageState extends State<filledpage> {
                       // }
 
                       // Show success message
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              languageProvider.isEnglish
-                                  ? 'Payment processed and cash book updated'
-                                  : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
-                            ),
-                          ),
-                        );
-                      }
+                      // if (mounted) {
+                      //   ScaffoldMessenger.of(context).showSnackBar(
+                      //     SnackBar(
+                      //       content: Text(
+                      //         languageProvider.isEnglish
+                      //             ? 'Payment processed and cash book updated'
+                      //             : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
+                      //       ),
+                      //     ),
+                      //   );
+                      // }
                       Navigator.of(context).pop();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1547,16 +1547,36 @@ class _filledpageState extends State<filledpage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
+                  // Reference Number Field
+                  TextFormField(
                     controller: _referenceController,
                     decoration: InputDecoration(
                       labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
                       border: const OutlineInputBorder(),
-                      isDense: true, // Reduces vertical height
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Adjust padding
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    style: const TextStyle(fontSize: 14), // Optional: smaller font size
+                    readOnly: widget.filled != null, // Make it read-only if editing existing filled
+                    style: const TextStyle(fontSize: 14),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return languageProvider.isEnglish
+                            ? 'Reference number is required'
+                            : 'ریفرنس نمبر درکار ہے';
+                      }
+                      return null;
+                    },
                   ),
+                  // TextField(
+                  //   controller: _referenceController,
+                  //   decoration: InputDecoration(
+                  //     labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                  //     border: const OutlineInputBorder(),
+                  //     isDense: true, // Reduces vertical height
+                  //     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Adjust padding
+                  //   ),
+                  //   style: const TextStyle(fontSize: 14), // Optional: smaller font size
+                  // ),
                   // Dropdown to select customer
                   Text(
                     languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
@@ -1946,6 +1966,22 @@ class _filledpageState extends State<filledpage> {
                             });
 
                             try {
+
+                              // Validate reference number
+                              if (_referenceController.text.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      languageProvider.isEnglish
+                                          ? 'Please enter a reference number'
+                                          : 'براہ کرم رفرنس نمبر درج کریں',
+                                    ),
+                                  ),
+                                );
+                                setState(() => _isButtonPressed = false);
+                                return;
+                              }
+
                               // Validate customer selection
                               if (_selectedCustomerId == null || _selectedCustomerName == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(

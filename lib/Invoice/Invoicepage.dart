@@ -1245,17 +1245,17 @@ import 'package:intl/intl.dart';
                           bankId: _selectedBankId,
                           bankName: _selectedBankName,
                         );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                languageProvider.isEnglish
-                                    ? 'Payment processed and cash book updated'
-                                    : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
-                              ),
-                            ),
-                          );
-                        }
+                        // if (mounted) {
+                        //   ScaffoldMessenger.of(context).showSnackBar(
+                        //     SnackBar(
+                        //       content: Text(
+                        //         languageProvider.isEnglish
+                        //             ? 'Payment processed and cash book updated'
+                        //             : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
+                        //       ),
+                        //     ),
+                        //   );
+                        // }
                         Navigator.of(context).pop();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1608,15 +1608,25 @@ import 'package:intl/intl.dart';
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextField(
+                        // Reference Number Field
+                        TextFormField(
                           controller: _referenceController,
                           decoration: InputDecoration(
                             labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
                             border: const OutlineInputBorder(),
-                            isDense: true, // Reduces vertical height
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Adjust padding
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
-                          style: const TextStyle(fontSize: 14), // Optional: smaller font size
+                          readOnly: widget.invoice != null,
+                          style: const TextStyle(fontSize: 14),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return languageProvider.isEnglish
+                                  ? 'Reference number is required'
+                                  : 'ریفرنس نمبر درکار ہے';
+                            }
+                            return null;
+                          },
                         ),
 
                         // Dropdown to select customer
@@ -2048,6 +2058,21 @@ import 'package:intl/intl.dart';
                                   });
 
                                   try {
+                                    // Validate reference number
+                                    if (_referenceController.text.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            languageProvider.isEnglish
+                                                ? 'Please enter a reference number'
+                                                : 'براہ کرم رفرنس نمبر درج کریں',
+                                          ),
+                                        ),
+                                      );
+                                      setState(() => _isButtonPressed = false);
+                                      return;
+                                    }
+
                                     // Validate customer selection
                                     if (_selectedCustomerId == null || _selectedCustomerName == null) {
                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -2061,6 +2086,7 @@ import 'package:intl/intl.dart';
                                       );
                                       return;
                                     }
+
 
                                     // Validate payment type
                                     if (_paymentType == null) {
