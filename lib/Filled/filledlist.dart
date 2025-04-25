@@ -31,6 +31,23 @@ class _filledListpageState extends State<filledListpage> {
   List<Map<String, dynamic>> _filteredFilled = [];
 
   @override
+  void initState() {//
+    super.initState();
+    debugPrint('Initializing filled list page');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+      debugPrint('Starting data fetch...');
+
+      try {
+        await filledProvider.fetchFilled();
+        debugPrint('Data fetch completed. Items: ${filledProvider.filled.length}');
+      } catch (e) {
+        debugPrint('Error in initState fetch: $e');
+      }
+    });
+  }
+  @override
   Widget build(BuildContext context) {
     final filledProvider = Provider.of<FilledProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -257,7 +274,8 @@ class _filledListpageState extends State<filledListpage> {
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }//s
 
-  DateTime _parsePaymentDate(dynamic date) {
+  DateTime _parsePaymentDate(dynamic date)
+  {
     if (date is String) {
       // If the date is a string, try parsing it directly
       return DateTime.tryParse(date) ?? DateTime.now();

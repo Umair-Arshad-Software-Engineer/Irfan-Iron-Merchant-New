@@ -44,7 +44,6 @@ class FilledProvider with ChangeNotifier {
     return number.length > 10 && int.tryParse(number) != null;
   }
 
-
   Future<void> saveFilled({
     required String filledId, // Accepts the filled ID (instead of using push)
     required String filledNumber,
@@ -56,23 +55,32 @@ class FilledProvider with ChangeNotifier {
     required String paymentType,
     String? paymentMethod, // For instant payments
     required String referenceNumber, // Add this
-
     required List<Map<String, dynamic>> items,
     required String createdAt, // Add this parameter
   })
   async {
     try {
-      final cleanedItems = items.map((item) {
-        return {
+      // final cleanedItems = items.map((item) {
+      //   return {
+      //     'itemName': item['itemName'],
+      //     'rate': item['rate'] ?? 0.0,
+      //     'qty': item['qty'] ?? 0.0,
+      //     // 'weight': item['weight'] ?? 0.0,
+      //     'description': item['description'] ?? '',
+      //     'total': item['total'],
+      //   };
+      // }).toList();
+      // Convert items to a List without keys
+      final cleanedItems = [];
+      for (var item in items) {
+        cleanedItems.add({
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
-          // 'weight': item['weight'] ?? 0.0,
           'description': item['description'] ?? '',
           'total': item['total'],
-        };
-      }).toList();
-
+        });
+      }
       final filledData = {
         'referenceNumber': referenceNumber, // Add this
         'filledNumber': filledNumber,
@@ -83,12 +91,11 @@ class FilledProvider with ChangeNotifier {
         'grandTotal': grandTotal,
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
-        'items': cleanedItems,
+        // 'items': cleanedItems,
+        'items': cleanedItems, // Store as pure list
         // 'createdAt': DateTime.now().toIso8601String(),
         'createdAt': createdAt, // Use the provided date
         'numberType': _isTimestampNumber(filledNumber) ? 'timestamp' : 'sequential',
-
-
       };
       // Save the filled at the specified filledId path
       await _db.child('filled').child(filledId).set(filledData);
@@ -174,7 +181,6 @@ class FilledProvider with ChangeNotifier {
         'updatedAt': DateTime.now().toIso8601String(),
         'createdAt': createdAt,
         'numberType': isTimestamp ? 'timestamp' : 'sequential',
-
       };
 
       // Update the filled in the database
@@ -249,39 +255,71 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+  // Future<void> fetchFilled() async {
+  //   try {
+  //     final snapshot = await _db.child('filled').get();
+  //     if (snapshot.exists) {
+  //       print('Fetched filled data: ${snapshot.value}'); // Debug log
+  //       _filled = [];
+  //       final data = snapshot.value as Map<dynamic, dynamic>;
+  //       data.forEach((key, value) {
+  //         _filled.add({
+  //           'id': key, // This is the unique ID for each filled
+  //           'filledNumber': value['filledNumber'],
+  //           'customerId': value['customerId'],
+  //           'customerName': value['customerName'],
+  //           'subtotal': (value['subtotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'subtotal' is a double
+  //           'discount': (value['discount'] as num?)?.toDouble() ?? 0.0,   // Ensuring 'discount' is a double
+  //           'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'grandTotal' is a double
+  //           'paymentType': value['paymentType'],
+  //           'paymentMethod': value['paymentMethod'],
+  //           'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
+  //           'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
+  //           'referenceNumber': value['referenceNumber'],
+  //           'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
+  //           'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0, // Add this li
+  //           'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0, // Ensuring 'debitAmount' is a double
+  //           'debitAt': value['debitAt'],
+  //           'items': List<Map<String, dynamic>>.from(
+  //             (value['items'] as List).map((item) => Map<String, dynamic>.from(item)),
+  //           ),
+  //           'createdAt': value['createdAt'] is int
+  //               ? DateTime.fromMillisecondsSinceEpoch(value['createdAt']).toIso8601String()
+  //               : value['createdAt'],
+  //           'remainingBalance': (value['remainingBalance'] as num?)?.toDouble() ?? 0.0, // Ensuring 'remainingBalance' is a double
+  //         });
+  //       });
+  //       notifyListeners();
+  //     }
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch filled: $e');
+  //   }
+  // }
+
   Future<void> fetchFilled() async {
     try {
       final snapshot = await _db.child('filled').get();
       if (snapshot.exists) {
+        // print('Fetched filled data: ${snapshot.value}'); // Debug log
         _filled = [];
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        data.forEach((key, value) {
-          _filled.add({
-            'id': key, // This is the unique ID for each filled
-            'filledNumber': value['filledNumber'],
-            'customerId': value['customerId'],
-            'customerName': value['customerName'],
-            'subtotal': (value['subtotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'subtotal' is a double
-            'discount': (value['discount'] as num?)?.toDouble() ?? 0.0,   // Ensuring 'discount' is a double
-            'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'grandTotal' is a double
-            'paymentType': value['paymentType'],
-            'paymentMethod': value['paymentMethod'],
-            'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'referenceNumber': value['referenceNumber'],
-            'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0, // Add this li
-            'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0, // Ensuring 'debitAmount' is a double
-            'debitAt': value['debitAt'],
-            'items': List<Map<String, dynamic>>.from(
-              (value['items'] as List).map((item) => Map<String, dynamic>.from(item)),
-            ),
-            'createdAt': value['createdAt'] is int
-                ? DateTime.fromMillisecondsSinceEpoch(value['createdAt']).toIso8601String()
-                : value['createdAt'],
-            'remainingBalance': (value['remainingBalance'] as num?)?.toDouble() ?? 0.0, // Ensuring 'remainingBalance' is a double
+
+        final value = snapshot.value;
+
+        if (value is Map) {
+          // Handle Map structure
+          value.forEach((key, val) {
+            _filled.add(_parseFilledItem(key, val));
           });
-        });
+        } else if (value is List) {
+          // Handle List structure
+          for (int i = 0; i < value.length; i++) {
+            final val = value[i];
+            if (val != null) {
+              _filled.add(_parseFilledItem(i.toString(), val));
+            }
+          }
+        }
+
         notifyListeners();
       }
     } catch (e) {
@@ -289,21 +327,95 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+// Helper method to parse a filled item
+  Map<String, dynamic> _parseFilledItem(String key, dynamic value) {
+    // Handle items conversion
+    dynamic itemsData = value['items'];
+    List<Map<String, dynamic>> itemsList = [];
+
+    if (itemsData is Map) {
+      // Convert Firebase map-with-keys to list
+      itemsList = (itemsData as Map<dynamic, dynamic>).values
+          .map<Map<String, dynamic>>((item) => Map<String, dynamic>.from(item))
+          .toList();
+    } else if (itemsData is List) {
+      // Already a proper list
+      itemsList = itemsData.map<Map<String, dynamic>>((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    return {
+      'id': key,
+      'filledNumber': value['filledNumber'],
+      'customerId': value['customerId'],
+      'customerName': value['customerName'],
+      'subtotal': (value['subtotal'] as num?)?.toDouble() ?? 0.0,
+      'discount': (value['discount'] as num?)?.toDouble() ?? 0.0,
+      'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0,
+      'paymentType': value['paymentType'],
+      'paymentMethod': value['paymentMethod'],
+      'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
+      'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
+      'referenceNumber': value['referenceNumber'],
+      'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
+      'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0,
+      'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0,
+      'debitAt': value['debitAt'],
+      'items': List<Map<String, dynamic>>.from(
+        (value['items'] as List).map((item) => Map<String, dynamic>.from(item)),
+      ),
+      'createdAt': value['createdAt'] is int
+          ? DateTime.fromMillisecondsSinceEpoch(value['createdAt']).toIso8601String()
+          : value['createdAt'],
+      'remainingBalance': (value['remainingBalance'] as num?)?.toDouble() ?? 0.0,
+    };
+  }
+
 
   // Fetch items from Firebase
-  Future<void> fetchItems() async {
-    try {
-      final snapshot = await _db.child('items').get();
-      if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        _items = data.entries.map((entry) {
+  // Future<void> fetchItems() async {
+  //   try {
+  //     final snapshot = await _db.child('items').get();
+  //     if (snapshot.exists) {
+  //       final data = snapshot.value as Map<dynamic, dynamic>;
+  //       _items = data.entries.map((entry) {
+  //         return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
+  //       }).toList();
+  //       notifyListeners();
+  //     }
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch items: $e');
+  //   }
+  // }
+  Future<List<Item>> fetchItems() async {
+    final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
+    final DatabaseEvent snapshot = await itemsRef.once();
+
+    List<Item> items = [];
+
+    if (snapshot.snapshot.exists) {
+      dynamic data = snapshot.snapshot.value;
+
+      if (data is Map) {
+        // Data is stored as a map (with unique keys)
+        Map<dynamic, dynamic> itemsMap = data;
+        items = itemsMap.entries.map((entry) {
           return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
         }).toList();
-        notifyListeners();
+      } else if (data is List) {
+        // Data is stored as a list (array)
+        List<dynamic> itemsList = data;
+        items = itemsList.asMap().entries
+            .where((entry) => entry.value != null && entry.value is Map)
+            .map((entry) {
+          int index = entry.key;
+          dynamic itemData = entry.value;
+          return Item.fromMap(itemData as Map<dynamic, dynamic>, index.toString());
+        }).toList();
       }
-    } catch (e) {
-      throw Exception('Failed to fetch items: $e');
+
     }
+
+    return items;
   }
 
   Future<void> deleteFilled(String filledId) async {
