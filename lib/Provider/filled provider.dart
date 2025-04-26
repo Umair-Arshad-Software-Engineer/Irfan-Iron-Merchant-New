@@ -11,31 +11,23 @@ class FilledProvider with ChangeNotifier {
   List<Map<String, dynamic>> _filled = [];
   List<Item> _items = []; // Initialize the _items list
   List<Item> get items => _items; // Add a getter for _items
-
   List<Map<String, dynamic>> get filled => _filled;
 
 
+
   Future<int> getNextFilledNumber() async {
-    final snapshot = await FirebaseDatabase.instance.ref('filled').once();
-    int maxNumber = 0;
+    final counterRef = _db.child('filledCounter');
+    final transactionResult = await counterRef.runTransaction((currentData) {
+      int currentCount = (currentData ?? 0) as int;
+      currentCount++;
+      return Transaction.success(currentCount);
+    });
 
-    if (snapshot.snapshot.exists) {
-      final allFilled = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
-
-      allFilled.forEach((key, value) {
-        final filledData = value as Map<dynamic, dynamic>;
-        if (filledData['numberType'] == 'sequential') {
-          final filledNumber = int.tryParse(filledData['filledNumber']?.toString() ?? '');
-
-          // Ensure the filled number is valid and not a 13-digit number
-          if (filledNumber != null && filledNumber > maxNumber && filledNumber.toString().length < 13) {
-            maxNumber = filledNumber;
-          }
-        }
-      });
+    if (transactionResult.committed) {
+      return transactionResult.snapshot!.value as int;
+    } else {
+      throw Exception('Failed to increment filled counter.');
     }
-
-    return maxNumber + 1;
   }
 
 
@@ -44,43 +36,35 @@ class FilledProvider with ChangeNotifier {
     return number.length > 10 && int.tryParse(number) != null;
   }
 
+
+
   Future<void> saveFilled({
     required String filledId, // Accepts the filled ID (instead of using push)
-    required String filledNumber,
+    required String filledNumber, // Can be timestamp or sequential
     required String customerId,
     required String customerName, // Accept the customer name as a parameter
     required double subtotal,
     required double discount,
     required double grandTotal,
     required String paymentType,
-    String? paymentMethod, // For instant payments
     required String referenceNumber, // Add this
-    required List<Map<String, dynamic>> items,
+    String? paymentMethod, // For instant payments
     required String createdAt, // Add this parameter
+
+    required List<Map<String, dynamic>> items,
   })
   async {
     try {
-      // final cleanedItems = items.map((item) {
-      //   return {
-      //     'itemName': item['itemName'],
-      //     'rate': item['rate'] ?? 0.0,
-      //     'qty': item['qty'] ?? 0.0,
-      //     // 'weight': item['weight'] ?? 0.0,
-      //     'description': item['description'] ?? '',
-      //     'total': item['total'],
-      //   };
-      // }).toList();
-      // Convert items to a List without keys
-      final cleanedItems = [];
-      for (var item in items) {
-        cleanedItems.add({
+      final cleanedItems = items.map((item) {
+        return {
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           'description': item['description'] ?? '',
           'total': item['total'],
-        });
-      }
+        };
+      }).toList();
+
       final filledData = {
         'referenceNumber': referenceNumber, // Add this
         'filledNumber': filledNumber,
@@ -91,11 +75,10 @@ class FilledProvider with ChangeNotifier {
         'grandTotal': grandTotal,
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
-        // 'items': cleanedItems,
-        'items': cleanedItems, // Store as pure list
-        // 'createdAt': DateTime.now().toIso8601String(),
+        'items': cleanedItems,
         'createdAt': createdAt, // Use the provided date
         'numberType': _isTimestampNumber(filledNumber) ? 'timestamp' : 'sequential',
+
       };
       // Save the filled at the specified filledId path
       await _db.child('filled').child(filledId).set(filledData);
@@ -123,6 +106,7 @@ class FilledProvider with ChangeNotifier {
       return null;
     } catch (e) {
       throw Exception('Failed to fetch filled: $e');
+
     }
   }
 
@@ -135,41 +119,41 @@ class FilledProvider with ChangeNotifier {
     required double discount,
     required double grandTotal,
     required String paymentType,
-    required String referenceNumber, // Add this
     String? paymentMethod,
+    required String referenceNumber, // Add this
     required List<Map<String, dynamic>> items,
     required String createdAt,
   })
   async {
     try {
       // Fetch the old filled data
-      final oldFilled = await getFilledById(filledId);
-      if (oldFilled == null) {
+      final oldfilled = await getFilledById(filledId);
+      if (oldfilled == null) {
         throw Exception('Filled not found.');
       }
-      final isTimestamp = oldFilled['numberType'] == 'timestamp';
+      final isTimestamp = oldfilled['numberType'] == 'timestamp';
+
       // Get the old grand total
-      final double oldGrandTotal = (oldFilled['grandTotal'] as num).toDouble();
+      final double oldGrandTotal = (oldfilled['grandTotal'] as num).toDouble();
 
       // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
 
-      // Clean the items data
       final cleanedItems = items.map((item) {
         return {
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
-          'initialQty': item['initialQty'] ?? 0.0, // Include initialQty
           'description': item['description'] ?? '',
           'total': item['total'],
+
         };
       }).toList();
 
       // Prepare the updated filled data
       final filledData = {
-        'filledNumber': filledNumber,
         'referenceNumber': referenceNumber, // Add this
+        'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName,
         'subtotal': subtotal,
@@ -181,19 +165,12 @@ class FilledProvider with ChangeNotifier {
         'updatedAt': DateTime.now().toIso8601String(),
         'createdAt': createdAt,
         'numberType': isTimestamp ? 'timestamp' : 'sequential',
+
       };
 
       // Update the filled in the database
       await _db.child('filled').child(filledId).update(filledData);
 
-      // // Update the ledger with the difference
-      // await _updateCustomerLedger(
-      //   customerId,
-      //   creditAmount: difference, // Use the difference instead of the full amount
-      //   debitAmount: 0.0,
-      //   remainingBalance: grandTotal, // Update the remaining balance
-      //   filledNumber: filledNumber,
-      // );
       // Step 1: Find the existing ledger entry for this filled
       final customerLedgerRef = _db.child('filledledger').child(customerId);
       final query = customerLedgerRef.orderByChild('filledNumber').equalTo(filledNumber);
@@ -233,8 +210,8 @@ class FilledProvider with ChangeNotifier {
         if (dbItem.id.isNotEmpty) {
           final String itemId = dbItem.id;
           final double currentQty = dbItem.qtyOnHand;
-          final double newQty = item['qty'] ?? 0.0;
-          final double initialQty = item['initialQty'] ?? 0.0;
+          final double newQty = item['qty'] ?? 0.0; // Use 'qty' instead of 'qty'
+          final double initialQty = item['initialQty'] ?? 0.0; // Ensure this is 'initialQty'
 
           // Calculate the difference between the initial quantity and the new quantity
           double delta = initialQty - newQty;
@@ -255,168 +232,100 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-  // Future<void> fetchFilled() async {
-  //   try {
-  //     final snapshot = await _db.child('filled').get();
-  //     if (snapshot.exists) {
-  //       print('Fetched filled data: ${snapshot.value}'); // Debug log
-  //       _filled = [];
-  //       final data = snapshot.value as Map<dynamic, dynamic>;
-  //       data.forEach((key, value) {
-  //         _filled.add({
-  //           'id': key, // This is the unique ID for each filled
-  //           'filledNumber': value['filledNumber'],
-  //           'customerId': value['customerId'],
-  //           'customerName': value['customerName'],
-  //           'subtotal': (value['subtotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'subtotal' is a double
-  //           'discount': (value['discount'] as num?)?.toDouble() ?? 0.0,   // Ensuring 'discount' is a double
-  //           'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0, // Ensuring 'grandTotal' is a double
-  //           'paymentType': value['paymentType'],
-  //           'paymentMethod': value['paymentMethod'],
-  //           'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
-  //           'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
-  //           'referenceNumber': value['referenceNumber'],
-  //           'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
-  //           'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0, // Add this li
-  //           'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0, // Ensuring 'debitAmount' is a double
-  //           'debitAt': value['debitAt'],
-  //           'items': List<Map<String, dynamic>>.from(
-  //             (value['items'] as List).map((item) => Map<String, dynamic>.from(item)),
-  //           ),
-  //           'createdAt': value['createdAt'] is int
-  //               ? DateTime.fromMillisecondsSinceEpoch(value['createdAt']).toIso8601String()
-  //               : value['createdAt'],
-  //           'remainingBalance': (value['remainingBalance'] as num?)?.toDouble() ?? 0.0, // Ensuring 'remainingBalance' is a double
-  //         });
-  //       });
-  //       notifyListeners();
-  //     }
-  //   } catch (e) {
-  //     throw Exception('Failed to fetch filled: $e');
-  //   }
-  // }
-
   Future<void> fetchFilled() async {
     try {
       final snapshot = await _db.child('filled').get();
+      _filled = [];
+
       if (snapshot.exists) {
-        // print('Fetched filled data: ${snapshot.value}'); // Debug log
-        _filled = [];
+        final dynamic data = snapshot.value;
 
-        final value = snapshot.value;
-
-        if (value is Map) {
-          // Handle Map structure
-          value.forEach((key, val) {
-            _filled.add(_parseFilledItem(key, val));
+        if (data is Map<dynamic, dynamic>) {
+          // Handle map structure
+          data.forEach((key, value) {
+            _processFilledEntry(key.toString(), value);
           });
-        } else if (value is List) {
-          // Handle List structure
-          for (int i = 0; i < value.length; i++) {
-            final val = value[i];
-            if (val != null) {
-              _filled.add(_parseFilledItem(i.toString(), val));
-            }
+        } else if (data is List<dynamic>) {
+          // Handle list structure
+          for (int i = 0; i < data.length; i++) {
+            _processFilledEntry(i.toString(), data[i]);
           }
         }
-
-        notifyListeners();
       }
+      notifyListeners();
     } catch (e) {
-      throw Exception('Failed to fetch filled: $e');
+      throw Exception('Failed to fetch filled: ${e.toString()}');
     }
   }
 
-// Helper method to parse a filled item
-  Map<String, dynamic> _parseFilledItem(String key, dynamic value) {
-    // Handle items conversion
-    dynamic itemsData = value['items'];
-    List<Map<String, dynamic>> itemsList = [];
+  void _processFilledEntry(String key, dynamic value) {
+    if (value is! Map<dynamic, dynamic>) return;
 
-    if (itemsData is Map) {
-      // Convert Firebase map-with-keys to list
-      itemsList = (itemsData as Map<dynamic, dynamic>).values
-          .map<Map<String, dynamic>>((item) => Map<String, dynamic>.from(item))
-          .toList();
-    } else if (itemsData is List) {
-      // Already a proper list
-      itemsList = itemsData.map<Map<String, dynamic>>((item) => Map<String, dynamic>.from(item))
-          .toList();
+    final filledData = Map<String, dynamic>.from(value);
+
+    // Helper function to safely parse dates
+    DateTime parseDateTime(dynamic dateValue) {
+      try {
+        if (dateValue is String) return DateTime.parse(dateValue);
+        if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
+        if (dateValue is DateTime) return dateValue;
+      } catch (e) {
+        print("Error parsing date: $e");
+      }
+      return DateTime.now();
     }
-    return {
-      'id': key,
-      'filledNumber': value['filledNumber'],
-      'customerId': value['customerId'],
-      'customerName': value['customerName'],
-      'subtotal': (value['subtotal'] as num?)?.toDouble() ?? 0.0,
-      'discount': (value['discount'] as num?)?.toDouble() ?? 0.0,
-      'grandTotal': (value['grandTotal'] as num?)?.toDouble() ?? 0.0,
-      'paymentType': value['paymentType'],
-      'paymentMethod': value['paymentMethod'],
-      'cashPaidAmount': (value['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
-      'onlinePaidAmount': (value['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
-      'referenceNumber': value['referenceNumber'],
-      'checkPaidAmount': (value['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
-      'slipPaidAmount': (value['slipPaidAmount'] as num?)?.toDouble() ?? 0.0,
-      'debitAmount': (value['debitAmount'] as num?)?.toDouble() ?? 0.0,
-      'debitAt': value['debitAt'],
-      'items': List<Map<String, dynamic>>.from(
-        (value['items'] as List).map((item) => Map<String, dynamic>.from(item)),
-      ),
-      'createdAt': value['createdAt'] is int
-          ? DateTime.fromMillisecondsSinceEpoch(value['createdAt']).toIso8601String()
-          : value['createdAt'],
-      'remainingBalance': (value['remainingBalance'] as num?)?.toDouble() ?? 0.0,
-    };
-  }
 
+    // Helper function to safely parse numeric values
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
 
-  // Fetch items from Firebase
-  // Future<void> fetchItems() async {
-  //   try {
-  //     final snapshot = await _db.child('items').get();
-  //     if (snapshot.exists) {
-  //       final data = snapshot.value as Map<dynamic, dynamic>;
-  //       _items = data.entries.map((entry) {
-  //         return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
-  //       }).toList();
-  //       notifyListeners();
-  //     }
-  //   } catch (e) {
-  //     throw Exception('Failed to fetch items: $e');
-  //   }
-  // }
-  Future<List<Item>> fetchItems() async {
-    final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
-    final DatabaseEvent snapshot = await itemsRef.once();
-
-    List<Item> items = [];
-
-    if (snapshot.snapshot.exists) {
-      dynamic data = snapshot.snapshot.value;
-
-      if (data is Map) {
-        // Data is stored as a map (with unique keys)
-        Map<dynamic, dynamic> itemsMap = data;
-        items = itemsMap.entries.map((entry) {
-          return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
-        }).toList();
-      } else if (data is List) {
-        // Data is stored as a list (array)
-        List<dynamic> itemsList = data;
-        items = itemsList.asMap().entries
-            .where((entry) => entry.value != null && entry.value is Map)
-            .map((entry) {
-          int index = entry.key;
-          dynamic itemData = entry.value;
-          return Item.fromMap(itemData as Map<dynamic, dynamic>, index.toString());
+    // Safely process items list
+    List<Map<String, dynamic>> processItems(dynamic itemsData) {
+      if (itemsData is List) {
+        return itemsData.map<Map<String, dynamic>>((item) {
+          if (item is Map<dynamic, dynamic>) {
+            return {
+              'itemName': item['itemName']?.toString() ?? '',
+              'rate': parseDouble(item['rate']),
+              'qty': parseDouble(item['qty']),
+              'description': item['description']?.toString() ?? '',
+              'total': parseDouble(item['total']),
+            };
+          }
+          return {};
         }).toList();
       }
-
+      return [];
     }
 
-    return items;
+    _filled.add({
+      'id': key,
+      'filledNumber': filledData['filledNumber']?.toString() ?? 'N/A',
+      'customerId': filledData['customerId']?.toString() ?? '',
+      'customerName': filledData['customerName']?.toString() ?? 'N/A',
+      'subtotal': parseDouble(filledData['subtotal']),
+      'discount': parseDouble(filledData['discount']),
+      'grandTotal': parseDouble(filledData['grandTotal']),
+      'paymentType': filledData['paymentType']?.toString() ?? '',
+      'paymentMethod': filledData['paymentMethod']?.toString() ?? '',
+      'cashPaidAmount': parseDouble(filledData['cashPaidAmount']),
+      'onlinePaidAmount': parseDouble(filledData['onlinePaidAmount']),
+      'checkPaidAmount': parseDouble(filledData['checkPaidAmount'] ?? 0.0),
+      'slipPaidAmount': parseDouble(filledData['slipPaidAmount'] ?? 0.0),
+      'debitAmount': parseDouble(filledData['debitAmount']),
+      'debitAt': filledData['debitAt']?.toString() ?? '',
+      'items': processItems(filledData['items']),
+      'createdAt': parseDateTime(filledData['createdAt']).toIso8601String(),
+      'remainingBalance': parseDouble(filledData['remainingBalance']),
+      'referenceNumber': filledData['referenceNumber']?.toString() ?? '',
+    });
   }
+
+
 
   Future<void> deleteFilled(String filledId) async {
     try {
@@ -436,7 +345,7 @@ class FilledProvider with ChangeNotifier {
       // Reverse the qtyOnHand deduction for each item
       for (var item in items) {
         final itemName = item['itemName'] as String;
-        final weight = (item['qty'] as num?)?.toDouble() ?? 0.0; // Handle null weight
+        final qty = (item['qty'] as num).toDouble(); // Get the qty from the filled
 
         // Fetch the item from the database
         final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
@@ -449,8 +358,8 @@ class FilledProvider with ChangeNotifier {
           // Get the current qtyOnHand
           double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
 
-          // Add back the weight to qtyOnHand
-          double updatedQtyOnHand = currentQtyOnHand + weight;
+          // Add back the qty to qtyOnHand
+          double updatedQtyOnHand = currentQtyOnHand + qty;
 
           // Update the item in the database
           await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
@@ -482,8 +391,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
-  // **Updated Method to Handle Customer Ledger**
   Future<void> _updateCustomerLedger(
       String customerId, {
         required double creditAmount,
@@ -491,7 +398,6 @@ class FilledProvider with ChangeNotifier {
         required double remainingBalance,
         required String filledNumber,
         required String referenceNumber
-
       })
   async {
     try {
@@ -518,7 +424,7 @@ class FilledProvider with ChangeNotifier {
         'filledNumber': filledNumber,
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
-        'remainingBalance': newRemainingBalance, // Updated balances
+        'remainingBalance': newRemainingBalance, // Updated balance
         'createdAt': DateTime.now().toIso8601String(),
       };
 
@@ -528,6 +434,7 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+
   List<Map<String, dynamic>> getFilledByPaymentMethod(String paymentMethod) {
     return _filled.where((filled) {
       final method = filled['paymentMethod'] ?? '';
@@ -536,6 +443,20 @@ class FilledProvider with ChangeNotifier {
   }
 
 
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    return 0.0;
+  }
+
   Future<void> payFilledWithSeparateMethod(
       BuildContext context,
       String filledId,
@@ -543,9 +464,10 @@ class FilledProvider with ChangeNotifier {
       String paymentMethod, {
         String? description,
         Uint8List? imageBytes,
-        required DateTime paymentDate,
+        required DateTime paymentDate, // Add this parameter
         String? bankId,
         String? bankName,
+
       })
   async {
     try {
@@ -575,9 +497,6 @@ class FilledProvider with ChangeNotifier {
           }
         }
       }
-
-
-
       if (paymentMethod == 'Bank' && bankId != null) {
         final bankRef = _db.child('banks/$bankId/transactions');
         final transactionData = {
@@ -608,6 +527,8 @@ class FilledProvider with ChangeNotifier {
       // Calculate the total paid so far
       final totalPaid = currentCashPaid + currentOnlinePaid + currentCheckPaid + currentSlipPaid + currentBankPaid;
 
+
+      // // Add the new payment to the appropriate field
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
       double updatedCheckPaid = _parseToDouble(filled['checkPaidAmount']);
@@ -623,7 +544,6 @@ class FilledProvider with ChangeNotifier {
         'bankId': bankId,
         'bankName': bankName,
       };
-
       // Inside the cash payment handling block:
       if (paymentMethod == 'Cash') {
         // Create cashbook entry using push key
@@ -640,19 +560,18 @@ class FilledProvider with ChangeNotifier {
 
         await cashbookEntryRef.set(cashbookEntry.toJson());
 
-        // Store cashbook entry ID in payment data
+        // Store cashbook entry ID in payment datas
         paymentData['cashbookEntryId'] = cashbookEntryId;
 
         // Remove the following redundant call:
         // await addCashBookEntry(...);
       }
-
       // If an image is provided, encode it to base64 and add it to the payment data
       if (imageBytes != null) {
         paymentData['image'] = base64Encode(imageBytes);
       }
 
-      // Save the payment data in the appropriate child node based on the payment method
+
       DatabaseReference paymentRef;
       if (paymentMethod == 'Cash') {
         updatedCashPaid += paymentAmount;
@@ -686,6 +605,12 @@ class FilledProvider with ChangeNotifier {
       final debitAt = DateTime.now().toIso8601String();
 
       await _db.child('filled').child(filledId).update({
+        // 'cashPaidAmount': updatedCashPaid,
+        // 'onlinePaidAmount': updatedOnlinePaid,
+        // 'checkPaidAmount': updatedCheckPaid,
+        // 'debitAmount': updatedDebit, // Make sure this is updated correctly
+        // 'debitAt': debitAt,
+        // 'slipPaidAmount': updatedSlipPaid, // Add this line
         'cashPaidAmount': updatedCashPaid,
         'onlinePaidAmount': updatedOnlinePaid,
         'checkPaidAmount': updatedCheckPaid,
@@ -693,8 +618,8 @@ class FilledProvider with ChangeNotifier {
         'slipPaidAmount': updatedSlipPaid,
         'debitAmount': updatedDebit,
         'debitAt': debitAt,
-      });
 
+      });
       // Update the local state without fetching all filled
       final filledIndex = _filled.indexWhere((inv) => inv['id'] == filledId);
       if (filledIndex != -1) {
@@ -707,15 +632,14 @@ class FilledProvider with ChangeNotifier {
         _filled[filledIndex]['debitAt'] = debitAt;
         notifyListeners(); // Trigger UI update
       }
-
       // Update the ledger with the calculated remaining balance
       await _updateCustomerLedger(
-        referenceNumber: filled['referenceNumber'],
-        filled['customerId'],
-        creditAmount: 0.0,
-        debitAmount: paymentAmount,
-        remainingBalance: grandTotal - updatedDebit,
-        filledNumber: filled['filledNumber'],
+          filled['customerId'],
+          creditAmount: 0.0,
+          debitAmount: paymentAmount,
+          remainingBalance: grandTotal - updatedDebit,
+          filledNumber: filled['filledNumber'],
+          referenceNumber: filled['referenceNumber']
       );
 
       // Refresh the filled list
@@ -731,7 +655,6 @@ class FilledProvider with ChangeNotifier {
       throw Exception('Failed to save payment: $e');
     }
   }
-
 
   Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
     try {
@@ -768,7 +691,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> deletePaymentEntry({
     required BuildContext context,
     required String filledId,
@@ -779,20 +701,19 @@ class FilledProvider with ChangeNotifier {
   async {
     try {
       final filledRef = _db.child('filled').child(filledId);
-
-      print("Fetching payment data for method: $paymentMethod and key: $paymentKey");
+      print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
 
       // Step 1: Fetch payment data before deleting it
       final paymentSnapshot = await filledRef.child('${paymentMethod}Payments').child(paymentKey).get();
 
       if (!paymentSnapshot.exists) {
-        print("Error: Payment entry not found in ${paymentMethod}Payments");
+        print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
         throw Exception("Payment not found.");
       }
-      final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
-      print("Payment data found: $paymentData");
 
-      // Inside the deletePaymentEntry method
+      final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
+      print("✅ Payment data found: $paymentData");
+
 
       if (paymentMethod.toLowerCase() == 'cash') {
         final cashbookEntryId = paymentData['cashbookEntryId'];
@@ -804,22 +725,20 @@ class FilledProvider with ChangeNotifier {
         }
       }
 
-
       // Step 2: Handle Bank Payment - Delete specific bank transaction using unique ID
       if (paymentMethod.toLowerCase() == 'bank') {
-        String? bankId = paymentData['bankId'];
-        String? transactionId = paymentData['transactionId']; // Check if stored
+        String? bankId = paymentData['bankId']?.toString();
+        String? transactionId = paymentData['transactionId']?.toString();
 
-        print("Bank Payment detected. bankId: $bankId, transactionId: $transactionId");
+        print("🏦 Bank Payment detected. bankId: $bankId, transactionId: $transactionId");
 
         if (bankId == null || bankId.isEmpty) {
-          print("Error: Bank ID is missing!");
+          print("❌ Error: Bank ID is missing!");
           throw Exception("Bank ID is missing in the payment record.");
         }
 
         if (transactionId == null || transactionId.isEmpty) {
-          print("Transaction ID is missing. Searching for transaction in the bank node...");
-
+          print("🔍 Searching for transaction in the bank node...");
           final bankTransactionsRef = _db.child('banks/$bankId/transactions');
           final transactionSnapshot = await bankTransactionsRef.orderByChild('filledId').equalTo(filledId).get();
 
@@ -828,8 +747,8 @@ class FilledProvider with ChangeNotifier {
             for (var key in transactions.keys) {
               final transaction = Map<String, dynamic>.from(transactions[key]);
               if (transaction['amount'] == paymentAmount) {
-                transactionId = key; // Assign found transaction ID
-                print("Found matching bank transaction ID: $transactionId");
+                transactionId = key;
+                print("✅ Found matching bank transaction ID: $transactionId");
                 break;
               }
             }
@@ -837,11 +756,10 @@ class FilledProvider with ChangeNotifier {
         }
 
         if (transactionId == null) {
-          print("Error: Unable to find transaction ID for this payment.");
+          print("❌ Error: Unable to find transaction ID for this payment.");
           throw Exception("Transaction ID not found for this bank payment.");
         }
 
-        // Proceed to delete the transaction
         final bankTransactionRef = _db.child('banks/$bankId/transactions/$transactionId');
         final transactionSnapshot = await bankTransactionRef.get();
 
@@ -849,26 +767,24 @@ class FilledProvider with ChangeNotifier {
           final transactionData = Map<String, dynamic>.from(transactionSnapshot.value as Map);
           final transactionAmount = (transactionData['amount'] as num).toDouble();
 
-          print("Deleting bank transaction: $transactionData");
-
+          print("🗑️ Deleting bank transaction: $transactionData");
           await bankTransactionRef.remove();
-          print("Transaction deleted successfully.");
+          print("✅ Transaction deleted successfully.");
 
           // Update bank balance
           final bankBalanceRef = _db.child('banks/$bankId/balance');
           final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
           final updatedBalance = (currentBalance - transactionAmount).clamp(0.0, double.infinity);
 
-          print("Updating bank balance from $currentBalance to $updatedBalance");
+          print("💰 Updating bank balance from $currentBalance to $updatedBalance");
           await bankBalanceRef.set(updatedBalance);
         } else {
-          print("Error: Bank transaction not found for deletion.");
+          print("❌ Error: Bank transaction not found for deletion.");
         }
       }
 
-
       // Step 3: Remove the payment entry from the filled
-      print("Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
+      print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
       await filledRef.child('${paymentMethod}Payments').child(paymentKey).remove();
 
       // Step 4: Fetch the filled data
@@ -878,10 +794,10 @@ class FilledProvider with ChangeNotifier {
       }
 
       final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
-      final customerId = filled['customerId'] as String;
-      final filledNumber = filled['filledNumber'] as String;
+      final customerId = filled['customerId']?.toString() ?? '';
+      final filledNumber = filled['filledNumber']?.toString() ?? '';
 
-      print("Filled details retrieved: customerId = $customerId, filledNumber = $filledNumber");
+      print("📄 Filled details retrieved: customerId = $customerId, filledNumber = $filledNumber");
 
       // Step 5: Get current payment amounts
       double currentCashPaid = _parseToDouble(filled['cashPaidAmount']);
@@ -891,7 +807,7 @@ class FilledProvider with ChangeNotifier {
       double currentBankPaid = _parseToDouble(filled['bankPaidAmount'] ?? 0.0);
       double currentDebit = _parseToDouble(filled['debitAmount']);
 
-      print("Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
+      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
 
       // Deduct the payment amount from the respective payment method
       switch (paymentMethod.toLowerCase()) {
@@ -914,10 +830,9 @@ class FilledProvider with ChangeNotifier {
           throw Exception("Invalid payment method.");
       }
 
-      // Deduct the payment amount from the debitAmount
       final updatedDebit = (currentDebit - paymentAmount).clamp(0.0, double.infinity);
+      print("🔄 Updating filled with new values...");
 
-      print("Updating filled entry with new values...");
       await filledRef.update({
         'cashPaidAmount': currentCashPaid,
         'onlinePaidAmount': currentOnlinePaid,
@@ -926,9 +841,10 @@ class FilledProvider with ChangeNotifier {
         'slipPaidAmount': currentSlipPaid,
         'debitAmount': updatedDebit,
       });
-      print("Filled entry updated successfully.");
 
-      // Step 6: Fetch the latest ledger entry for the customer
+      print("✅ Filled updated successfully.");
+
+      // Step 6: Fetch latest ledger entry for the customer
       final customerLedgerRef = _db.child('filledledger').child(customerId);
       final ledgerSnapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
 
@@ -938,42 +854,42 @@ class FilledProvider with ChangeNotifier {
         final latestEntry = Map<String, dynamic>.from(ledgerData[latestEntryKey]);
 
         double currentRemainingBalance = _parseToDouble(latestEntry['remainingBalance']);
-        double updatedRemainingBalance = (currentRemainingBalance + paymentAmount).clamp(0.0, double.infinity);
+        double updatedRemainingBalance = currentRemainingBalance + paymentAmount;
+        print("🔄 Updating ledger balance to: $updatedRemainingBalance");
 
-        print("Updating ledger with new balance: $updatedRemainingBalance");
         await customerLedgerRef.child(latestEntryKey).update({
           'remainingBalance': updatedRemainingBalance,
         });
       }
 
-      // Step 7: Refresh the filled list
-      print("Refreshing filled list...");
-      await fetchFilled();
+      // Step 7: Delete ledger entry for the payment
+      final paymentLedgerSnapshot = await customerLedgerRef.orderByChild('filledNumber').equalTo(filledNumber).get();
 
-      print("Payment deletion successful.");
+      if (paymentLedgerSnapshot.exists) {
+        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
+        for (var entryKey in paymentLedgerData.keys) {
+          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
+          if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
+            await customerLedgerRef.child(entryKey).remove();
+            break;
+          }
+        }
+      }
+
+      print("🔄 Refreshing filled list...");
+      await fetchFilled();
+      print("✅ Payment deletion successful.");
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment deleted successfully.')),
+        const SnackBar(content: Text('Payment deleted successfully.')),
       );
       Navigator.pop(context);
+
     } catch (e) {
-      print("Error deleting payment: $e");
+      print("❌ Error deleting payment: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
       );
-      throw Exception('Failed to delete payment entry: $e');
-    }
-  }
-
-
-  double _parseToDouble(dynamic value) {
-    if (value is int) {
-      return value.toDouble();
-    } else if (value is double) {
-      return value;
-    } else if (value is String) {
-      return double.tryParse(value) ?? 0.0;
-    } else {
-      return 0.0;
     }
   }
 
@@ -1018,11 +934,10 @@ class FilledProvider with ChangeNotifier {
         // Step 3: Update the customer ledger
         final customerId = filled['customerId'];
         final filledNumber = filled['filledNumber'];
-        final grandTotal = _parseToDouble(filled['grandTotal']);
         final referenceNumber = filled['referenceNumber'];
+        final grandTotal = _parseToDouble(filled['grandTotal']);
 
         await _updateCustomerLedger(
-
           customerId,
           creditAmount: 0.0,
           debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
@@ -1042,7 +957,7 @@ class FilledProvider with ChangeNotifier {
   List<Map<String, dynamic>> getTodaysFilled() {
     final today = DateTime.now();
     // final startOfDay = DateTime(today.year, today.month, today.day - 1); // Include yesterday
-    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterday
+    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterdays
 
     final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
@@ -1086,4 +1001,6 @@ class FilledProvider with ChangeNotifier {
       rethrow;
     }
   }
+
+
 }

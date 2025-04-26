@@ -1,22 +1,22 @@
-
 import 'dart:convert';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
-import '../Provider/filled provider.dart';
 import '../Provider/lanprovider.dart';
-import 'filledpage.dart';
+import '../Provider/filled provider.dart';
+import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:ui' as ui;
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 
+import 'Filledpage.dart';
 
 
 class filledListpage extends StatefulWidget {
@@ -29,24 +29,24 @@ class _filledListpageState extends State<filledListpage> {
   final TextEditingController _paymentController = TextEditingController();
   DateTimeRange? _selectedDateRange;
   List<Map<String, dynamic>> _filteredFilled = [];
+  String? _selectedBankId;
+  String? _selectedBankName;
+
 
   @override
-  void initState() {//
+  void initState() {
     super.initState();
-    debugPrint('Initializing filled list page');
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final filledProvider = Provider.of<FilledProvider>(context, listen: false);
-      debugPrint('Starting data fetch...');
-
-      try {
-        await filledProvider.fetchFilled();
-        debugPrint('Data fetch completed. Items: ${filledProvider.filled.length}');
-      } catch (e) {
-        debugPrint('Error in initState fetch: $e');
-      }
+    _searchController.addListener(() {
+      setState(() {}); // Trigger rebuild on text change
     });
   }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final filledProvider = Provider.of<FilledProvider>(context);
@@ -56,15 +56,23 @@ class _filledListpageState extends State<filledListpage> {
       appBar: _buildAppBar(context, languageProvider, filledProvider),
       body: Column(
         children: [
+          // Search and Filter Section
           SearchAndFilterSection(
             searchController: _searchController,
             selectedDateRange: _selectedDateRange,
-            onDateRangeSelected: (range) => setState(() => _selectedDateRange = range),
-            onClearDateFilter: () => setState(() => _selectedDateRange = null),
+            onDateRangeSelected: (range) {
+              setState(() {
+                _selectedDateRange = range;
+              });
+            },
+            onClearDateFilter: () {
+              setState(() {
+                _selectedDateRange = null;
+              });
+            },
             languageProvider: languageProvider,
-            searchLabel: languageProvider.isEnglish ? 'Search By Filled ID' : 'فلڈ آئی ڈی سے تالاش کریں',
-            clearFilterLabel: languageProvider.isEnglish ? 'Clear Date Filter' : 'فلڈ لسٹ کا فلٹر ختم کریں',
           ),
+          // Filled List
           Expanded(
             child: FutureBuilder(
               future: filledProvider.fetchFilled(),
@@ -72,32 +80,42 @@ class _filledListpageState extends State<filledListpage> {
                 if (snapshot.connectionState == ConnectionState.active) {
                   return const Center(child: CircularProgressIndicator());
                 }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
                 _filteredFilled = _filterFilled(filledProvider.filled);
                 if (_filteredFilled.isEmpty) {
                   return Center(
-                    child: Text(languageProvider.isEnglish ? 'No Filled Found' : 'کوئی فلڈ موجود نہیں'),
+                    child: Text(
+                      languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
+                    ),
                   );
                 }
                 return FilledList(
                   filteredFilled: _filteredFilled,
                   languageProvider: languageProvider,
                   filledProvider: filledProvider,
-                  onFilledTap: (filled) => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => filledpage(filled: filled)),
-                  ),
-                  onFilledLongPress: (filled) => _showDeleteConfirmationDialog(
-                    context,
-                    filled,
-                    filledProvider,
-                    languageProvider,
-                  ),
-                  onPaymentPressed: (filled) => _showFilledPaymentDialog(
-                    filled,
-                    filledProvider,
-                    languageProvider,
-                  ),
+                  onFilledTap: (filled) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => filledpage(filled: filled),
+                      ),
+                    );
+                  },
+                  onFilledLongPress: (filled) async {
+                    await _showDeleteConfirmationDialog(
+                      context,
+                      filled,
+                      filledProvider,
+                      languageProvider,
+                    );
+                  },
+                  onPaymentPressed: (filled) {
+                    _showFilledPaymentDialog(filled, filledProvider, languageProvider);
+                  },
                   onViewPayments: (filled) => _showPaymentDetails(filled),
+
                 );
               },
             ),
@@ -107,10 +125,30 @@ class _filledListpageState extends State<filledListpage> {
     );
   }
 
+
+// Add to _filledListpageState
+  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.memory(imageBytes, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+  // Build AppBar
   AppBar _buildAppBar(BuildContext context, LanguageProvider languageProvider, FilledProvider filledProvider) {
     return AppBar(
       title: Text(
-        languageProvider.isEnglish ? 'Filled List' : 'فلڈ لسٹ',
+        languageProvider.isEnglish ? 'Filled List' : 'انوائس لسٹ',
         style: const TextStyle(color: Colors.white),
       ),
       centerTitle: true,
@@ -118,10 +156,12 @@ class _filledListpageState extends State<filledListpage> {
       actions: [
         IconButton(
           icon: const Icon(Icons.add, color: Colors.white),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => filledpage()),
-          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => filledpage()),
+            );
+          },
         ),
         IconButton(
           icon: const Icon(Icons.print, color: Colors.white),
@@ -131,37 +171,70 @@ class _filledListpageState extends State<filledListpage> {
     );
   }
 
-
+  // Filter filled based on search and date range
   List<Map<String, dynamic>> _filterFilled(List<Map<String, dynamic>> filled) {
-    return filled.where((entry) {
+    return filled.where((filled) {
       final searchQuery = _searchController.text.toLowerCase();
-      final filledNumber = (entry['filledNumber'] ?? '').toString().toLowerCase();
-      final customerName = (entry['customerName'] ?? '').toString().toLowerCase();
-
-      // Check if search query matches either filledNumber or customerName
-      final matchesSearch = filledNumber.contains(searchQuery) ||
-          customerName.contains(searchQuery);
+      final filledNumber = (filled['filledNumber'] ?? '').toString().toLowerCase();
+      final customerName = (filled['customerName'] ?? '').toString().toLowerCase();
+      final matchesSearch = filledNumber.contains(searchQuery) || customerName.contains(searchQuery);
 
       if (_selectedDateRange != null) {
-        final dateStr = entry['createdAt'];
-        DateTime? date;
+        final filledDateStr = filled['createdAt'];
+        DateTime? filledDate;
         try {
-          date = DateTime.tryParse(dateStr) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(dateStr));
+          filledDate = DateTime.tryParse(filledDateStr) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(filledDateStr));
         } catch (e) {
           print('Error parsing date: $e');
           return false;
         }
-        return matchesSearch &&
-            (date.isAfter(_selectedDateRange!.start) || date.isAtSameMomentAs(_selectedDateRange!.start)) &&
-            (date.isBefore(_selectedDateRange!.end) || date.isAtSameMomentAs(_selectedDateRange!.end));
+        final isInDateRange = (filledDate.isAfter(_selectedDateRange!.start) ||
+            filledDate.isAtSameMomentAs(_selectedDateRange!.start)) &&
+            (filledDate.isBefore(_selectedDateRange!.end) ||
+                filledDate.isAtSameMomentAs(_selectedDateRange!.end));
+        return matchesSearch && isInDateRange;
       }
       return matchesSearch;
     }).toList()
       ..sort((a, b) {
         final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
         final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
-        return dateB.compareTo(dateA);
+        return dateB.compareTo(dateA); // Newest first
       });
+  }
+
+  // Show delete confirmation dialog
+  Future<void> _showDeleteConfirmationDialog(
+      BuildContext context,
+      Map<String, dynamic> filled,
+      FilledProvider filledProvider,
+      LanguageProvider languageProvider,
+      )
+  async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Delete Filled' : 'انوائس ڈلیٹ کریں'),
+          content: Text(languageProvider.isEnglish
+              ? 'Are you sure you want to delete this filled?'
+              : 'کیاآپ واقعی اس انوائس کو ڈیلیٹ کرنا چاہتے ہیں'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'ردکریں'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await filledProvider.deleteFilled(filled['id']);
+                Navigator.of(context).pop();
+              },
+              child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   double _parseToDouble(dynamic value) {
@@ -175,6 +248,147 @@ class _filledListpageState extends State<filledListpage> {
       return 0.0;
     }
   }
+
+  DateTime _parsePaymentDate(dynamic date) {
+    if (date is String) {
+      // If the date is a string, try parsing it directly
+      return DateTime.tryParse(date) ?? DateTime.now();
+    } else if (date is int) {
+      // If the date is a timestamp (in milliseconds), convert it to DateTime
+      return DateTime.fromMillisecondsSinceEpoch(date);
+    } else if (date is DateTime) {
+      // If the date is already a DateTime object, return it directly
+      return date;
+    } else {
+      // Fallback to the current date if the format is unknown
+      return DateTime.now();
+    }
+  }
+
+  // Add to _filledListpageState
+  Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    try {
+      final payments = await filledProvider.getFilledPayments(filled['id']);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
+          content: Container(
+            width: double.maxFinite,
+            child: payments.isEmpty
+                ? Text(languageProvider.isEnglish
+                ? 'No payments found'
+                : 'کوئی ادائیگی نہیں ملی')
+                : ListView.builder(
+              shrinkWrap: true,
+              itemCount: payments.length,
+              itemBuilder: (context, index) {
+                final payment = payments[index];
+                Uint8List? imageBytes;
+                if (payment['image'] != null) {
+                  imageBytes = base64Decode(payment['image']);
+                }
+
+                return Card(
+                  child: ListTile(
+                    // title: Text(
+                    //   '${payment['method']}: Rs ${payment['amount']}',
+                    //   style: const TextStyle(fontWeight: FontWeight.bold),
+                    // ),
+                    title: Text(
+                      '${payment['method'] == 'Bank'
+                          ? '${payment['bankName'] ?? 'Bank'}'
+                          : payment['method']}: Rs ${payment['amount']}',
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Text(DateFormat('yyyy-MM-dd – HH:mm')
+                        //     .format(payment['date'])),
+                        // In payment history list
+                        Text(DateFormat('yyyy-MM-dd – HH:mm')
+                            .format(payment['date'])),
+                        if (payment['description'] != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(payment['description']),
+                          ),
+                        if (imageBytes != null)
+                          Column(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _showFullScreenImage(imageBytes!),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Hero(
+                                    tag: 'paymentImage$index',
+                                    child: Image.memory(
+                                      imageBytes,
+                                      width: 100,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => _showFullScreenImage(imageBytes!),
+                                child: Text(
+                                  Provider.of<LanguageProvider>(context, listen: false)
+                                      .isEnglish
+                                      ? 'View Full Image'
+                                      : 'مکمل تصویر دیکھیں',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+
+                        IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () => _showDeletePaymentConfirmationDialog(
+                            context,
+                            filled['id'],
+                            payment['key'], // Ensure the payment key is passed
+                            payment['method'],
+                            payment['amount'],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => _printPaymentHistoryPDF(payments, context),
+              child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
+      );
+    }
+  }  // Print filled
+
 
   Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
     final pdf = pw.Document();
@@ -193,6 +407,7 @@ class _filledListpageState extends State<filledListpage> {
         final paymentAmount = _parseToDouble(payment['amount']);
         final paymentDate = _parsePaymentDate(payment['date']);
         final description = payment['description'] ?? 'N/A';
+        // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
 
         // Generate image from description text
         final descriptionImage = await _createTextImage(description);
@@ -225,7 +440,17 @@ class _filledListpageState extends State<filledListpage> {
           // Table with payment history
           pw.Table.fromTextArray(
             headers: ['Method', 'Amount', 'Date', 'Description'],
-            data: tableData,
+            // data: tableData,
+            data: payments.map((payment) {
+              return [
+                payment['method'] == 'Bank'
+                    ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+                    : payment['method'],
+                'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
+                DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
+                payment['description'] ?? 'N/A',
+              ];
+            }).toList(),
             border: pw.TableBorder.all(),
             headerStyle: pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
@@ -272,250 +497,137 @@ class _filledListpageState extends State<filledListpage> {
 
     // Print the PDF
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-  }//s
-
-  DateTime _parsePaymentDate(dynamic date)
-  {
-    if (date is String) {
-      // If the date is a string, try parsing it directly
-      return DateTime.tryParse(date) ?? DateTime.now();
-    } else if (date is int) {
-      // If the date is a timestamp (in milliseconds), convert it to DateTime
-      return DateTime.fromMillisecondsSinceEpoch(date);
-    } else if (date is DateTime) {
-      // If the date is already a DateTime object, return it directly
-      return date;
-    } else {
-      // Fallback to the current date if the format is unknown
-      return DateTime.now();
-    }
   }
 
-  Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
-    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  Future<void> _printFilled() async {
+    final pdf = pw.Document();
+    final headers = ['Filled Number', 'Customer Name', 'Date', 'Grand Total', 'Remaining Amount'];
+    final List<List<dynamic>> tableData = [];
 
-    try {
-      final payments = await filledProvider.getFilledPayments(filled['id']);
+    for (var filled in _filteredFilled) {
+      final customerName = filled['customerName'] ?? 'N/A';
+      final customerNameImage = await _createTextImage(customerName);
+      tableData.add([
+        filled['filledNumber'] ?? 'N/A',
+        pw.Image(customerNameImage),
+        filled['createdAt'] ?? 'N/A',
+        'Rs ${filled['grandTotal']}',
+        'Rs ${(filled['grandTotal'] - filled['debitAmount']).toStringAsFixed(2)}',
+      ]);
+    }
 
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
-          content: Container(
-            width: double.maxFinite,
-            child: payments.isEmpty
-                ? Text(languageProvider.isEnglish ? 'No payments found' : 'کوئی ادائیگی نہیں ملی')
-                : Column(
+    // Load the image asset for the logo
+    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    final buffer = bytes.buffer.asUint8List();
+    final image = pw.MemoryImage(buffer);
+
+    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    final footerBuffer = footerBytes.buffer.asUint8List();
+    final footerLogo = pw.MemoryImage(footerBuffer);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.all(15), // Reduced margins for more content space
+        header: (pw.Context context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'Filled List',
+              style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Column(
               children: [
-                Expanded(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: payments.length,
-                    itemBuilder: (context, index) {
-                      final payment = payments[index];
-                      final paymentAmount = _parseToDouble(payment['amount']);
-                      Uint8List? imageBytes;
-                      if (payment['image'] != null) {
-                        imageBytes = base64Decode(payment['image']);
-                      }
-
-                      return Card(
-                        child: ListTile(
-                          // title: Text(
-                          //   '${payment['method']}: Rs $paymentAmount',
-                          //   style: const TextStyle(fontWeight: FontWeight.bold),
-                          // ),
-                          title: Text(
-                            '${payment['method'] == 'Bank'
-                                ? '${payment['bankName'] ?? 'Bank'}'
-                                : payment['method']}: Rs ${payment['amount']}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // In payment history list
-                              Text(DateFormat('yyyy-MM-dd – HH:mm')
-                                  .format(payment['date'])),
-                              // Text(DateFormat('yyyy-MM-dd – HH:mm').format(payment['date'])),
-                              if (payment['description'] != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(payment['description']),
-                                ),
-                              if (imageBytes != null)
-                                Column(
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () => _showFullScreenImage(imageBytes!),
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Hero(
-                                          tag: 'paymentImage$index',
-                                          child: Image.memory(
-                                            imageBytes,
-                                            width: 100,
-                                            height: 100,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => _showFullScreenImage(imageBytes!),
-                                      child: Text(
-                                        Provider.of<LanguageProvider>(context, listen: false)
-                                            .isEnglish
-                                            ? 'View Full Image'
-                                            : 'مکمل تصویر دیکھیں',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    )
-                                  ],
-                                )
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _showDeletePaymentConfirmationDialog(
-                                  context,
-                                  filled['id'],
-                                  payment['key'],
-                                  payment['method'],
-                                  paymentAmount,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () => _printPaymentHistoryPDF(payments, context),
-                  child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+                pw.Image(image, width: 70, height: 70, dpi: 1000), // Display the logo at the top
+                pw.SizedBox(height: 10)
+              ],
+            )
+          ],
+        ),
+        footer: (pw.Context context) => pw.Column(
+          children: [
+            pw.Divider(), // Adds a horizontal line above the footer content
+            pw.SizedBox(height: 5), // Adds spacing between divider and footer content
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Image(footerLogo, width: 30, height: 30),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      'Dev Valley Software House',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      'Contact: 0303-4889663',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
-              onPressed: () => Navigator.pop(context),
-            ),
           ],
         ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
-      );
-    }
-  }
-
-  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
-    await showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.8,
-          child: InteractiveViewer(
-            panEnabled: true,
-            minScale: 0.5,
-            maxScale: 4.0,
-            child: Image.memory(imageBytes, fit: BoxFit.contain),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showDeletePaymentConfirmationDialog(
-      BuildContext context,
-      String filledId,
-      String paymentKey,
-      String paymentMethod,
-      double paymentAmount,
-      )
-  async {
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
-          content: Text(languageProvider.isEnglish
-              ? 'Are you sure you want to delete this payment?'
-              : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  await Provider.of<FilledProvider>(context, listen: false).deletePaymentEntry(
-                    context: context, // Pass the context here
-                    filledId: filledId,
-                    paymentKey: paymentKey,
-                    paymentMethod: paymentMethod,
-                    paymentAmount: paymentAmount,
-                  );
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payment deleted successfully.')),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
-                  );
-                }
-              },
-              child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _showDeleteConfirmationDialog(
-      BuildContext context,
-      Map<String, dynamic> filled,
-      FilledProvider filledProvider,
-      LanguageProvider languageProvider,
-      )
-  async {
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(languageProvider.isEnglish ? 'Delete Filled' : 'فلڈ ڈلیٹ کریں'),
-        content: Text(languageProvider.isEnglish
-            ? 'Are you sure you want to delete this filled?'
-            : 'کیاآپ واقعی اس فلڈ کو ڈیلیٹ کرنا چاہتے ہیں'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(languageProvider.isEnglish ? 'Cancel' : 'ردکریں'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await filledProvider.deleteFilled(filled['id']);
-              Navigator.of(context).pop();
-            },
-            child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
+        build: (pw.Context context) => [
+          pw.Table.fromTextArray(
+            headers: headers,
+            data: tableData,
+            border: pw.TableBorder.all(),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellPadding: const pw.EdgeInsets.all(5), // Reduced cell padding
           ),
         ],
       ),
     );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
   }
+  // Create text image for PDF
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    const double scaleFactor = 1.5;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
+      ),
+    );
+
+    final paint = Paint()..color = Colors.black;
+    final textStyle = const TextStyle(
+      fontSize: 13 * scaleFactor,
+      fontFamily: 'JameelNoori',
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    final textSpan = TextSpan(text: text, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    textPainter.layout();
+    textPainter.paint(canvas, const Offset(0, 0));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(
+      (textPainter.width * scaleFactor).toInt(),
+      (textPainter.height * scaleFactor).toInt(),
+    );
+
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    return pw.MemoryImage(buffer);
+  }
+
 
   Future<Uint8List?> _pickImage(BuildContext context) async {
     Uint8List? imageBytes;
@@ -565,131 +677,6 @@ class _filledListpageState extends State<filledListpage> {
     return imageBytes;
   }
 
-  Future<void> _printFilled() async {
-    final pdf = pw.Document();
-    final headers = ['Filled Number', 'Customer Name', 'Date', 'Grand Total', 'Remaining Amount'];
-    final List<List<dynamic>> tableData = [];
-
-    for (var filled in _filteredFilled) {
-      final customerName = filled['customerName'] ?? 'N/A';
-      final customerNameImage = await _createTextImage(customerName);
-      tableData.add([
-        filled['filledNumber'] ?? 'N/A',
-        pw.Image(customerNameImage),
-        filled['createdAt'] ?? 'N/A',
-        'Rs ${filled['grandTotal']}',
-        'Rs ${(filled['grandTotal'] - filled['debitAmount']).toStringAsFixed(2)}',
-      ]);
-    }
-
-    // Load the logo image
-    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
-    final buffer = bytes.buffer.asUint8List();
-    final image = pw.MemoryImage(buffer);
-
-    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-    final footerBuffer = footerBytes.buffer.asUint8List();
-    final footerLogo = pw.MemoryImage(footerBuffer);
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(10), // Reduced margins
-        header: (pw.Context context) => pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text(
-              'Filled List',
-              style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.Column(
-              children: [
-                pw.Image(image, width: 70, height: 70, dpi: 1000), // Display logo at the top
-                pw.SizedBox(height: 10)
-              ],
-            ),
-          ],
-        ),
-        footer: (pw.Context context) => pw.Column(
-          children: [
-            pw.Divider(), // Divider above footer
-            pw.SizedBox(height: 5), // Space between divider and footer content
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Image(footerLogo, width: 30, height: 30),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Text(
-                      'Dev Valley Software House',
-                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                    ),
-                    pw.Text(
-                      'Contact: 0303-4889663',
-                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        build: (pw.Context context) => [
-          pw.Table.fromTextArray(
-            headers: headers,
-            data: tableData,
-            border: pw.TableBorder.all(),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            cellAlignment: pw.Alignment.centerLeft,
-            cellPadding: const pw.EdgeInsets.all(5), // Reduced cell padding
-          ),
-        ],
-      ),
-    );
-
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-  }
-
-  Future<pw.MemoryImage> _createTextImage(String text) async {
-    const double scaleFactor = 1.5;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      Rect.fromPoints(
-        const Offset(0, 0),
-        const Offset(500 * scaleFactor, 50 * scaleFactor),
-      ),
-    );
-
-    final textStyle = const TextStyle(
-      fontSize: 13 * scaleFactor,
-      fontFamily: 'JameelNoori',
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-    );
-
-    final textSpan = TextSpan(text: text, style: textStyle);
-    final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left,
-      textDirection: ui.TextDirection.ltr,
-    );
-
-    textPainter.layout();
-    textPainter.paint(canvas, const Offset(0, 0));
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(
-      (textPainter.width * scaleFactor).toInt(),
-      (textPainter.height * scaleFactor).toInt(),
-    );
-
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    final buffer = byteData!.buffer.asUint8List();
-
-    return pw.MemoryImage(buffer);
-  }
 
   Future<void> _showFilledPaymentDialog(
       Map<String, dynamic> filled,
@@ -967,92 +954,146 @@ class _filledListpageState extends State<filledListpage> {
   }
 }
 
-class SearchAndFilterSection extends StatelessWidget {
-  final TextEditingController searchController;
-  final DateTimeRange? selectedDateRange;
-  final Function(DateTimeRange?) onDateRangeSelected;
-  final VoidCallback onClearDateFilter;
-  final LanguageProvider languageProvider;
-  final String searchLabel;
-  final String clearFilterLabel;
+Future<void> _showDeletePaymentConfirmationDialog(
+    BuildContext context,
+    String filledId,
+    String paymentKey,
+    String paymentMethod,
+    double paymentAmount,
+    )
+async {
+  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
-  const SearchAndFilterSection({
-    required this.searchController,
-    required this.selectedDateRange,
-    required this.onDateRangeSelected,
-    required this.onClearDateFilter,
-    required this.languageProvider,
-    required this.searchLabel,
-    required this.clearFilterLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: searchController,
-            decoration: InputDecoration(
-              labelText: languageProvider.isEnglish
-                  ? 'Search by Filled ID or Customer Name'
-                  : 'فلڈ آئی ڈی یا کسٹمر کے نام سے تلاش کریں',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: searchController.text.isNotEmpty
-                  ? IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () => searchController.clear(),
-              )
-                  : null,
-              border: const OutlineInputBorder(),
-            ),
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
+        content: Text(languageProvider.isEnglish
+            ? 'Are you sure you want to delete this payment?'
+            : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: ElevatedButton.icon(
+          TextButton(
             onPressed: () async {
-              DateTimeRange? pickedDateRange = await showDateRangePicker(
-                context: context,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2101),
-                initialDateRange: selectedDateRange,
-              );
-              if (pickedDateRange != null) onDateRangeSelected(pickedDateRange);
+              try {
+                await Provider.of<FilledProvider>(context, listen: false).deletePaymentEntry(
+                  context: context, // Pass the context here
+                  filledId: filledId,
+                  paymentKey: paymentKey,
+                  paymentMethod: paymentMethod,
+                  paymentAmount: paymentAmount,
+                );
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Payment deleted successfully.')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+                );
+              }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal.shade400,
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(Icons.date_range, color: Colors.white),
-            label: Text(
-              selectedDateRange == null
-                  ? languageProvider.isEnglish ? 'Select Date' : 'ڈیٹ منتخب کریں'
-                  : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
-            ),
+            child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        ],
+      );
+    },
+  );
+}
+
+
+Future<void> _showEditPaymentDialog(
+    BuildContext context,
+    String filledId,
+    String paymentKey,
+    String paymentMethod,
+    double oldPaymentAmount,
+    String oldDescription,
+    Uint8List? oldImageBytes,
+    Future<Uint8List?> Function() pickImage, // Add this parameter
+    )
+async {
+  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  final TextEditingController _amountController = TextEditingController(text: oldPaymentAmount.toString());
+  final TextEditingController _descriptionController = TextEditingController(text: oldDescription);
+  Uint8List? _imageBytes = oldImageBytes;
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ElevatedButton(
-                onPressed: onClearDateFilter,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal.shade400,
-                  foregroundColor: Colors.white,
+              TextField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
                 ),
-                child: Text(clearFilterLabel),
+              ),
+              TextField(
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Uint8List? imageBytes = await pickImage(); // Use the passed function
+                  if (imageBytes != null) {
+                    _imageBytes = imageBytes;
+                  }
+                },
+                child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newAmount = double.tryParse(_amountController.text) ?? 0.0;
+              final newDescription = _descriptionController.text;
+
+              try {
+                await Provider.of<FilledProvider>(context, listen: false).editPaymentEntry(
+                  filledId: filledId,
+                  paymentKey: paymentKey,
+                  paymentMethod: paymentMethod,
+                  oldPaymentAmount: oldPaymentAmount,
+                  newPaymentAmount: newAmount,
+                  newDescription: newDescription,
+                  newImageBytes: _imageBytes,
+                );
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Payment updated successfully.')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to update payment: ${e.toString()}')),
+                );
+              }
+            },
+            child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
+          ),
+        ],
+      );
+    },
+  );
 }
+
 
 class FilledList extends StatelessWidget {
   final List<Map<String, dynamic>> filteredFilled;
@@ -1079,6 +1120,7 @@ class FilledList extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isWideScreen = constraints.maxWidth > 600;
+
         return ListView.builder(
           itemCount: filteredFilled.length,
           itemBuilder: (context, index) {
@@ -1096,9 +1138,7 @@ class FilledList extends StatelessWidget {
               child: ListTile(
                 contentPadding: const EdgeInsets.all(8),
                 title: Text(
-                  // '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['referenceNumber']}',
                   '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['referenceNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-
                   style: TextStyle(
                     fontSize: isWideScreen ? 18 : 16,
                     fontWeight: FontWeight.bold,
@@ -1110,7 +1150,9 @@ class FilledList extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${filled['customerName']}',
-                      style: TextStyle(fontSize: isWideScreen ? 16 : 14),
+                      style: TextStyle(
+                        fontSize: isWideScreen ? 16 : 14,
+                      ),
                     ),
                     Text(
                       '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${filled['createdAt']}',
@@ -1120,24 +1162,12 @@ class FilledList extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['filledNumber']}',
+                      '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['filledNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize:12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    // Row(
-                    //   children: [
-                    //     IconButton(
-                    //       icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
-                    //       onPressed: () => onPaymentPressed(filled),
-                    //     ),
-                    //     IconButton(
-                    //       icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
-                    //       onPressed: () => onViewPayments(filled),
-                    //     ),
-                    //   ],
-                    // )
                   ],
                 ),
                 trailing: Column(
@@ -1172,3 +1202,86 @@ class FilledList extends StatelessWidget {
   }
 }
 
+
+class SearchAndFilterSection extends StatelessWidget {
+  final TextEditingController searchController;
+  final DateTimeRange? selectedDateRange;
+  final Function(DateTimeRange?) onDateRangeSelected;
+  final VoidCallback onClearDateFilter;
+  final LanguageProvider languageProvider;
+
+  const SearchAndFilterSection({
+    required this.searchController,
+    required this.selectedDateRange,
+    required this.onDateRangeSelected,
+    required this.onClearDateFilter,
+    required this.languageProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              labelText: languageProvider.isEnglish
+                  ? 'Search by Filled ID or Customer Name'
+                  : 'انوائس آئی ڈی یا کسٹمر کے نام سے تلاش کریں',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: searchController.text.isNotEmpty
+                  ? IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () => searchController.clear(),
+              )
+                  : null,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              DateTimeRange? pickedDateRange = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2101),
+                initialDateRange: selectedDateRange,
+              );
+              if (pickedDateRange != null) {
+                onDateRangeSelected(pickedDateRange);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+            ),
+            icon: const Icon(Icons.date_range, color: Colors.white),
+            label: Text(
+              selectedDateRange == null
+                  ? languageProvider.isEnglish ? 'Select Date' : 'ڈیٹ منتخب کریں'
+                  : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton(
+                onPressed: onClearDateFilter,
+                child: Text(languageProvider.isEnglish ? 'Clear Date Filter' : 'انوائس لسٹ کا فلٹر ختم کریں'),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

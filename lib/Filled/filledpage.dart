@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
@@ -8,22 +7,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:iron_project_new/Provider/filled%20provider.dart';
+import 'package:iron_project_new/Filled/filledlist.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 import '../Models/itemModel.dart';
 import '../Provider/customerprovider.dart';
+import '../Provider/filled provider.dart';
 import '../Provider/lanprovider.dart';
-import 'filledlist.dart'; // Import your customer provider
+import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
+import 'package:share_plus/share_plus.dart';
+
 
 
 class filledpage extends StatefulWidget {
-  final Map<String, dynamic>? filled; // Optional filled data for editing
+  final Map<String, dynamic>? filled; // Optional filled data for editingss
 
   filledpage({this.filled});
 
@@ -34,7 +35,9 @@ class filledpage extends StatefulWidget {
 class _filledpageState extends State<filledpage> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   List<Item> _items = [];
-
+  String? _selectedItemName;
+  String? _selectedItemId;
+  double _selectedItemRate = 0.0;
   String? _selectedCustomerName; // This should hold the name of the selected customer
   String? _selectedCustomerId;
   double _discount = 0.0; // Discount amount or percentage
@@ -49,7 +52,7 @@ class _filledpageState extends State<filledpage> {
   final TextEditingController _rateController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   double _remainingBalance = 0.0; // Add this variable to store the remaining balance
-  final TextEditingController _paymentController = TextEditingController();
+  TextEditingController _paymentController = TextEditingController();
   TextEditingController _referenceController = TextEditingController();
 
 
@@ -92,9 +95,9 @@ class _filledpageState extends State<filledpage> {
         'total': 0.0,
         'rate': 0.0,
         'qty': 0.0,
-        // 'weight': 0.0,
         'description': '',
-        'weightController': TextEditingController(),
+        'itemName': '', // Add this field to store the item name
+        'itemNameController': TextEditingController(), // Add this line
         'rateController': TextEditingController(),
         'qtyController': TextEditingController(),
         'descriptionController': TextEditingController(),
@@ -105,16 +108,24 @@ class _filledpageState extends State<filledpage> {
   void _updateRow(int index, String field, dynamic value) {
     setState(() {
       _filledRows[index][field] = value;
-
-      // If both Sarya Rate and Sarya Qty are filled, calculate the Total
-      if (_filledRows[index]['rate'] != 0.0 && _filledRows[index]['qty'] != 0.0) {
-        _filledRows[index]['total'] = _filledRows[index]['rate'] * _filledRows[index]['qty'];
+      // Recalculate totals based on rate and qty
+      if (field == 'rate' || field == 'qty')  {
+        double rate = _filledRows[index]['rate'] ?? 0.0;
+        double qty = _filledRows[index]['qty'] ?? 0.0;
+        _filledRows[index]['total'] = rate * qty;
       }
+
     });
   }
 
   void _deleteRow(int index) {
     setState(() {
+      final deletedRow = _filledRows[index];
+      // Dispose all controllers for the deleted row
+      deletedRow['itemNameController']?.dispose();
+      deletedRow['rateController']?.dispose();
+      deletedRow['qtyController']?.dispose();
+      deletedRow['descriptionController']?.dispose();
       _filledRows.removeAt(index);
     });
   }
@@ -134,9 +145,21 @@ class _filledpageState extends State<filledpage> {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
-
-    // Get current date and time
+    // final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
+    // Add null checks for customer selection
+    if (_selectedCustomerId == null) {
+      throw Exception("No customer selected");
+    }
+    final selectedCustomer = customerProvider.customers.firstWhere(
+            (customer) => customer.id == _selectedCustomerId,
+        orElse: () => Customer( // Add orElse to handle missing customer
+            id: 'unknown',
+            name: 'Unknown Customer',
+            phone: '',
+            address: ''
+        )
+    );
+    // // Get current date and time
     // final DateTime now = DateTime.now();
     // final String formattedDate = '${now.day}/${now.month}/${now.year}';
     // final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
@@ -162,7 +185,6 @@ class _filledpageState extends State<filledpage> {
 
     final String formattedDate = '${filledDate.day}/${filledDate.month}/${filledDate.year}';
     final String formattedTime = '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
-
     // Get the remaining balance from the ledger
     double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
 
@@ -196,7 +218,7 @@ class _filledpageState extends State<filledpage> {
       descriptionImages.add(image);
     }
 
-    // Pre-generate images for all item names
+    // Pre-generate images for all item namess
     List<pw.MemoryImage> itemnameImages = [];
     for (var row in _filledRows) {
       final image = await _createTextImage(row['itemName']);
@@ -218,7 +240,7 @@ class _filledpageState extends State<filledpage> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Company Logo and Feilled Header
+              // Company Logo and filled Header
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -256,12 +278,13 @@ class _filledpageState extends State<filledpage> {
                 ],
               ),
               pw.Divider(),
+
               // Customer Information
               pw.Image(customerDetailsImage, width: 250, dpi: 1000), // Adjust width
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
               pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
               pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
-              // pw.Text('FilledId: $_filledId', style: const pw.TextStyle(fontSize: 12)),
+
               pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
 
               pw.SizedBox(height: 10),
@@ -271,7 +294,6 @@ class _filledpageState extends State<filledpage> {
                 headers: [
                   pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
-                  // pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
@@ -282,7 +304,6 @@ class _filledpageState extends State<filledpage> {
                     [
                       pw.Image(itemnameImages[index], dpi: 1000),
                       pw.Image(descriptionImages[index], dpi: 1000),
-                      // pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
@@ -317,7 +338,6 @@ class _filledpageState extends State<filledpage> {
               pw.SizedBox(height: 20),
 
               // Footer Section (Remaining Balance)
-              // In the PDF layout
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -333,7 +353,7 @@ class _filledpageState extends State<filledpage> {
                 ],
               ),
 
-              // Footer Section
+              // Footer Sectiondasd
               pw.Spacer(), // Push footer to the bottom of the page
               pw.Divider(),
               pw.Row(
@@ -341,17 +361,16 @@ class _filledpageState extends State<filledpage> {
                 children: [
                   pw.Image(footerLogo, width: 30, height: 20), // Footer logo
                   pw.Image(lineimage,width: 150,height: 50),
-
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       pw.Text(
                         'Dev Valley Software House',
-                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
                       ),
                       pw.Text(
                         'Contact: 0303-4889663',
-                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
                       ),
                     ],
                   ),
@@ -446,7 +465,7 @@ class _filledpageState extends State<filledpage> {
       double invoiceBalance = 0.0;
       double filledBalance = 0.0;
 
-      // Fetch from 'ledger' (invoice balance)
+      // Fetch from 'ledger' (filled balance)
       final ledgerRef = _db.child('ledger').child(customerId);
       final ledgerSnapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).once();
       if (ledgerSnapshot.snapshot.exists) {
@@ -576,6 +595,75 @@ class _filledpageState extends State<filledpage> {
     }
   }
 
+  Future<void> _showDeletePaymentConfirmationDialog(
+      BuildContext context,
+      String filledId,
+      String paymentKey,
+      String paymentMethod,
+      double paymentAmount,
+      )
+  async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
+          content: Text(languageProvider.isEnglish
+              ? 'Are you sure you want to delete this payment?'
+              : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
+            ),
+            TextButton(
+              onPressed: () async {
+                try {
+                  await Provider.of<FilledProvider>(context, listen: false).deletePaymentEntry(
+                    context: context, // Pass the context here
+                    filledId: filledId,
+                    paymentKey: paymentKey,
+                    paymentMethod: paymentMethod,
+                    paymentAmount: paymentAmount,
+                  );
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Payment deleted successfully.')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+                  );
+                }
+              },
+              child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.memory(imageBytes, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
   double _parseToDouble(dynamic value) {
     if (value is int) {
       return value.toDouble();
@@ -587,6 +675,145 @@ class _filledpageState extends State<filledpage> {
       return 0.0;
     }
   }
+
+  DateTime _parsePaymentDate(dynamic date) {
+    if (date is String) {
+      // If the date is a string, try parsing it directly
+      return DateTime.tryParse(date) ?? DateTime.now();
+    } else if (date is int) {
+      // If the date is a timestamp (in milliseconds), convert it to DateTime
+      return DateTime.fromMillisecondsSinceEpoch(date);
+    } else if (date is DateTime) {
+      // If the date is already a DateTime object, return it directly
+      return date;
+    } else {
+      // Fallback to the current date if the format is unknown
+      return DateTime.now();
+    }
+  }
+
+  Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    try {
+      final payments = await filledProvider.getFilledPayments(filled['id']);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
+          content: Container(
+            width: double.maxFinite,
+            child: payments.isEmpty
+                ? Text(languageProvider.isEnglish
+                ? 'No payments found'
+                : 'کوئی ادائیگی نہیں ملی')
+                : ListView.builder(
+              shrinkWrap: true,
+              itemCount: payments.length,
+              itemBuilder: (context, index) {
+                final payment = payments[index];
+                Uint8List? imageBytes;
+                if (payment['image'] != null) {
+                  imageBytes = base64Decode(payment['image']);
+                }
+
+                return Card(
+                  child: ListTile(
+                    // title: Text(
+                    //   '${payment['method']}: Rs ${payment['amount']}',
+                    //   style: const TextStyle(fontWeight: FontWeight.bold),
+                    // ),
+                    title: Text(
+                      '${payment['method'] == 'Bank'
+                          ? '${payment['bankName'] ?? 'Bank'}'
+                          : payment['method']}: Rs ${payment['amount']}',
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Text(DateFormat('yyyy-MM-dd – HH:mm')
+                        //     .format(payment['date'])),
+                        // In payment history list
+                        Text(DateFormat('yyyy-MM-dd – HH:mm')
+                            .format(payment['date'])),
+                        if (payment['description'] != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(payment['description']),
+                          ),
+                        if (imageBytes != null)
+                          Column(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _showFullScreenImage(imageBytes!),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Hero(
+                                    tag: 'paymentImage$index',
+                                    child: Image.memory(
+                                      imageBytes,
+                                      width: 100,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => _showFullScreenImage(imageBytes!),
+                                child: Text(
+                                  Provider.of<LanguageProvider>(context, listen: false)
+                                      .isEnglish
+                                      ? 'View Full Image'
+                                      : 'مکمل تصویر دیکھیں',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+
+                        IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () => _showDeletePaymentConfirmationDialog(
+                            context,
+                            filled['id'],
+                            payment['key'], // Ensure the payment key is passed
+                            payment['method'],
+                            payment['amount'],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => _printPaymentHistoryPDF(payments, context),
+              child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
+      );
+    }
+  }  // Print filled
 
   Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
     final pdf = pw.Document();
@@ -605,6 +832,7 @@ class _filledpageState extends State<filledpage> {
         final paymentAmount = _parseToDouble(payment['amount']);
         final paymentDate = _parsePaymentDate(payment['date']);
         final description = payment['description'] ?? 'N/A';
+        // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
 
         // Generate image from description text
         final descriptionImage = await _createTexttoImage(description);
@@ -637,7 +865,17 @@ class _filledpageState extends State<filledpage> {
           // Table with payment history
           pw.Table.fromTextArray(
             headers: ['Method', 'Amount', 'Date', 'Description'],
-            data: tableData,
+            // data: tableData,
+            data: payments.map((payment) {
+              return [
+                payment['method'] == 'Bank'
+                    ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+                    : payment['method'],
+                'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
+                DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
+                payment['description'] ?? 'N/A',
+              ];
+            }).toList(),
             border: pw.TableBorder.all(),
             headerStyle: pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
@@ -686,255 +924,52 @@ class _filledpageState extends State<filledpage> {
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 
-  DateTime _parsePaymentDate(dynamic date) {
-    if (date is String) {
-      // If the date is a string, try parsing it directly
-      return DateTime.tryParse(date) ?? DateTime.now();
-    } else if (date is int) {
-      // If the date is a timestamp (in milliseconds), convert it to DateTime
-      return DateTime.fromMillisecondsSinceEpoch(date);
-    } else if (date is DateTime) {
-      // If the date is already a DateTime object, return it directly
-      return date;
-    } else {
-      // Fallback to the current date if the format is unknown
-      return DateTime.now();
-    }
-  }
-
-  Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
-    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+  Future<Uint8List?> _pickImage(BuildContext context) async {
+    Uint8List? imageBytes;
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
-    try {
-      final payments = await filledProvider.getFilledPayments(filled['id']);
+    if (kIsWeb) {
+      // For web, use file_picker
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
 
-      showDialog(
+      if (result != null && result.files.isNotEmpty) {
+        imageBytes = result.files.first.bytes;
+      }
+    } else {
+      // For mobile, show source selection dialog
+      final ImagePicker _picker = ImagePicker();
+
+      // Show dialog to choose camera or gallery
+      final ImageSource? source = await showDialog<ImageSource>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
-          content: Container(
-            width: double.maxFinite,
-            child: payments.isEmpty
-                ? Text(languageProvider.isEnglish ? 'No payments found' : 'کوئی ادائیگی نہیں ملی')
-                : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: payments.length,
-                    itemBuilder: (context, index) {
-                      final payment = payments[index];
-                      final paymentAmount = _parseToDouble(payment['amount']);
-                      Uint8List? imageBytes;
-                      if (payment['image'] != null) {
-                        imageBytes = base64Decode(payment['image']);
-                      }
-
-                      return Card(
-                        child: ListTile(
-                          // title: Text(
-                          //   '${payment['method']}: Rs $paymentAmount',
-                          //   style: const TextStyle(fontWeight: FontWeight.bold),
-                          // ),
-                          title: Text(
-                            '${payment['method'] == 'Bank'
-                                ? '${payment['bankName'] ?? 'Bank'}'
-                                : payment['method']}: Rs ${payment['amount']}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // In payment history list
-                              Text(DateFormat('yyyy-MM-dd – HH:mm')
-                                  .format(payment['date'])),
-                              // Text(DateFormat('yyyy-MM-dd – HH:mm').format(payment['date'])),
-                              if (payment['description'] != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(payment['description']),
-                                ),
-                              if (imageBytes != null)
-                                Column(
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () => _showFullScreenImage(imageBytes!),
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Hero(
-                                          tag: 'paymentImage$index',
-                                          child: Image.memory(
-                                            imageBytes,
-                                            width: 100,
-                                            height: 100,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => _showFullScreenImage(imageBytes!),
-                                      child: Text(
-                                        Provider.of<LanguageProvider>(context, listen: false)
-                                            .isEnglish
-                                            ? 'View Full Image'
-                                            : 'مکمل تصویر دیکھیں',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    )
-                                  ],
-                                )
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _showDeletePaymentConfirmationDialog(
-                                  context,
-                                  filled['id'],
-                                  payment['key'],
-                                  payment['method'],
-                                  paymentAmount,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () => _printPaymentHistoryPDF(payments, context),
-                  child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
-                ),
-              ],
-            ),
-          ),
+          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
           actions: [
             TextButton(
-              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
-              onPressed: () => Navigator.pop(context),
+              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
+              onPressed: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            TextButton(
+              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
+              onPressed: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
         ),
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
-      );
+
+      if (source == null) return null; // User canceled
+
+      XFile? pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        imageBytes = await file.readAsBytes();
+      }
     }
-  }
 
-  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
-    await showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.8,
-          child: InteractiveViewer(
-            panEnabled: true,
-            minScale: 0.5,
-            maxScale: 4.0,
-            child: Image.memory(imageBytes, fit: BoxFit.contain),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showDeletePaymentConfirmationDialog(
-      BuildContext context,
-      String filledId,
-      String paymentKey,
-      String paymentMethod,
-      double paymentAmount,
-      )
-  async {
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
-          content: Text(languageProvider.isEnglish
-              ? 'Are you sure you want to delete this payment?'
-              : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  await Provider.of<FilledProvider>(context, listen: false).deletePaymentEntry(
-                    context: context, // Pass the context here
-                    filledId: filledId,
-                    paymentKey: paymentKey,
-                    paymentMethod: paymentMethod,
-                    paymentAmount: paymentAmount,
-                  );
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payment deleted successfully.')),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
-                  );
-                }
-              },
-              child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<pw.MemoryImage> _createTexttoImage(String text) async {
-    const double scaleFactor = 1.5;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      Rect.fromPoints(
-        const Offset(0, 0),
-        const Offset(500 * scaleFactor, 50 * scaleFactor),
-      ),
-    );
-
-    final textStyle = const TextStyle(
-      fontSize: 13 * scaleFactor,
-      fontFamily: 'JameelNoori',
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-    );
-
-    final textSpan = TextSpan(text: text, style: textStyle);
-    final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left,
-      textDirection: ui.TextDirection.ltr,
-    );
-
-    textPainter.layout();
-    textPainter.paint(canvas, const Offset(0, 0));
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(
-      (textPainter.width * scaleFactor).toInt(),
-      (textPainter.height * scaleFactor).toInt(),
-    );
-
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    final buffer = byteData!.buffer.asUint8List();
-
-    return pw.MemoryImage(buffer);
+    return imageBytes;
   }
 
   Future<void> _showFilledPaymentDialog(
@@ -942,7 +977,7 @@ class _filledpageState extends State<filledpage> {
       FilledProvider filledProvider,
       LanguageProvider languageProvider,
       )
-  async  {
+  async {
     String? selectedPaymentMethod;
     _paymentController.clear();
     bool _isPaymentButtonPressed = false;
@@ -1187,36 +1222,6 @@ class _filledpageState extends State<filledpage> {
                         bankId: _selectedBankId,
                         bankName: _selectedBankName,
                       );
-
-                      // Add cash book entry if payment method is cash
-                      // if (selectedPaymentMethod?.toLowerCase() == 'cash') {
-                      //   try {
-                      //     await filledProvider.addCashBookEntry(
-                      //       description: _description ?? 'Filled Payment ${filled['filledNumber']}',
-                      //       amount: amount,
-                      //       dateTime: _selectedPaymentDate,
-                      //       type: 'cash_in',
-                      //     );
-                      //   } catch (e) {
-                      //     print("Error adding cash book entry: $e");
-                      //     // Show error if cash book entry fails but payment succeeded
-                      //     if (mounted) {
-                      //       ScaffoldMessenger.of(context).showSnackBar(
-                      //         SnackBar(
-                      //           content: Text(
-                      //             languageProvider.isEnglish
-                      //                 ? 'Payment processed but cash book update failed'
-                      //                 : 'ادائیگی پراسیس ہو گئی لیکن کیش بک اپ ڈیٹ نہیں ہو سکی',
-                      //           ),
-                      //         ),
-                      //       );
-                      //     }
-                      //     Navigator.of(context).pop();
-                      //     return;
-                      //   }
-                      // }
-
-                      // Show success message
                       // if (mounted) {
                       //   ScaffoldMessenger.of(context).showSnackBar(
                       //     SnackBar(
@@ -1253,54 +1258,6 @@ class _filledpageState extends State<filledpage> {
     );
   }
 
-  Future<Uint8List?> _pickImage(BuildContext context) async {
-    Uint8List? imageBytes;
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-    if (kIsWeb) {
-      // For web, use file_picker
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        imageBytes = result.files.first.bytes;
-      }
-    } else {
-      // For mobile, show source selection dialog
-      final ImagePicker _picker = ImagePicker();
-
-      // Show dialog to choose camera or gallery
-      final ImageSource? source = await showDialog<ImageSource>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
-          actions: [
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
-              onPressed: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
-              onPressed: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      );
-
-      if (source == null) return null; // User canceled
-
-      XFile? pickedFile = await _picker.pickImage(source: source);
-      if (pickedFile != null) {
-        final file = File(pickedFile.path);
-        imageBytes = await file.readAsBytes();
-      }
-    }
-
-    return imageBytes;
-  }
-
   void onPaymentPressed(Map<String, dynamic> filled) {
     // At the start of both methods
     if (filled == null) return;
@@ -1315,17 +1272,46 @@ class _filledpageState extends State<filledpage> {
     _showPaymentDetails(filled);
   }
 
-  @override
-  void dispose() {
-    for (var row in _filledRows) {
-      // row['weightController']?.dispose();
-      row['rateController']?.dispose();
-      row['qtyController']?.dispose();
-      row['descriptionController']?.dispose();
-    }
-    _discountController.dispose(); // Dispose discount controller
-    _dateController.dispose();
-    super.dispose();
+  // Create text image for PDF
+  Future<pw.MemoryImage> _createTexttoImage(String text) async {
+    const double scaleFactor = 1.5;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
+      ),
+    );
+
+    final paint = Paint()..color = Colors.black;
+    final textStyle = const TextStyle(
+      fontSize: 13 * scaleFactor,
+      fontFamily: 'JameelNoori',
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    final textSpan = TextSpan(text: text, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    textPainter.layout();
+    textPainter.paint(canvas, const Offset(0, 0));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(
+      (textPainter.width * scaleFactor).toInt(),
+      (textPainter.height * scaleFactor).toInt(),
+    );
+
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    return pw.MemoryImage(buffer);
   }
 
   @override
@@ -1334,6 +1320,12 @@ class _filledpageState extends State<filledpage> {
     _fetchItems();
     _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
 
+    if (widget.filled != null) {
+      _filledId = widget.filled!['filledNumber'];
+      _referenceController.text = widget.filled!['referenceNumber'] ?? '';
+
+    }
+    // Initialize customer provider and fetch customers
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     customerProvider.fetchCustomers().then((_) {
       if (widget.filled != null) {
@@ -1353,6 +1345,7 @@ class _filledpageState extends State<filledpage> {
     });
 
     _isReadOnly = widget.filled != null;
+
     if (widget.filled != null) {
       final filled = widget.filled!;
       _discount = (filled['discount'] as num).toDouble();
@@ -1360,10 +1353,8 @@ class _filledpageState extends State<filledpage> {
       _filledId = filled['filledNumber'];
       _paymentType = filled['paymentType'];
       _instantPaymentMethod = filled['paymentMethod'];
-      _referenceController.text = filled['referenceNumber'] ?? '';
 
-
-      // Initialize rows with calculated totals and initial quantities
+      // Initialize rows with calculated totals
       _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
         double rate = (row['rate'] as num).toDouble();
         double qty = (row['qty'] as num).toDouble();
@@ -1372,10 +1363,10 @@ class _filledpageState extends State<filledpage> {
         return {
           'itemName': row['itemName'],
           'rate': rate,
-          'qty': qty,
-          'initialQty': qty, // Store the initial quantity
+          'initialQty': qty, // Store initial qty for delta calculation
+          'qty': (row['qty'] as num).toDouble(),
           'description': row['description'],
-          'total': total,
+          'total': total, // Use calculated total
           'itemNameController': TextEditingController(text: row['itemName']),
           'rateController': TextEditingController(text: rate.toString()),
           'qtyController': TextEditingController(text: row['qty'].toString()),
@@ -1388,9 +1379,8 @@ class _filledpageState extends State<filledpage> {
           'total': 0.0,
           'rate': 0.0,
           'qty': 0.0,
-          'initialQty': 0.0, // Initialize initialQty for new rows
           'description': '',
-          'itemNameController': TextEditingController(),
+          'itemNameController': TextEditingController(), // Add this
           'rateController': TextEditingController(),
           'qtyController': TextEditingController(),
           'descriptionController': TextEditingController(),
@@ -1400,888 +1390,901 @@ class _filledpageState extends State<filledpage> {
   }
 
   @override
+  void dispose() {
+    for (var row in _filledRows) {
+      row['itemNameController']?.dispose(); // Add this
+      row['rateController']?.dispose();
+      row['qtyController']?.dispose();
+      row['descriptionController']?.dispose();
+      row['rateController']?.dispose();
+    }
+    _discountController.dispose(); // Dispose discount controller
+    _customerController.dispose();
+    _dateController.dispose();
+    _referenceController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
-    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
     final _formKey = GlobalKey<FormState>();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _isReadOnly
-              ? (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ بنائیں')
-              : (languageProvider.isEnglish ? 'Create Filled' : 'انوائس کو اپ ڈیٹ کریں'),
-          style: const TextStyle(color: Colors.white,
-          ),
-        ),
-        backgroundColor: Colors.teal,
-        centerTitle: true,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onSelected: (String value) async {
-              // final filledNumber = _filledId ?? generateFilledNumber();
-
-              String filledNumber;
-              if (widget.filled != null) {
-                // For existing filled, use their original number
-                filledNumber = widget.filled!['filledNumber'];
-              } else {
-                // For new filled, get the next sequential number
-                final filledProvider = Provider.of<FilledProvider>(context, listen: false);
-                filledNumber = (await filledProvider.getNextFilledNumber()).toString();
-              }
-
-              switch (value) {
-                case 'print':
-                  // _generateAndPrintPDF(filledNumber);
-                  try {
-                    // Add customer selection check
-                    if (_selectedCustomerId == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              languageProvider.isEnglish
-                                  ? 'Please select a customer first'
-                                  : 'براہ کرم پہلے ایک گاہک منتخب کریں'
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-                    // await _generateAndPrintPDF(filledNumber);
-                    await _generateAndPrintPDF();
-
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                            languageProvider.isEnglish
-                                ? 'Error generating PDF: ${e.toString()}'
-                                : 'PDF بنانے میں خرابی: ${e.toString()}'
-                        ),
-                      ),
-                    );
+    return FutureBuilder(
+      future: Provider.of<CustomerProvider>(context, listen: false).fetchCustomers(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.active) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(
+              // widget.filled == null
+              _isReadOnly
+                  ? (languageProvider.isEnglish ? 'Update Filled' : 'انوائس بنائیں')
+                  : (languageProvider.isEnglish ? 'Create Filled' : 'انوائس کو اپ ڈیٹ کریں'),
+              style: const TextStyle(color: Colors.white,
+              ),
+            ),
+            backgroundColor: Colors.teal,
+            centerTitle: true,
+            actions: [
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Colors.white), // Three-dot menu icon
+                onSelected: (String value) async {
+                  // final filledNumber = _filledId ?? generateFilledNumber();
+                  // Get the appropriate filled number
+                  String filledNumber;
+                  if (widget.filled != null) {
+                    // For existing filled, use their original number
+                    filledNumber = widget.filled!['filledNumber'];
+                  } else {
+                    // For new filled, get the next sequential number
+                    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                    filledNumber = (await filledProvider.getNextFilledNumber()).toString();
                   }
-                  break;
-                case 'save':
-                  await _savePDF(filledNumber);
-                  break;
-                case 'share':
-                  await _sharePDFViaWhatsApp(filledNumber);
-                  break;
-              }
-            },
-            itemBuilder: (BuildContext context) => [
-              const PopupMenuItem<String>(
-                value: 'print',
-                child: Row(
-                  children: [
-                    Icon(Icons.print, color: Colors.black),
-                    SizedBox(width: 8),
-                    Text('Print'),
-                  ],
-                ),
+
+                  switch (value) {
+                    case 'print':
+                      try {
+                        // Add customer selection check
+                        if (_selectedCustomerId == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  languageProvider.isEnglish
+                                      ? 'Please select a customer first'
+                                      : 'براہ کرم پہلے ایک گاہک منتخب کریں'
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        // await _generateAndPrintPDF(filledNumber);
+                        await _generateAndPrintPDF();
+
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                languageProvider.isEnglish
+                                    ? 'Error generating PDF: ${e.toString()}'
+                                    : 'PDF بنانے میں خرابی: ${e.toString()}'
+                            ),
+                          ),
+                        );
+                      }
+                      // _generateAndPrintPDF(filledNumber);
+                      break;
+                    case 'save':
+                      await _savePDF(filledNumber);
+                      break;
+                    case 'share':
+                      await _sharePDFViaWhatsApp(filledNumber);
+                      break;
+                  }
+                },
+                itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem<String>(
+                    value: 'print',
+                    child: Row(
+                      children: [
+                        Icon(Icons.print, color: Colors.black), // Print icon
+                        SizedBox(width: 8), // Spacing
+                        Text('Print'), // Print label
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'save',
+                    child: Row(
+                      children: [
+                        Icon(Icons.save, color: Colors.black), // Save icon
+                        SizedBox(width: 8), // Spacing
+                        Text('Save'), // Save label
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'share',
+                    child: Row(
+                      children: [
+                        Icon(Icons.share, color: Colors.black), // Share icon
+                        SizedBox(width: 8), // Spacing
+                        Text('Share'), // Share label
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const PopupMenuItem<String>(
-                value: 'save',
-                child: Row(
-                  children: [
-                    Icon(Icons.save, color: Colors.black),
-                    SizedBox(width: 8),
-                    Text('Save'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem<String>(
-                value: 'share',
-                child: Row(
-                  children: [
-                    Icon(Icons.share, color: Colors.black),
-                    SizedBox(width: 8),
-                    Text('Share'),
-                  ],
-                ),
-              ),
+
             ],
           ),
-          // Padding(
-          //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          //   child: Text(
-          //     widget.filled == null
-          //         ? '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${generateFilledNumber()}'
-          //         : '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر#'}${widget.filled!['filledNumber']}',
-          //     style: TextStyle(color: Colors.white, fontSize: 14),
-          //   ),
-          // ),
-          // Padding(
-          //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          //   child: FutureBuilder<String>(
-          //     future: widget.filled == null
-          //         ? Provider.of<FilledProvider>(context, listen: false)
-          //         .getNextFilledNumber()
-          //         .then((num) => num.toString())
-          //         : Future.value(widget.filled!['filledNumber']),
-          //     builder: (context, snapshot) {
-          //       return Text(
-          //         '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر#'}${snapshot.data ?? '...'}',
-          //         style: const TextStyle(color: Colors.white, fontSize: 14),
-          //       );
-          //     },
-          //   ),
-          // ),
-        ],      ),
-      body: SingleChildScrollView(
-        child: Consumer<CustomerProvider>(
-          builder: (context, customerProvider, child) {
-            if (widget.filled != null && _selectedCustomerId != null) {
-              final customer = customerProvider.customers.firstWhere(
-                    (c) => c.id == _selectedCustomerId,
-                orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
-              );
-              _selectedCustomerName = customer.name; // Update name
-            }
 
-            return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Reference Number Field
-                  TextFormField(
-                    controller: _referenceController,
-                    decoration: InputDecoration(
-                      labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    readOnly: widget.filled != null, // Make it read-only if editing existing filled
-                    style: const TextStyle(fontSize: 14),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return languageProvider.isEnglish
-                            ? 'Reference number is required'
-                            : 'ریفرنس نمبر درکار ہے';
-                      }
-                      return null;
-                    },
-                  ),
-                  // TextField(
-                  //   controller: _referenceController,
-                  //   decoration: InputDecoration(
-                  //     labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
-                  //     border: const OutlineInputBorder(),
-                  //     isDense: true, // Reduces vertical height
-                  //     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Adjust padding
-                  //   ),
-                  //   style: const TextStyle(fontSize: 14), // Optional: smaller font size
-                  // ),
-                  // Dropdown to select customer
-                  Text(
-                    languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
-                    style: TextStyle(color: Colors.teal.shade800, fontSize: 18), // Title text color
-                  ),
-                  Autocomplete<Customer>(
-                    initialValue: TextEditingValue(
-                        text: _selectedCustomerName ?? ''
-                    ),
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text.isEmpty) {
-                        return const Iterable<Customer>.empty();
-                      }
-                      return customerProvider.customers.where((Customer customer) {
-                        return customer.name.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                      });
-                    },
-                    displayStringForOption: (Customer customer) => customer.name,
-                    fieldViewBuilder: (BuildContext context, TextEditingController textEditingController,
-                        FocusNode focusNode, VoidCallback onFieldSubmitted) {
-                      _customerController.text = _selectedCustomerName ?? '';
 
-                      return TextField(
-                        controller: textEditingController,
-                        focusNode: focusNode,
+          body: SingleChildScrollView(
+            child: Consumer<CustomerProvider>(
+              builder: (context, customerProvider, child) {
+                if (widget.filled != null && _selectedCustomerId != null) {
+                  final customer = customerProvider.customers.firstWhere(
+                        (c) => c.id == _selectedCustomerId,
+                    orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+                  );
+                  _selectedCustomerName = customer.name; // Update name
+                }
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Reference Number Field
+                      TextFormField(
+                        controller: _referenceController,
                         decoration: InputDecoration(
-                          labelText: languageProvider.isEnglish ? 'Choose a customer' : 'ایک کسٹمر منتخب کریں',
+                          labelText: languageProvider.isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
                           border: const OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedCustomerId = null; // Reset ID when manually changing text
-                            _selectedCustomerName = value;
+                        readOnly: widget.filled != null,
+                        style: const TextStyle(fontSize: 14),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return languageProvider.isEnglish
+                                ? 'Reference number is required'
+                                : 'ریفرنس نمبر درکار ہے';
+                          }
+                          return null;
+                        },
+                      ),
+
+                      // Dropdown to select customer
+                      Text(
+                        languageProvider.isEnglish ? 'Select Customer:' : 'ایک کسٹمر منتخب کریں',
+                        style: TextStyle(color: Colors.teal.shade800, fontSize: 18), // Title text color
+                      ),
+                      Autocomplete<Customer>(
+                        initialValue: TextEditingValue(
+                            text: _selectedCustomerName ?? ''
+                        ),
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return const Iterable<Customer>.empty();
+                          }
+                          return customerProvider.customers.where((Customer customer) {
+                            return customer.name.toLowerCase().contains(textEditingValue.text.toLowerCase());
                           });
                         },
-                      );
-                    },
-                    // In the customer Autocomplete widget
-                    onSelected: (Customer selectedCustomer) {
-                      setState(() {
-                        _selectedCustomerId = selectedCustomer.id;
-                        _selectedCustomerName = selectedCustomer.name;
-                        _customerController.text = selectedCustomer.name;
-                      });
-                      _fetchRemainingBalance(); // Fetch the remaining balance when a customer is selected
-                    },
-                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
-                        Iterable<Customer> options) {
-                      return Align(
-                        alignment: Alignment.topLeft,
-                        child: Material(
-                          elevation: 4.0,
-                          child: Container(
-                            width: MediaQuery.of(context).size.width * 0.9,
-                            constraints: const BoxConstraints(maxHeight: 200),
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: options.length,
-                              itemBuilder: (BuildContext context, int index) {
-                                final Customer customer = options.elementAt(index);
-                                return ListTile(
-                                  title: Text(customer.name),
-                                  onTap: () => onSelected(customer),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  // Show selected customer name
-                  if (_selectedCustomerName != null)
-                    Text(
-                      'Selected Customer: $_selectedCustomerName',
-                      style: TextStyle(color: Colors.teal.shade600),
-                    ),
-                  Text(
-                    'Remaining Balance: ${_remainingBalance.toStringAsFixed(2)}',
-                    style: TextStyle(color: Colors.teal.shade600),
-                  ),
-                  // Add a TextField for the date
-                  TextField(
-                    controller: _dateController,
-                    decoration: InputDecoration(
-                      labelText: 'Filled Date',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.calendar_today),
-                        onPressed: () => _selectDate(context),
-                      ),
-                    ),
-                    // readOnly: true, // Prevent manual typing
-                    onTap: () => _selectDate(context),
-                  ),
-                  // Space between sections
-                  const SizedBox(height: 20),
-                  // Display columns for the filled details
-                  Text(
-                    languageProvider.isEnglish ? 'Filled Details:' : 'فلڈ کی تفصیلات:',
-                    style: TextStyle(color: Colors.teal.shade800, fontSize: 18),
-                  ),
-                  Card(
-                    elevation: 5,
-                    child: SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.4, // Adjust height as neededss
-                      child: ListView.builder(
-                        itemCount: _filledRows.length,
-                        itemBuilder: (context, i) {
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Total Display and Delete Button
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        '${languageProvider.isEnglish ? 'Total:' : 'کل:'} ${_filledRows[i]['total']?.toStringAsFixed(2) ?? '0.00'}',
-                                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade800),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () {
-                                          _deleteRow(i);
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 5,),
-                                  CustomAutocomplete(
-                                    items: _items,
+                        displayStringForOption: (Customer customer) => customer.name,
+                        fieldViewBuilder: (BuildContext context, TextEditingController textEditingController,
+                            FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                          _customerController.text = _selectedCustomerName ?? '';
 
-                                    controller: _filledRows[i]['itemNameController'],
-                                    onSelected: (Item selectedItem) {
-                                      setState(() {
-                                        _filledRows[i]['itemId'] = selectedItem.id; // Add itemId
-                                        _filledRows[i]['itemName'] = selectedItem.itemName;
-                                        _filledRows[i]['rate'] = selectedItem.costPrice;
-                                        _filledRows[i]['rateController'].text = selectedItem.costPrice.toString();
-                                        _filledRows[i]['itemNameController'].text = selectedItem.itemName;
-                                      });
-                                      print(_items);
-                                    },
-                                    // readOnly: _isReadOnly,
-                                  ),
-                                  const SizedBox(height: 5),
-                                  // Sarya Rate TextField
-                                  TextField(
-                                    controller: _filledRows[i]['rateController'],
-                                    onChanged: (value) {
-                                      double newRate = double.tryParse(value) ?? 0.0;
-                                      _updateRow(i, 'rate', newRate);
-                                    },
-                                    // enabled: !_isReadOnly,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Rate',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 5,),
-                                  // Sarya Qty
-                                  TextField(
-                                    controller: _filledRows[i]['qtyController'],
-                                    // enabled: !_isReadOnly,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                    ],
-                                    onChanged: (value) {
-                                      _updateRow(i, 'qty', double.tryParse(value) ?? 0.0);
-                                    },
-                                    decoration: InputDecoration(
-                                      labelText: languageProvider.isEnglish ? 'Sarya Qty' : 'سرئے کی مقدار',
-                                      hintStyle: TextStyle(color: Colors.teal.shade600),
-                                      border: const OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(10)),
-                                        borderSide: BorderSide(color: Colors.grey),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5,),
-                                  // Descriptions
-                                  TextField(
-                                    controller: _filledRows[i]['descriptionController'],
-                                    // enabled: !_isReadOnly,
-                                    onChanged: (value) {
-                                      _updateRow(i, 'description', value);
-                                    },
-                                    decoration: InputDecoration(
-                                      labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                                      hintStyle: TextStyle(color: Colors.teal.shade600),
-                                      border: const OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(10)),
-                                        borderSide: BorderSide(color: Colors.grey),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5,),
-                                ],
+                          return TextField(
+                            controller: textEditingController,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              labelText: languageProvider.isEnglish ? 'Choose a customer' : 'ایک کسٹمر منتخب کریں',
+                              border: const OutlineInputBorder(),
+                            ),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedCustomerId = null; // Reset ID when manually changing text
+                                _selectedCustomerName = value;
+                              });
+                            },
+                          );
+                        },
+                        // In the customer Autocomplete widget
+                        onSelected: (Customer selectedCustomer) {
+                          setState(() {
+                            _selectedCustomerId = selectedCustomer.id;
+                            _selectedCustomerName = selectedCustomer.name;
+                            _customerController.text = selectedCustomer.name;
+                          });
+                          _fetchRemainingBalance(); // This updates the remaining balance
+                        },
+                        optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
+                            Iterable<Customer> options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4.0,
+                              child: Container(
+                                width: MediaQuery.of(context).size.width * 0.9,
+                                constraints: const BoxConstraints(maxHeight: 200),
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length,
+                                  itemBuilder: (BuildContext context, int index) {
+                                    final Customer customer = options.elementAt(index);
+                                    return ListTile(
+                                      title: Text(customer.name),
+                                      onTap: () => onSelected(customer),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           );
                         },
                       ),
-                    ),
-                  ),
-                  // Add Row Button
-                  Center(
-                    child: ElevatedButton.icon(
-                      onPressed: _addNewRow,
-                      icon: const Icon(Icons.add, color: Colors.white),
-                      label: Text(
-                        languageProvider.isEnglish ? 'Add Row' : 'نئی لائن شامل کریں',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                    ),
-                  ),
-                  // Subtotal row
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
+                      // Show selected customer name
+                      if (_selectedCustomerName != null)
+                        Text(
+                          'Selected Customer: $_selectedCustomerName',
+                          style: TextStyle(color: Colors.teal.shade600),
+                        ),
                       Text(
-                        '${languageProvider.isEnglish ? 'Subtotal:' : 'کل رقم:'} ${_calculateSubtotal().toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade800, // Subtotal text color
+                        'Remaining Balance: ${_remainingBalance.toStringAsFixed(2)}',
+                        style: TextStyle(color: Colors.teal.shade600),
+                      ),
+                      // Space between sections
+                      // Add a TextField for the date
+                      TextField(
+                        controller: _dateController,
+                        decoration: InputDecoration(
+                          labelText: 'Filled Date',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today),
+                            onPressed: () => _selectDate(context),
+                          ),
+                        ),
+                        // readOnly: true, // Prevent manual typing
+                        onTap: () => _selectDate(context),
+                      ),
+                      const SizedBox(height: 20),
+                      // Display columns for the filled details
+                      Text(languageProvider.isEnglish ? 'Filled Details:' : 'انوائس کی تفصیلات:',
+                        style: TextStyle(color: Colors.teal.shade800, fontSize: 18),
+                      ),
+                      // Replace the Table widget with a ListView.builder
+                      Card(
+                        elevation: 5,
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.6, // Adjust height as neededs
+                          child: ListView.builder(
+                            itemCount: _filledRows.length,
+                            itemBuilder: (context, i) {
+                              return Card(
+                                margin: const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Total Displays
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            '${languageProvider.isEnglish ? 'Total:' : 'کل:'} ${_filledRows[i]['total']?.toStringAsFixed(2) ?? '0.00'}',
+                                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete, color: Colors.red),
+                                            onPressed: () {
+                                              _deleteRow(i);
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5,),
+                                      CustomAutocomplete(
+                                        items: _items,
+                                        controller: _filledRows[i]['itemNameController'],
+                                        onSelected: (Item selectedItem) {
+                                          setState(() {
+                                            _filledRows[i]['itemId'] = selectedItem.id; // Add itemId
+                                            _filledRows[i]['itemName'] = selectedItem.itemName;
+                                            _filledRows[i]['rate'] = selectedItem.costPrice;
+                                            _filledRows[i]['rateController'].text = selectedItem.costPrice.toString();
+                                            _filledRows[i]['itemNameController'].text = selectedItem.itemName;
+                                          });
+                                        },
+                                        // readOnly: _isReadOnly,
+                                      ),
+                                      const SizedBox(height: 5),
+                                      // Sarya Rate TextField
+                                      TextField(
+                                        controller: _filledRows[i]['rateController'],
+                                        onChanged: (value) {
+                                          double newRate = double.tryParse(value) ?? 0.0;
+                                          _updateRow(i, 'rate', newRate);
+                                        },
+                                        // enabled: !_isReadOnly,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Rate',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5,),
+                                      // Sarya Qty
+                                      TextField(
+                                        controller: _filledRows[i]['qtyController'],
+                                        // enabled: !_isReadOnly,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.digitsOnly,
+                                        ],
+                                        onChanged: (value) {
+                                          _updateRow(i, 'qty', double.tryParse(value) ?? 0.0);
+                                        },
+                                        decoration: InputDecoration(
+                                          labelText: languageProvider.isEnglish ? 'Sarya Qty' : 'سرئے کی مقدار',
+                                          hintStyle: TextStyle(color: Colors.teal.shade600),
+                                          border: const OutlineInputBorder(
+                                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                                            borderSide: BorderSide(color: Colors.grey),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5,),
+                                      const SizedBox(height: 5,),
+                                      // Descriptions
+                                      TextField(
+                                        controller: _filledRows[i]['descriptionController'],
+                                        // enabled: !_isReadOnly,
+                                        onChanged: (value) {
+                                          _updateRow(i, 'description', value);
+                                        },
+                                        decoration: InputDecoration(
+                                          labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                                          hintStyle: TextStyle(color: Colors.teal.shade600),
+                                          border: const OutlineInputBorder(
+                                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                                            borderSide: BorderSide(color: Colors.grey),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5,),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Text(languageProvider.isEnglish ? 'Discount (Amount):' : 'رعایت (رقم):', style: const TextStyle(fontSize: 18)),
-                  TextField(
-                    controller: _discountController,
-                    // enabled: !_isReadOnly, // Disable in read-only mode
-
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) {
-                      setState(() {
-                        double parsedDiscount = double.tryParse(value) ?? 0.0;
-                        // Check if the discount is greater than the subtotal
-                        if (parsedDiscount > _calculateSubtotal()) {
-                          // If it is, you can either reset the value or show a warning
-                          _discount = _calculateSubtotal();  // Set discount to subtotal if greater
-                          // Optionally, show an error message to the user
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(languageProvider.isEnglish ? 'Discount cannot be greater than subtotal.' : 'رعایت کل رقم سے زیادہ نہیں ہو سکتی۔')),
-                          );
-                        } else {
-                          _discount = parsedDiscount;
-                        }
-                      });
-                    },
-                    decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter discount' : 'رعایت درج کریں'),
-                  ),
-                  // Grand Total row
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${languageProvider.isEnglish ? 'Grand Total:' : 'مجموعی کل:'} ${_calculateGrandTotal().toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+                      // if(!_isReadOnly)
+                      Center(
+                        child: ElevatedButton.icon(
+                          onPressed: _addNewRow,
+                          icon: const Icon(Icons.add, color: Colors.white),
+                          label: Text(
+                            languageProvider.isEnglish ? 'Add Row' : 'نئی لائن شامل کریں',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                        ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Payment Type
-                  Text(
-                    languageProvider.isEnglish ? 'Payment Type:' : 'ادائیگی کی قسم:',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  RadioListTile<String>(
-                                    value: 'instant',
-                                    groupValue: _paymentType,
-                                    title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
-                                    onChanged:
-                                    // _isReadOnly ? null :
-                                        (value) {
-                                      setState(() {
-                                        _paymentType = value!;
-                                        _instantPaymentMethod = null; // Reset instant payment method
-
-                                      });
-                                    },
-                                  ),
-                                  RadioListTile<String>(
-                                    value: 'udhaar',
-                                    groupValue: _paymentType,
-                                    title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
-                                    onChanged:
-                                    // _isReadOnly ? null :
-                                        (value) {
-                                      setState(() {
-                                        _paymentType = value!;
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
+                      // Subtotal row
+                      const SizedBox(height:
+                      20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${languageProvider.isEnglish ? 'Subtotal:' : 'کل رقم:'} ${_calculateSubtotal().toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal.shade800, // Subtotal text color
                             ),
-                            if (_paymentType == 'instant')
-                              Expanded(
-                                child: Column(
-                                  children: [
-                                    RadioListTile<String>(
-                                      value: 'cash',
-                                      groupValue: _instantPaymentMethod,
-                                      title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
-                                      onChanged:
-                                      // _isReadOnly ? null :
-                                          (value) {
-                                        setState(() {
-                                          _instantPaymentMethod = value!;
-                                        });
-                                      },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(languageProvider.isEnglish ? 'Discount (Amount):' : 'رعایت (رقم):', style: const TextStyle(fontSize: 18)),
+                      TextField(
+                        controller: _discountController,
+                        // enabled: !_isReadOnly, // Disable in read-only modess
+                        keyboardType: TextInputType.number,
+                        onChanged: (value) {
+                          setState(() {
+                            double parsedDiscount = double.tryParse(value) ?? 0.0;
+                            // Check if the discount is greater than the subtotal
+                            if (parsedDiscount > _calculateSubtotal()) {
+                              // If it is, you can either reset the value or show a warning
+                              _discount = _calculateSubtotal();  // Set discount to subtotal if greater
+                              // Optionally, show an error message to the user
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(languageProvider.isEnglish ? 'Discount cannot be greater than subtotal.' : 'رعایت کل رقم سے زیادہ نہیں ہو سکتی۔')),
+                              );
+                            } else {
+                              _discount = parsedDiscount;
+                            }
+                          });
+                        },
+                        decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter discount' : 'رعایت درج کریں'),
+                      ),
+                      // Grand Total row
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${languageProvider.isEnglish ? 'Grand Total:' : 'مجموعی کل:'} ${_calculateGrandTotal().toStringAsFixed(2)}',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Payment Type
+                      Text(
+                        languageProvider.isEnglish ? 'Payment Type:' : 'ادائیگی کی قسم:',
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      RadioListTile<String>(
+                                        value: 'instant',
+                                        groupValue: _paymentType,
+                                        title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
+                                        onChanged:
+                                        // _isReadOnly ? null :
+                                            (value) {
+                                          setState(() {
+                                            _paymentType = value!;
+                                            _instantPaymentMethod = null; // Reset instant payment method
+
+                                          });
+                                        },
+                                        // onChanged: (value) {
+                                        //   setState(() {
+                                        //     _paymentType = value!;
+                                        //     _instantPaymentMethod = null; // Reset instant payment method
+                                        //
+                                        //   });
+                                        // },
+                                      ),
+                                      RadioListTile<String>(
+                                        value: 'udhaar',
+                                        groupValue: _paymentType,
+                                        title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
+                                        onChanged:
+                                        // _isReadOnly ? null :
+                                            (value) {
+                                          setState(() {
+                                            _paymentType = value!;
+                                          });
+                                        },
+                                        //                                         onChanged:(value) {
+                                        //                                           setState(() {
+                                        //                                             _paymentType = value!;
+                                        //                                           });
+                                        //                                         },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_paymentType == 'instant')
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        RadioListTile<String>(
+                                          value: 'cash',
+                                          groupValue: _instantPaymentMethod,
+                                          title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
+                                          onChanged:
+                                          // _isReadOnly ? null :
+                                              (value) {
+                                            setState(() {
+                                              _instantPaymentMethod = value!;
+                                            });
+                                          },
+                                          //                                           onChanged:  (value) {
+                                          //                                             setState(() {
+                                          //                                               _instantPaymentMethod = value!;
+                                          //                                             });
+                                          //                                           },
+                                        ),
+                                        RadioListTile<String>(
+                                          value: 'online',
+                                          groupValue: _instantPaymentMethod,
+                                          title: Text(languageProvider.isEnglish ? 'Online Bank Transfer' : 'آن لائن بینک ٹرانسفر'),
+                                          onChanged:
+                                          // _isReadOnly ? null :
+                                              (value) {
+                                            setState(() {
+                                              _instantPaymentMethod = value!;
+                                            });
+                                          },
+                                          //                                           onChanged: (value) {
+                                          //                                             setState(() {
+                                          //                                               _instantPaymentMethod = value!;
+                                          //                                             });
+                                          //                                           },
+                                        ),
+                                      ],
                                     ),
-                                    RadioListTile<String>(
-                                      value: 'online',
-                                      groupValue: _instantPaymentMethod,
-                                      title: Text(languageProvider.isEnglish ? 'Online Bank Transfer' : 'آن لائن بینک ٹرانسفر'),
-                                      onChanged:
-                                      // _isReadOnly ? null :
-                                          (value) {
-                                        setState(() {
-                                          _instantPaymentMethod = value!;
-                                        });
-                                      },
-                                    ),
-                                  ],
+                                  ),
+                              ],
+                            ),
+                            // Add validation messages
+                            if (_paymentType == null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 16.0),
+                                child: Text(
+                                  languageProvider.isEnglish
+                                      ? 'Please select a payment type'
+                                      : 'براہ کرم ادائیگی کی قسم منتخب کریں',
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            if (_paymentType == 'instant' && _instantPaymentMethod == null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 16.0),
+                                child: Text(
+                                  languageProvider.isEnglish
+                                      ? 'Please select an instant payment method'
+                                      : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
+                                  style: const TextStyle(color: Colors.red),
                                 ),
                               ),
                           ],
                         ),
-                        // Add validation messages
-                        if (_paymentType == null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16.0),
-                            child: Text(
-                              languageProvider.isEnglish
-                                  ? 'Please select a payment type'
-                                  : 'براہ کرم ادائیگی کی قسم منتخب کریں',
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        if (_paymentType == 'instant' && _instantPaymentMethod == null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16.0),
-                            child: Text(
-                              languageProvider.isEnglish
-                                  ? 'Please select an instant payment method'
-                                  : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  // if (!_isReadOnly)
-                    Row(
-                      children: [
-                        ElevatedButton(
-                          onPressed: _isButtonPressed
-                              ? null
-                              : () async {
-                            setState(() {
-                              _isButtonPressed = true; // Disable the button when pressed
-                            });
+                      ),
+                      Row(
+                        children: [
+                          ElevatedButton(
+                            onPressed: _isButtonPressed
+                                ? null
+                                : () async {
+                              setState(() {
+                                _isButtonPressed = true; // Disable the button when pressed
+                              });
 
-                            try {
-
-                              // Validate reference number
-                              if (_referenceController.text.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      languageProvider.isEnglish
-                                          ? 'Please enter a reference number'
-                                          : 'براہ کرم رفرنس نمبر درج کریں',
-                                    ),
-                                  ),
-                                );
-                                setState(() => _isButtonPressed = false);
-                                return;
-                              }
-
-                              // Validate customer selection
-                              if (_selectedCustomerId == null || _selectedCustomerName == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      languageProvider.isEnglish
-                                          ? 'Please select a customer'
-                                          : 'براہ کرم کسٹمر منتخب کریں',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              // Validate payment type
-                              if (_paymentType == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      languageProvider.isEnglish
-                                          ? 'Please select a payment type'
-                                          : 'براہ کرم ادائیگی کی قسم منتخب کریں',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              // Validate instant payment method if "Instant Payment" is selected
-                              if (_paymentType == 'instant' && _instantPaymentMethod == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      languageProvider.isEnglish
-                                          ? 'Please select an instant payment method'
-                                          : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              // Validate rate fields
-                              for (var row in _filledRows) {
-                                if (row['rate'] == null || row['rate'] <= 0) {
+                              try {
+                                // Validate reference number
+                                if (_referenceController.text.isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
                                         languageProvider.isEnglish
-                                            ? 'Rate cannot be zero or less'
-                                            : 'ریٹ صفر یا اس سے کم نہیں ہو سکتا',
+                                            ? 'Please enter a reference number'
+                                            : 'براہ کرم رفرنس نمبر درج کریں',
                                       ),
                                     ),
                                   );
-                                  return;
-                                }
-                              }
-                              // Validate rate fields
-                              for (var row in _filledRows) {
-                                if (row['qty'] == null || row['qty'] <= 0) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        languageProvider.isEnglish
-                                            ? 'Qty cannot be zero or less'
-                                            : 'تعداد صفر یا اس سے کم نہیں ہو سکتا',
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-                              }
-
-                              // Validate discount amount
-                              final subtotal = _calculateSubtotal();
-                              if (_discount >= subtotal) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      languageProvider.isEnglish
-                                          ? 'Discount amount cannot be greater than or equal to the subtotal'
-                                          : 'ڈسکاؤنٹ کی رقم سب ٹوٹل سے زیادہ یا اس کے برابر نہیں ہو سکتی',
-                                    ),
-                                  ),
-                                );
-                                return; // Do not save or print if discount is invalid
-                              }
-
-                              // Check for insufficient stock
-                              List<Map<String, dynamic>> insufficientItems = [];
-                              for (var row in _filledRows) {
-                                String itemName = row['itemName'];
-                                if (itemName.isEmpty) continue;
-
-                                Item? item = _items.firstWhere(
-                                      (i) => i.itemName == itemName,
-                                  orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
-                                );
-
-                                if (item.id.isEmpty) continue;
-
-                                double currentQty = item.qtyOnHand;
-                                double qty = row['qty'] ?? 0.0;
-                                double delta;
-
-                                if (widget.filled != null) {
-                                  double initialQty = row['initialQty'] ?? 0.0;
-                                  delta = initialQty - qty;
-                                } else {
-                                  delta = -qty;
-                                }
-
-                                double newQty = currentQty + delta;
-
-                                if (newQty < 0) {
-                                  insufficientItems.add({
-                                    'item': item,
-                                    'delta': delta,
-                                  });
-                                }
-                              }
-
-                              if (insufficientItems.isNotEmpty) {
-                                bool proceed = await showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                        ? 'Insufficient Stock'
-                                        : 'اسٹاک ناکافی'),
-                                    content: Text(
-                                      Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                          ? 'The following items will have negative stock. Do you want to proceed?'
-                                          : 'مندرجہ ذیل اشیاء کا اسٹاک منفی ہو جائے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                            ? 'Cancel'
-                                            : 'منسوخ کریں'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
-                                            ? 'Proceed'
-                                            : 'آگے بڑھیں'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (!proceed) {
                                   setState(() => _isButtonPressed = false);
                                   return;
                                 }
-                              }
 
-                              // final filledNumber = _filledId ?? generateFilledNumber();
-                              final grandTotal = _calculateGrandTotal();
+                                // Validate customer selection
+                                if (_selectedCustomerId == null || _selectedCustomerName == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Please select a customer'
+                                            : 'براہ کرم کسٹمر منتخب کریں',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
 
 
-                              // Determine filled number
-                              String filledNumber;
-                              if (widget.filled != null) {
-                                // For updates, keep the original number
-                                filledNumber = widget.filled!['filledNumber'];
-                              } else {
-                                final filledProvider = Provider.of<FilledProvider>(context, listen: false);
-                                filledNumber = (await filledProvider.getNextFilledNumber()).toString();
-                              }
+                                // Validate payment type
+                                if (_paymentType == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Please select a payment type'
+                                            : 'براہ کرم ادائیگی کی قسم منتخب کریں',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
 
-                              // Try saving the filled
-                              if (_filledId != null) {
-                                // Update existing filled
-                                await Provider.of<FilledProvider>(context, listen: false).updateFilled(
-                                  filledId: _filledId!, // Pass the correct ID for updating
-                                  filledNumber: filledNumber,
-                                  customerId: _selectedCustomerId!,
-                                  customerName: _selectedCustomerName!,
-                                  subtotal: subtotal,
-                                  discount: _discount,
-                                  grandTotal: grandTotal,
-                                  paymentType: _paymentType,
-                                  referenceNumber: _referenceController.text, // Add this
-                                  paymentMethod: _instantPaymentMethod,
-                                  items: _filledRows,
-                                  createdAt: _dateController.text.isNotEmpty
-                                      ? DateTime(
-                                    DateTime.parse(_dateController.text).year,
-                                    DateTime.parse(_dateController.text).month,
-                                    DateTime.parse(_dateController.text).day,
-                                    DateTime.now().hour,
-                                    DateTime.now().minute,
-                                    DateTime.now().second,
-                                  ).toIso8601String()
-                                      : DateTime.now().toIso8601String(),
+                                // Validate instant payment method if "Instant Payment" is selected
+                                if (_paymentType == 'instant' && _instantPaymentMethod == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Please select an instant payment method'
+                                            : 'براہ کرم فوری ادائیگی کا طریقہ منتخب کریں',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                // Validate weight and rate fields
+                                for (var row in _filledRows) {
+                                  if (row['rate'] == null || row['rate'] <= 0) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          languageProvider.isEnglish
+                                              ? 'Rate cannot be zero or less'
+                                              : 'ریٹ صفر یا اس سے کم نہیں ہو سکتا',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                }
+
+                                // Validate discount amount
+                                final subtotal = _calculateSubtotal();
+                                if (_discount >= subtotal) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Discount amount cannot be greater than or equal to the subtotal'
+                                            : 'ڈسکاؤنٹ کی رقم سب ٹوٹل سے زیادہ یا اس کے برابر نہیں ہو سکتی',
+                                      ),
+                                    ),
+                                  );
+                                  return; // Do not save or print if discount is invalid
+                                }
+                                // Check for insufficient stock
+                                List<Map<String, dynamic>> insufficientItems = [];
+                                for (var row in _filledRows) {
+                                  String itemName = row['itemName'];
+                                  if (itemName.isEmpty) continue;
+
+                                  Item? item = _items.firstWhere(
+                                        (i) => i.itemName == itemName,
+                                    orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+                                  );
+
+                                  if (item.id.isEmpty) continue;
+
+                                  double currentQty = item.qtyOnHand;
+                                  double qty = row['qty'] ?? 0.0;
+                                  double delta;
+
+                                  if (widget.filled != null) {
+                                    double initialQty = row['initialQty'] ?? 0.0;
+                                    delta = initialQty - qty;
+                                  } else {
+                                    delta = -qty;
+                                  }
+
+                                  double newQty = currentQty + delta;
+
+                                  if (newQty < 0) {
+                                    insufficientItems.add({
+                                      'item': item,
+                                      'delta': delta,
+                                    });
+                                  }
+                                }
+
+                                if (insufficientItems.isNotEmpty) {
+                                  bool proceed = await showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                          ? 'Insufficient Stock'
+                                          : 'اسٹاک ناکافی'),
+                                      content: Text(
+                                        Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                            ? 'The following items will have negative stock. Do you want to proceed?'
+                                            : 'مندرجہ ذیل اشیاء کا اسٹاک منفی ہو جائے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context, false),
+                                          child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                              ? 'Cancel'
+                                              : 'منسوخ کریں'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context, true),
+                                          child: Text(Provider.of<LanguageProvider>(context, listen: false).isEnglish
+                                              ? 'Proceed'
+                                              : 'آگے بڑھیں'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+
+                                  if (!proceed) {
+                                    setState(() => _isButtonPressed = false);
+                                    return;
+                                  }
+                                }
+
+
+                                final grandTotal = _calculateGrandTotal();
+
+
+
+                                // Determine filled number
+                                String filledNumber;
+                                if (widget.filled != null) {
+                                  // For updates, keep the original number
+                                  filledNumber = widget.filled!['filledNumber'];
+                                } else {
+                                  // For new filled, use sequential numbering
+                                  // For new filled, get the next sequential number
+                                  final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                                  filledNumber = (await filledProvider.getNextFilledNumber()).toString();
+                                }
+
+
+                                // Try saving the filled
+                                if (_filledId != null) {
+                                  // Update existing filled
+                                  await Provider.of<FilledProvider>(context, listen: false).updateFilled(
+                                    filledId: _filledId!, // Pass the correct ID for updating
+                                    filledNumber: filledNumber,
+                                    customerId: _selectedCustomerId!,
+                                    customerName: _selectedCustomerName ?? 'Unknown Customer',
+                                    subtotal: subtotal,
+                                    discount: _discount,
+                                    grandTotal: grandTotal,
+                                    paymentType: _paymentType,
+                                    referenceNumber: _referenceController.text, // Add this
+                                    paymentMethod: _instantPaymentMethod,
+                                    items: _filledRows,
+                                    createdAt: _dateController.text.isNotEmpty
+                                        ? DateTime(
+                                      DateTime.parse(_dateController.text).year,
+                                      DateTime.parse(_dateController.text).month,
+                                      DateTime.parse(_dateController.text).day,
+                                      DateTime.now().hour,
+                                      DateTime.now().minute,
+                                      DateTime.now().second,
+                                    ).toIso8601String()
+                                        : DateTime.now().toIso8601String(),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Filled updated successfully'
+                                            : 'انوائس کامیابی سے تبدیل ہوگئی',
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  // Save new filled
+                                  await Provider.of<FilledProvider>(context, listen: false).saveFilled(
+                                    filledId: filledNumber,
+                                    filledNumber: filledNumber,
+                                    customerId: _selectedCustomerId!,
+                                    customerName: _selectedCustomerName ?? 'Unknown Customer',
+                                    subtotal: subtotal,
+                                    discount: _discount,
+                                    grandTotal: grandTotal,
+                                    paymentType: _paymentType,
+                                    paymentMethod: _instantPaymentMethod,
+                                    referenceNumber: _referenceController.text, // Add this
+                                    // createdAt: _dateController.text.isNotEmpty
+                                    //     ? DateTime.parse(_dateController.text).toIso8601String()
+                                    //     : DateTime.now().toIso8601String(), // Pass the selected date
+                                    createdAt: _dateController.text.isNotEmpty
+                                        ? DateTime(
+                                      DateTime.parse(_dateController.text).year,
+                                      DateTime.parse(_dateController.text).month,
+                                      DateTime.parse(_dateController.text).day,
+                                      DateTime.now().hour,
+                                      DateTime.now().minute,
+                                      DateTime.now().second,
+                                    ).toIso8601String()
+                                        : DateTime.now().toIso8601String(),
+                                    items: _filledRows.map((row) {
+                                      return {
+                                        'itemName': row['itemName'], // Include the item name
+                                        'rate': row['rate'],
+                                        'qty': row['qty'],
+                                        'description': row['description'],
+                                        'total': row['total'],
+                                      };
+                                    }).toList(),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        languageProvider.isEnglish
+                                            ? 'Filled saved successfully'
+                                            : 'انوائس کامیابی سے محفوظ ہوگئی',
+                                      ),
+                                    ),
+                                  );
+                                }
+                                // Update qtyOnHand after saving/updating the filled
+                                _updateQtyOnHand(_filledRows);
+                                // Navigate back
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => filledListpage()),
                                 );
+                              } catch (e) {
+                                // Show error message
+                                print(e);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
                                       languageProvider.isEnglish
-                                          ? 'Filled updated successfully'
-                                          : 'فلڈ کامیابی سے تبدیل ہوگئی',
+                                          ? 'Failed to save filled'
+                                          : 'انوائس محفوظ کرنے میں ناکام',
                                     ),
                                   ),
                                 );
-                              } else {
-                                // Save new filled
-                                await Provider.of<FilledProvider>(context, listen: false).saveFilled(
-                                  filledId: filledNumber, // Pass the filled number (or generated ID)
-                                  filledNumber: filledNumber,
-                                  customerId: _selectedCustomerId!,
-                                  customerName: _selectedCustomerName!,
-                                  subtotal: subtotal,
-                                  discount: _discount,
-                                  grandTotal: grandTotal,
-                                  paymentType: _paymentType,
-                                  paymentMethod: _instantPaymentMethod,
-                                  referenceNumber: _referenceController.text, // Add this
-                                  items: _filledRows,
-                                  createdAt: _dateController.text.isNotEmpty
-                                      ? DateTime(
-                                    DateTime.parse(_dateController.text).year,
-                                    DateTime.parse(_dateController.text).month,
-                                    DateTime.parse(_dateController.text).day,
-                                    DateTime.now().hour,
-                                    DateTime.now().minute,
-                                    DateTime.now().second,
-                                  ).toIso8601String()
-                                      : DateTime.now().toIso8601String(),
-                                );
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      languageProvider.isEnglish
-                                          ? 'Filled saved successfully'
-                                          : 'فلڈ کامیابی سے محفوظ ہوگئی',
-                                    ),
-                                  ),
-                                );
+                              } finally {
+                                setState(() {
+                                  _isButtonPressed = false; // Re-enable button after the operation is complete
+                                });
                               }
-                              // Update qtyOnHand after saving/updating the filled
-                              _updateQtyOnHand(_filledRows);
-                              // Navigate to the filled list page
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (context) => filledListpage()),
-                              );
-                            } catch (e) {
-                              // Show error message
-                              print(e);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    languageProvider.isEnglish
-                                        ? 'Failed to save filled'
-                                        : 'فلڈ محفوظ کرنے میں ناکام',
-                                  ),
+                            },
+                            child: Text(
+                              widget.filled == null
+                                  ? (languageProvider.isEnglish ? 'Save Filled' : 'انوائس محفوظ کریں')
+                                  : (languageProvider.isEnglish ? 'Update filled' : 'انوائس کو اپ ڈیٹ کریں'),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal.shade400, // Button background color
+                            ),
+                          ),
+                          if (widget.filled != null)
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.payment),
+                                  onPressed: () => onPaymentPressed(widget.filled!),
                                 ),
-                              );
-                            } finally {
-                              setState(() {
-                                _isButtonPressed = false; // Re-enable button after the operation is complete
-                              });
-                            }
-                          },
-                          child: Text(
-                            widget.filled == null
-                                ? (languageProvider.isEnglish ? 'Save Filled' : 'فلڈ محفوظ کریں')
-                                : (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal.shade400, // Button background color
-                          ),
-                        ),
-                        if (widget.filled != null)
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.payment),
-                                onPressed: () => onPaymentPressed(widget.filled!),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.history),
-                                onPressed: () => onViewPayments(widget.filled!),
-                              ),
-                            ],
-                          ),
-                      ],
-                    )
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+                                IconButton(
+                                  icon: const Icon(Icons.history),
+                                  onPressed: () => onViewPayments(widget.filled!),
+                                ),
+                              ],
+                            ),
+                        ],
+                      )
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+
+      },
     );
   }
 }
+
 class CustomAutocomplete extends StatefulWidget {
   final List<Item> items;
   final Function(Item) onSelected;
