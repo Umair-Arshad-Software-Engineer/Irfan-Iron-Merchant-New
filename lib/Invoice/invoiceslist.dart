@@ -38,7 +38,25 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     _searchController.addListener(() {
       setState(() {}); // Trigger rebuild on text change
     });
+    // Set default date range to last two days
+    _selectedDateRange = _getDefaultDateRange();
   }
+
+  // Helper to get default date range (last two days)
+  // DateTimeRange _getDefaultDateRange() {
+  //   DateTime today = DateTime.now();
+  //   DateTime twoDaysAgo = today.subtract(Duration(days: 2));
+  //   DateTime startDate = DateTime(twoDaysAgo.year, twoDaysAgo.month, twoDaysAgo.day);
+  //   DateTime endDate = DateTime(today.year, today.month, today.day, 23, 59, 59);
+  //   return DateTimeRange(start: startDate, end: endDate);
+  // }
+  DateTimeRange _getDefaultDateRange() {
+    DateTime now = DateTime.now();
+    DateTime startDate = DateTime(now.year, now.month, now.day); // today at 00:00:00
+    DateTime endDate = DateTime(now.year, now.month, now.day, 23, 59, 59); // today at 23:59:59
+    return DateTimeRange(start: startDate, end: endDate);
+  }
+
 
   @override
   void dispose() {
@@ -66,7 +84,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
             },
             onClearDateFilter: () {
               setState(() {
-                _selectedDateRange = null;
+                // _selectedDateRange = null;
+                _selectedDateRange = _getDefaultDateRange();
               });
             },
             languageProvider: languageProvider,
@@ -1009,95 +1028,6 @@ async {
               }
             },
             child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-
-Future<void> _showEditPaymentDialog(
-    BuildContext context,
-    String invoiceId,
-    String paymentKey,
-    String paymentMethod,
-    double oldPaymentAmount,
-    String oldDescription,
-    Uint8List? oldImageBytes,
-    Future<Uint8List?> Function() pickImage, // Add this parameter
-    )
-async {
-  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  final TextEditingController _amountController = TextEditingController(text: oldPaymentAmount.toString());
-  final TextEditingController _descriptionController = TextEditingController(text: oldDescription);
-  Uint8List? _imageBytes = oldImageBytes;
-
-  await showDialog(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
-                ),
-              ),
-              TextField(
-                controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Uint8List? imageBytes = await pickImage(); // Use the passed function
-                  if (imageBytes != null) {
-                    _imageBytes = imageBytes;
-                  }
-                },
-                child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final newAmount = double.tryParse(_amountController.text) ?? 0.0;
-              final newDescription = _descriptionController.text;
-
-              try {
-                await Provider.of<InvoiceProvider>(context, listen: false).editPaymentEntry(
-                  invoiceId: invoiceId,
-                  paymentKey: paymentKey,
-                  paymentMethod: paymentMethod,
-                  oldPaymentAmount: oldPaymentAmount,
-                  newPaymentAmount: newAmount,
-                  newDescription: newDescription,
-                  newImageBytes: _imageBytes,
-                );
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Payment updated successfully.')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to update payment: ${e.toString()}')),
-                );
-              }
-            },
-            child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
           ),
         ],
       );
