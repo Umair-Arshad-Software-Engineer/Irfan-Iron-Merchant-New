@@ -41,8 +41,6 @@ class _filledListpageState extends State<filledListpage> {
     _searchController.addListener(() {
       setState(() {}); // Trigger rebuild on text change
     });
-    // Set default date range to last two days
-    _selectedDateRange = _getDefaultDateRange();
   }
 
   @override
@@ -71,8 +69,7 @@ class _filledListpageState extends State<filledListpage> {
             },
             onClearDateFilter: () {
               setState(() {
-                // _selectedDateRange = null;
-                _selectedDateRange = _getDefaultDateRange();
+                _selectedDateRange = null;
               });
             },
             languageProvider: languageProvider,
@@ -131,12 +128,7 @@ class _filledListpageState extends State<filledListpage> {
   }
 
 
-  DateTimeRange _getDefaultDateRange() {
-    DateTime now = DateTime.now();
-    DateTime startDate = DateTime(now.year, now.month, now.day); // today at 00:00:00
-    DateTime endDate = DateTime(now.year, now.month, now.day, 23, 59, 59); // today at 23:59:59
-    return DateTimeRange(start: startDate, end: endDate);
-  }
+
 
 // Add to _filledListpageState
   Future<void> _showFullScreenImage(Uint8List imageBytes) async {

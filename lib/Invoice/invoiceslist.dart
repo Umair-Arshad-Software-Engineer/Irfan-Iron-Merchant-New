@@ -38,24 +38,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     _searchController.addListener(() {
       setState(() {}); // Trigger rebuild on text change
     });
-    // Set default date range to last two days
-    _selectedDateRange = _getDefaultDateRange();
   }
 
-  // Helper to get default date range (last two days)
-  // DateTimeRange _getDefaultDateRange() {
-  //   DateTime today = DateTime.now();
-  //   DateTime twoDaysAgo = today.subtract(Duration(days: 2));
-  //   DateTime startDate = DateTime(twoDaysAgo.year, twoDaysAgo.month, twoDaysAgo.day);
-  //   DateTime endDate = DateTime(today.year, today.month, today.day, 23, 59, 59);
-  //   return DateTimeRange(start: startDate, end: endDate);
-  // }
-  DateTimeRange _getDefaultDateRange() {
-    DateTime now = DateTime.now();
-    DateTime startDate = DateTime(now.year, now.month, now.day); // today at 00:00:00
-    DateTime endDate = DateTime(now.year, now.month, now.day, 23, 59, 59); // today at 23:59:59
-    return DateTimeRange(start: startDate, end: endDate);
-  }
 
 
   @override
@@ -84,8 +68,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
             },
             onClearDateFilter: () {
               setState(() {
-                // _selectedDateRange = null;
-                _selectedDateRange = _getDefaultDateRange();
+                _selectedDateRange = null;
               });
             },
             languageProvider: languageProvider,
