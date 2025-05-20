@@ -13,6 +13,7 @@ import 'Provider/invoice provider.dart';
 import 'Provider/lanprovider.dart';
 import 'Provider/purchaseprovider.dart';
 import 'chequePayments/listofchequePayments.dart';
+import 'chequePayments/newchequelist.dart';
 import 'dashboard.dart';
 import 'firebase_options.dart';
 
@@ -34,6 +35,7 @@ void main() async{
         ChangeNotifierProvider(create: (_) => BankProvider()), // Add this line
         ChangeNotifierProvider(create: (_) => PurchaseProvider()),
         ChangeNotifierProvider(create: (_) => CheckPaymentProvider()),
+        ChangeNotifierProvider(create: (_) => PaymentProvider()),
       ],
       child: const MyApp(),
     ),

@@ -54,7 +54,9 @@ import 'package:intl/intl.dart';
     double _remainingBalance = 0.0; // Add this variable to store the remaining balance
     TextEditingController _paymentController = TextEditingController();
     TextEditingController _referenceController = TextEditingController();
-
+    bool _isSaved = false;
+    Map<String, dynamic>? _currentInvoice;
+    List<Map<String, dynamic>> _cachedBanks = [];
 
     Future<void> _fetchRemainingBalance() async {
       if (_selectedCustomerId != null) {
@@ -1278,7 +1280,12 @@ import 'package:intl/intl.dart';
 
     void onPaymentPressed(Map<String, dynamic> invoice) {
       // At the start of both methods
-      if (invoice == null) return;
+      if (invoice['invoiceNumber'] == null || invoice['customerId'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cannot process payment - invalid Invocie data')),
+        );
+        return;
+      }
       final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
@@ -1286,7 +1293,12 @@ import 'package:intl/intl.dart';
 
     void onViewPayments(Map<String, dynamic> invoice) {
       // At the start of both methods
-      if (invoice == null) return;
+      if (invoice == null || invoice['invoiceNumber'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cannot view payments - invalid Invoice data')),
+        );
+        return;
+      }
       _showPaymentDetails(invoice);
     }
 
@@ -1336,6 +1348,7 @@ import 'package:intl/intl.dart';
     void initState() {
       super.initState();
       _fetchItems();
+      _currentInvoice = widget.invoice; // Initialize with existing invoice if editing
       _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
 
       if (widget.invoice != null) {
@@ -2331,10 +2344,20 @@ import 'package:intl/intl.dart';
                                     // Update qtyOnHand after saving/updating the invoice
                                     _updateQtyOnHand(_invoiceRows);
                                     // Navigate back
-                                    Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => InvoiceListPage()),
-                                    );
+                                    // After saving the invoice:
+                                    setState(() {
+                                      _currentInvoice = {
+                                        'invoiceNumber': invoiceNumber, // Ensure this is included
+                                        'grandTotal': _calculateGrandTotal(),
+                                        'customerId': _selectedCustomerId!,
+                                        'customerName': _selectedCustomerName ?? 'Unknown Customer',
+                                        'referenceNumber': _referenceController.text,
+                                        'createdAt': DateTime.now().toIso8601String(),
+                                        'items': _invoiceRows,
+                                        'paymentType': _paymentType,
+                                      };
+                                    });
+
                                   } catch (e) {
                                     // Show error message
                                     print(e);
@@ -2363,16 +2386,41 @@ import 'package:intl/intl.dart';
                                   backgroundColor: Colors.teal.shade400, // Button background color
                                 ),
                               ),
-                              if (widget.invoice != null)
+                              // if (widget.invoice != null)
+                              //   Row(
+                              //     children: [
+                              //       IconButton(
+                              //         icon: const Icon(Icons.payment),
+                              //         onPressed: () => onPaymentPressed(widget.invoice!),
+                              //       ),
+                              //       IconButton(
+                              //         icon: const Icon(Icons.history),
+                              //         onPressed: () => onViewPayments(widget.invoice!),
+                              //       ),
+                              //     ],
+                              //   ),
+                              if ((widget.invoice != null || _currentInvoice != null) && _selectedCustomerId != null)
                                 Row(
                                   children: [
                                     IconButton(
                                       icon: const Icon(Icons.payment),
-                                      onPressed: () => onPaymentPressed(widget.invoice!),
+                                      onPressed: () {
+                                        if (widget.invoice != null) {
+                                          onPaymentPressed(widget.invoice!);
+                                        } else if (_currentInvoice != null) {
+                                          onPaymentPressed(_currentInvoice!);
+                                        }
+                                      },
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.history),
-                                      onPressed: () => onViewPayments(widget.invoice!),
+                                      onPressed: () {
+                                        if (widget.invoice != null) {
+                                          onViewPayments(widget.invoice!);
+                                        } else if (_currentInvoice != null) {
+                                          onViewPayments(_currentInvoice!);
+                                        }
+                                      },
                                     ),
                                   ],
                                 ),
