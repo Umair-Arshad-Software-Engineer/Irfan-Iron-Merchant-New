@@ -30,7 +30,10 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   List<Map<String, dynamic>> _filteredInvoices = [];
   String? _selectedBankId;
   String? _selectedBankName;
-
+  // Scroll controller for ListView
+  final ScrollController _scrollController = ScrollController();
+  // Flag to prevent multiple requests
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -38,9 +41,41 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     _searchController.addListener(() {
       setState(() {}); // Trigger rebuild on text change
     });
+    // Add scroll listener for pagination
+    _scrollController.addListener(_scrollListener);
+
+    // Initial data load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+      invoiceProvider.resetPagination(); // Clear any previous data
+      invoiceProvider.fetchInvoices(); // Fetch first page
+    });
   }
 
+  // Scroll listener to detect when user reaches bottom
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 && !_isLoadingMore) {
+      _loadMoreData();
+    }
+  }
 
+  // Load more data when user scrolls to bottom
+  Future<void> _loadMoreData() async {
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+
+    if (!invoiceProvider.isLoading && invoiceProvider.hasMoreData) {
+      setState(() {
+        _isLoadingMore = true;
+      });
+
+      await invoiceProvider.loadMoreInvoices();
+
+      setState(() {
+        _isLoadingMore = false;
+        _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -57,7 +92,70 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       appBar: _buildAppBar(context, languageProvider, invoiceProvider),
       body: Column(
         children: [
-          // Search and Filter Section
+          // // Search and Filter Section
+          // SearchAndFilterSection(
+          //   searchController: _searchController,
+          //   selectedDateRange: _selectedDateRange,
+          //   onDateRangeSelected: (range) {
+          //     setState(() {
+          //       _selectedDateRange = range;
+          //     });
+          //   },
+          //   onClearDateFilter: () {
+          //     setState(() {
+          //       _selectedDateRange = null;
+          //     });
+          //   },
+          //   languageProvider: languageProvider,
+          // ),
+          // // Invoice List
+          // Expanded(
+          //   child: FutureBuilder(
+          //     future: invoiceProvider.fetchInvoices(),
+          //     builder: (context, snapshot) {
+          //       if (snapshot.connectionState == ConnectionState.active) {
+          //         return const Center(child: CircularProgressIndicator());
+          //       }
+          //       if (snapshot.hasError) {
+          //         return Center(child: Text('Error: ${snapshot.error}'));
+          //       }
+          //       _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
+          //       if (_filteredInvoices.isEmpty) {
+          //         return Center(
+          //           child: Text(
+          //             languageProvider.isEnglish ? 'No Invoice Found' : 'کوئی انوائس موجود نہیں',
+          //           ),
+          //         );
+          //       }
+          //       return InvoiceList(
+          //         filteredInvoices: _filteredInvoices,
+          //         languageProvider: languageProvider,
+          //         invoiceProvider: invoiceProvider,
+          //         onInvoiceTap: (invoice) {
+          //           Navigator.push(
+          //             context,
+          //             MaterialPageRoute(
+          //               builder: (context) => InvoicePage(invoice: invoice),
+          //             ),
+          //           );
+          //         },
+          //         onInvoiceLongPress: (invoice) async {
+          //           await _showDeleteConfirmationDialog(
+          //             context,
+          //             invoice,
+          //             invoiceProvider,
+          //             languageProvider,
+          //           );
+          //         },
+          //         onPaymentPressed: (invoice) {
+          //           _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
+          //         },
+          //         onViewPayments: (invoice) => _showPaymentDetails(invoice),
+          //
+          //       );
+          //     },
+          //   ),
+          // ),
           SearchAndFilterSection(
             searchController: _searchController,
             selectedDateRange: _selectedDateRange,
@@ -65,60 +163,111 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
               setState(() {
                 _selectedDateRange = range;
               });
+
+              // When date filter changes, reset pagination
+              final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+              invoiceProvider.resetPagination();
+              invoiceProvider.fetchInvoices();
             },
             onClearDateFilter: () {
               setState(() {
                 _selectedDateRange = null;
               });
+
+              // When date filter is cleared, reset pagination
+              final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+              invoiceProvider.resetPagination();
+              invoiceProvider.fetchInvoices();
             },
             languageProvider: languageProvider,
           ),
           // Invoice List
           Expanded(
-            child: FutureBuilder(
-              future: invoiceProvider.fetchInvoices(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.active) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
-                if (_filteredInvoices.isEmpty) {
-                  return Center(
-                    child: Text(
-                      languageProvider.isEnglish ? 'No Invoice Found' : 'کوئی انوائس موجود نہیں',
-                    ),
-                  );
-                }
-                return InvoiceList(
-                  filteredInvoices: _filteredInvoices,
-                  languageProvider: languageProvider,
-                  invoiceProvider: invoiceProvider,
-                  onInvoiceTap: (invoice) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => InvoicePage(invoice: invoice),
+            child: RefreshIndicator(
+              onRefresh: () async {
+                // Refresh data by resetting pagination and fetching first page
+                final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+                invoiceProvider.resetPagination();
+                await invoiceProvider.fetchInvoices();
+                setState(() {
+                  _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
+                });
+              },
+              child: Builder(
+                builder: (context) {
+                  _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
+
+                  if (invoiceProvider.isLoading && _filteredInvoices.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (_filteredInvoices.isEmpty) {
+                    return Center(
+                      child: Text(
+                        languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
                       ),
                     );
-                  },
-                  onInvoiceLongPress: (invoice) async {
-                    await _showDeleteConfirmationDialog(
-                      context,
-                      invoice,
-                      invoiceProvider,
-                      languageProvider,
-                    );
-                  },
-                  onPaymentPressed: (invoice) {
-                    _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
-                  },
-                  onViewPayments: (invoice) => _showPaymentDetails(invoice),
+                  }
 
-                );
-              },
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: InvoiceList(
+                          scrollController: _scrollController,
+                          filteredInvoice: _filteredInvoices,
+                          languageProvider: languageProvider,
+                          invoiceProvider: invoiceProvider,
+                          onInvoiceTap: (invoice) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => InvoicePage(invoice: invoice),
+                              ),
+                            );
+                          },
+                          onInvoiceLongPress: (invoice) async {
+                            await _showDeleteConfirmationDialog(
+                              context,
+                              invoice,
+                              invoiceProvider,
+                              languageProvider,
+                            );
+                          },
+                          onPaymentPressed: (invoice) {
+                            _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
+                          },
+                          onViewPayments: (invoice) => _showPaymentDetails(invoice),
+                        ),
+                      ),
+
+                      // Loading indicator at the bottom
+                      if (invoiceProvider.isLoading && _filteredInvoices.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Center(
+                            child: SizedBox(
+                              height: 30,
+                              width: 30,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // No more data indicator
+                      if (!invoiceProvider.hasMoreData && _filteredInvoices.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            languageProvider.isEnglish ? 'No more records' : 'مزید ریکارڈز نہیں ہیں',
+                            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -128,7 +277,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
 
 // Add to _InvoiceListPageState
-  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
+  Future<void> _showFullScreenImage(Uint8List imageBytes)
+  async {
     await showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -196,12 +346,12 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
         return matchesSearch && isInDateRange;
       }
       return matchesSearch;
-    }).toList()
-      ..sort((a, b) {
-        final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
-        final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
-        return dateB.compareTo(dateA); // Newest first
-      });
+    }).toList();
+      // ..sort((a, b) {
+      //   final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
+      //   final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
+      //   return dateB.compareTo(dateA); // Newest first
+      // });
   }
 
   // Show delete confirmation dialog
@@ -296,10 +446,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
                 return Card(
                   child: ListTile(
-                    // title: Text(
-                    //   '${payment['method']}: Rs ${payment['amount']}',
-                    //   style: const TextStyle(fontWeight: FontWeight.bold),
-                    // ),
                     title: Text(
                       '${payment['method'] == 'Bank'
                           ? '${payment['bankName'] ?? 'Bank'}'
@@ -1020,7 +1166,8 @@ async {
 
 
 class InvoiceList extends StatelessWidget {
-  final List<Map<String, dynamic>> filteredInvoices;
+  final ScrollController scrollController;
+  final List<Map<String, dynamic>> filteredInvoice;
   final LanguageProvider languageProvider;
   final InvoiceProvider invoiceProvider;
   final Function(Map<String, dynamic>) onInvoiceTap;
@@ -1029,7 +1176,8 @@ class InvoiceList extends StatelessWidget {
   final Function(Map<String, dynamic>) onViewPayments;
 
   const InvoiceList({
-    required this.filteredInvoices,
+    required this.scrollController,
+    required this.filteredInvoice,
     required this.languageProvider,
     required this.invoiceProvider,
     required this.onInvoiceTap,
@@ -1046,11 +1194,18 @@ class InvoiceList extends StatelessWidget {
         final bool isWideScreen = constraints.maxWidth > 600;
 
         return ListView.builder(
-          itemCount: filteredInvoices.length,
+          controller: scrollController, // Use the scroll controller for pagination
+          itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
-            final invoice = Map<String, dynamic>.from(filteredInvoices[index]);
-            final grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
-            final debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
+            final invoice = Map<String, dynamic>.from(filteredInvoice[index]);
+            // final grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
+            // final debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
+            // Update the grandTotal and debitAmount calculations with explicit casting
+            // final grandTotal = ((invoice['grandTotal'] as num?) ?? 0.0).toDouble();
+            // final debitAmount = ((invoice['debitAmount'] as num?) ?? 0.0).toDouble();
+            // Instead of casting directly, use:
+            double grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
+            double debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
             final remainingAmount = (grandTotal - debitAmount).toDouble();
 
             return Card(
@@ -1060,12 +1215,16 @@ class InvoiceList extends StatelessWidget {
               ),
               elevation: 2,
               child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.teal,
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
                 contentPadding: const EdgeInsets.all(8),
                 title: Text(
                   '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-
-                  // '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']}',
-                  //  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
                   style: TextStyle(
                     fontSize: isWideScreen ? 18 : 16,
                     fontWeight: FontWeight.bold,
@@ -1090,26 +1249,11 @@ class InvoiceList extends StatelessWidget {
                     ),
                     Text(
                       '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-
-                      // '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']}',
-                      //  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
                       style: TextStyle(
                         fontSize:12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    // Row(
-                    //   children: [
-                    //     IconButton(
-                    //       icon: Icon(Icons.payment, size: isWideScreen ? 28 : 24),
-                    //       onPressed: () => onPaymentPressed(invoice),
-                    //     ),
-                    //     IconButton(
-                    //       icon: Icon(Icons.history, size: isWideScreen ? 28 : 24),
-                    //       onPressed: () => onViewPayments(invoice),
-                    //     ),
-                    //   ],
-                    // ),
                   ],
                 ),
                 trailing: Column(
@@ -1143,6 +1287,7 @@ class InvoiceList extends StatelessWidget {
     );
   }
 }
+
 
 
 class SearchAndFilterSection extends StatelessWidget {

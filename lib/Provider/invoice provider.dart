@@ -12,8 +12,157 @@ class InvoiceProvider with ChangeNotifier {
   List<Item> _items = []; // Initialize the _items list
   List<Item> get items => _items; // Add a getter for _items
   List<Map<String, dynamic>> get invoices => _invoices;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+  bool _hasMoreData = true;
+  bool get hasMoreData => _hasMoreData;
+  int _lastLoadedIndex = 0;
+  String? _lastKey;
+  // Page size for pagination
+  final int _pageSize = 20;
 
 
+
+
+  // Clear all loaded data and reset pagination
+  void resetPagination() {
+    _invoices = [];
+    _hasMoreData = true;
+    _lastLoadedIndex = 0;
+    _lastKey = null;
+    notifyListeners();
+  }
+
+
+  Future<void> fetchInvoices() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Clear existing data for fresh load
+      _invoices.clear();
+
+      // Query first page ordered by createdAt descending
+      Query query = _db.child('invoices')
+          .orderByChild('createdAt')
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? values = snapshot.value as Map?;
+        if (values != null) {
+          _processInvoiceData(values);
+          // Set last key for next pagination
+          _lastKey = values.keys.last.toString();
+          _hasMoreData = values.length >= _pageSize;
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to fetch invoices: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _processInvoiceData(Map<dynamic, dynamic> values) {
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      _processInvoiceEntry(entry.key.toString(), entry.value);
+    }
+  }
+
+  DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue is String) return DateTime.parse(dateValue);
+    if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
+    return DateTime.now();
+  }
+
+
+  // Load next page
+  Future<void> loadMoreInvoices() async {
+    if (_isLoading || !_hasMoreData) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Get the createdAt value of the last item in the list, not the database key
+      String? lastCreatedAt;
+      if (_invoices.isNotEmpty) {
+        lastCreatedAt = _invoices.last['createdAt'];
+      } else {
+        _hasMoreData = false;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Use the createdAt value for endBefore, not the database key
+      Query query = _db.child('invoices')
+          .orderByChild('createdAt')
+          .endBefore(lastCreatedAt)
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        Map<dynamic, dynamic>? values = snapshot.value as Map?;
+
+        if (values != null && values.isNotEmpty) {
+          // Process data without adding duplicates
+          List<String> existingIds = _invoices.map((item) => item['id'].toString()).toList();
+
+          List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+            ..sort((a, b) {
+              dynamic dateA = a.value['createdAt'];
+              dynamic dateB = b.value['createdAt'];
+              // Sort in descending order (newest first)
+              return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+            });
+
+          bool addedNewItems = false;
+
+          for (var entry in sortedEntries) {
+            String key = entry.key.toString();
+            // Only add items that aren't already in the list
+            if (!existingIds.contains(key)) {
+              _processInvoiceEntry(key, entry.value);
+              addedNewItems = true;
+            }
+          }
+
+          // Only update pagination variables if we actually added new items
+          if (addedNewItems) {
+            // Set the last created date for the next pagination
+            lastCreatedAt = _invoices.last['createdAt'];
+            _hasMoreData = values.length >= _pageSize;
+          } else {
+            _hasMoreData = false;
+          }
+        } else {
+          _hasMoreData = false;
+        }
+      } else {
+        _hasMoreData = false;
+      }
+    } catch (e) {
+      print('Error loading more invoices: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<int> getNextInvoiceNumber() async {
     final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
@@ -38,13 +187,10 @@ class InvoiceProvider with ChangeNotifier {
     return maxNumber + 1;
   }
 
-
   bool _isTimestampNumber(String number) {
     // Only consider numbers longer than 10 digits as timestamps
     return number.length > 10 && int.tryParse(number) != null;
   }
-
-
 
   Future<void> saveInvoice({
     required String invoiceId, // Accepts the invoice ID (instead of using push)
@@ -241,46 +387,81 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchInvoices() async {
-    try {
-      final snapshot = await _db.child('invoices').get();
-      if (snapshot.exists) {
-        _invoices = [];
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        data.forEach((key, value) {
-          final invoiceData = value as Map<dynamic, dynamic>;
-          _invoices.add({
-            'id': key,
-            'invoiceNumber': invoiceData['invoiceNumber']?.toString() ?? 'N/A',
-            'customerId': invoiceData['customerId']?.toString() ?? '',
-            'customerName': invoiceData['customerName']?.toString() ?? 'N/A',
-            'subtotal': (invoiceData['subtotal'] as num?)?.toDouble() ?? 0.0,
-            'discount': (invoiceData['discount'] as num?)?.toDouble() ?? 0.0,
-            'grandTotal': (invoiceData['grandTotal'] as num?)?.toDouble() ?? 0.0,
-            'paymentType': invoiceData['paymentType']?.toString() ?? '',
-            'paymentMethod': invoiceData['paymentMethod']?.toString() ?? '',
-            'cashPaidAmount': (invoiceData['cashPaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'onlinePaidAmount': (invoiceData['onlinePaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'checkPaidAmount': (invoiceData['checkPaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'slipPaidAmount': (invoiceData['slipPaidAmount'] as num?)?.toDouble() ?? 0.0,
-            'debitAmount': (invoiceData['debitAmount'] as num?)?.toDouble() ?? 0.0,
-            'debitAt': invoiceData['debitAt']?.toString() ?? '',
-            'items': (invoiceData['items'] as List?)?.map<Map<String, dynamic>>(
-                  (item) => Map<String, dynamic>.from(item as Map<dynamic, dynamic>),
-            ).toList() ?? [],
-            'createdAt': invoiceData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
-            'remainingBalance': (invoiceData['remainingBalance'] as num?)?.toDouble() ?? 0.0,
-            // In the fetchInvoices method, add this to the invoice data map
-            'referenceNumber': invoiceData['referenceNumber']?.toString() ?? '',
-          });
-        });
-        notifyListeners();
-      }
-    } catch (e) {
-      throw Exception('Failed to fetch invoices: $e');
-    }
-  }
+  void _processInvoiceEntry(String key, dynamic value) {
+    if (value is! Map<dynamic, dynamic>) return;
 
+    final invoiceData = Map<String, dynamic>.from(value);
+
+    // Helper function to safely parse dates
+    DateTime parseDateTime(dynamic dateValue) {
+      try {
+        if (dateValue is String) return DateTime.parse(dateValue);
+        if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
+        if (dateValue is DateTime) return dateValue;
+      } catch (e) {
+        print("Error parsing date: $e");
+      }
+      return DateTime.now();
+    }
+
+    // Helper function to safely parse numeric values
+    // double parseDouble(dynamic value) {
+    //   if (value == null) return 0.0;
+    //   if (value is num) return value.toDouble();
+    //   if (value is String) return double.tryParse(value) ?? 0.0;
+    //   return 0.0;
+    // }
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) {
+        // Handle currency formats or commas if necessary
+        return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
+      }
+      return 0.0;
+    }
+
+    // Safely process items list
+    List<Map<String, dynamic>> processItems(dynamic itemsData) {
+      if (itemsData is List) {
+        return itemsData.map<Map<String, dynamic>>((item) {
+          if (item is Map<dynamic, dynamic>) {
+            return {
+              'itemName': item['itemName']?.toString() ?? '',
+              'rate': parseDouble(item['rate']),
+              'qty': parseDouble(item['qty']),
+              'description': item['description']?.toString() ?? '',
+              'total': parseDouble(item['total']),
+            };
+          }
+          return {};
+        }).toList();
+      }
+      return [];
+    }
+
+    _invoices.add({
+      'id': key,
+      'invoiceNumber': invoiceData['invoiceNumber']?.toString() ?? 'N/A',
+      'customerId': invoiceData['customerId']?.toString() ?? '',
+      'customerName': invoiceData['customerName']?.toString() ?? 'N/A',
+      'subtotal': parseDouble(invoiceData['subtotal']),
+      'discount': parseDouble(invoiceData['discount']),
+      'grandTotal': parseDouble(invoiceData['grandTotal']),
+      'paymentType': invoiceData['paymentType']?.toString() ?? '',
+      'paymentMethod': invoiceData['paymentMethod']?.toString() ?? '',
+      'cashPaidAmount': parseDouble(invoiceData['cashPaidAmount']),
+      'onlinePaidAmount': parseDouble(invoiceData['onlinePaidAmount']),
+      'checkPaidAmount': parseDouble(invoiceData['checkPaidAmount'] ?? 0.0),
+      'slipPaidAmount': parseDouble(invoiceData['slipPaidAmount'] ?? 0.0),
+      'debitAmount': parseDouble(invoiceData['debitAmount']),
+      'debitAt': invoiceData['debitAt']?.toString() ?? '',
+      'items': processItems(invoiceData['items']),
+      'createdAt': parseDateTime(invoiceData['createdAt']).toIso8601String(),
+      'remainingBalance': parseDouble(invoiceData['remainingBalance']),
+      'referenceNumber': invoiceData['referenceNumber']?.toString() ?? '',
+    });
+  }
 
 
   Future<void> deleteInvoice(String invoiceId) async {
@@ -390,14 +571,12 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-
   List<Map<String, dynamic>> getInvoicesByPaymentMethod(String paymentMethod) {
     return _invoices.where((invoice) {
       final method = invoice['paymentMethod'] ?? '';
       return method.toLowerCase() == paymentMethod.toLowerCase();
     }).toList();
   }
-
 
   double _parseToDouble(dynamic value) {
     if (value == null) return 0.0;
@@ -647,9 +826,6 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-
-
-
   Future<void> deletePaymentEntry({
     required BuildContext context,
     required String invoiceId,
@@ -851,9 +1027,6 @@ class InvoiceProvider with ChangeNotifier {
       );
     }
   }
-
-
-
 
   Future<void> editPaymentEntry({
     required String invoiceId,

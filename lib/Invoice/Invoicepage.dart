@@ -120,11 +120,6 @@ import 'package:intl/intl.dart';
       });
     }
 
-    // void _deleteRow(int index) {
-    //   setState(() {
-    //     _invoiceRows.removeAt(index);
-    //   });
-    // }
     void _deleteRow(int index) {
       setState(() {
         final deletedRow = _invoiceRows[index];
@@ -1371,7 +1366,8 @@ import 'package:intl/intl.dart';
 
       if (widget.invoice != null) {
         final invoice = widget.invoice!;
-        _discount = (invoice['discount'] as num).toDouble();
+        // _discount = (invoice['discount'] as num).toDouble();
+        _discount = (invoice['discount'] as num?)?.toDouble() ?? 0.0;
         _discountController.text = _discount.toStringAsFixed(2);
         _invoiceId = invoice['invoiceNumber'];
         _paymentType = invoice['paymentType'];
@@ -1379,8 +1375,10 @@ import 'package:intl/intl.dart';
 
         // Initialize rows with calculated totals
         _invoiceRows = List<Map<String, dynamic>>.from(invoice['items']).map((row) {
-          double rate = (row['rate'] as num).toDouble();
-          double weight = (row['weight'] as num).toDouble();
+          // double rate = (row['rate'] as num).toDouble();
+          // double weight = (row['weight'] as num).toDouble();
+          double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
+          double weight = (row['weight'] as num?)?.toDouble() ?? 0.0;
           double total = rate * weight; // Calculate total here
 
           return {

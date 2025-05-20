@@ -56,6 +56,7 @@ class _filledpageState extends State<filledpage> {
   TextEditingController _referenceController = TextEditingController();
   bool _isSaved = false;
   Map<String, dynamic>? _currentFilled;
+  List<Map<String, dynamic>> _cachedBanks = [];
 
   Future<void> _fetchRemainingBalance() async {
     if (_selectedCustomerId != null) {
@@ -989,50 +990,89 @@ class _filledpageState extends State<filledpage> {
     String? _selectedBankId;
     String? _selectedBankName;
 
+
+
+    // Future<void> _selectBank(BuildContext context) async {
+    //   final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+    //
+    //   if (bankSnapshot.snapshot.value == null) {
+    //     ScaffoldMessenger.of(context).showSnackBar(
+    //       SnackBar(content: Text(languageProvider.isEnglish
+    //           ? 'No banks available'
+    //           : 'کوئی بینک دستیاب نہیں')),
+    //     );
+    //     return;
+    //   }
+    //
+    //   final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+    //   final bankList = banks.entries.map((e) {
+    //     return {
+    //       'id': e.key,
+    //       'name': e.value['name'],
+    //       'balance': e.value['balance'],
+    //     };
+    //   }).toList();
+    //
+    //   await showDialog(
+    //     context: context,
+    //     builder: (context) => AlertDialog(
+    //       title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+    //       content: SizedBox(
+    //         width: double.maxFinite,
+    //         child: ListView.builder(
+    //           shrinkWrap: true,
+    //           itemCount: bankList.length,
+    //           itemBuilder: (context, index) {
+    //             final bank = bankList[index];
+    //             return ListTile(
+    //               title: Text(bank['name']),
+    //               subtitle: Text('${bank['balance']} Rs'),
+    //               onTap: () {
+    //                 setState(() {
+    //                   _selectedBankId = bank['id'];
+    //                   _selectedBankName = bank['name'];
+    //                 });
+    //                 Navigator.pop(context);
+    //               },
+    //             );
+    //           },
+    //         ),
+    //       ),
+    //     ),
+    //   );
+    // }
     Future<void> _selectBank(BuildContext context) async {
-      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+      if (_cachedBanks.isEmpty) {
+        final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+        if (bankSnapshot.snapshot.value == null) return;
 
-      if (bankSnapshot.snapshot.value == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(languageProvider.isEnglish
-              ? 'No banks available'
-              : 'کوئی بینک دستیاب نہیں')),
-        );
-        return;
-      }
-
-      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
-      final bankList = banks.entries.map((e) {
-        return {
+        final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+        _cachedBanks = banks.entries.map((e) => {
           'id': e.key,
           'name': e.value['name'],
-          'balance': e.value['balance'],
-        };
-      }).toList();
+          'balance': e.value['balance']
+        }).toList();
+      }
 
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
               shrinkWrap: true,
-              itemCount: bankList.length,
-              itemBuilder: (context, index) {
-                final bank = bankList[index];
-                return ListTile(
-                  title: Text(bank['name']),
-                  subtitle: Text('${bank['balance']} Rs'),
-                  onTap: () {
-                    setState(() {
-                      _selectedBankId = bank['id'];
-                      _selectedBankName = bank['name'];
-                    });
-                    Navigator.pop(context);
-                  },
-                );
-              },
+              itemCount: _cachedBanks.length,
+              itemBuilder: (context, index) => ListTile(
+                title: Text(_cachedBanks[index]['name']),
+                subtitle: Text('${_cachedBanks[index]['balance']} Rs'),
+                onTap: () {
+                  setState(() {
+                    _selectedBankId = _cachedBanks[index]['id'];
+                    _selectedBankName = _cachedBanks[index]['name'];
+                  });
+                  Navigator.pop(context);
+                },
+              ),
             ),
           ),
         ),
@@ -1214,7 +1254,7 @@ class _filledpageState extends State<filledpage> {
                     if (amount != null && amount > 0) {
                       await filledProvider.payFilledWithSeparateMethod(
                         context,
-                        filled['id'],
+                        filled['filledNumber'],
                         amount,
                         selectedPaymentMethod!,
                         description: _description,
@@ -1262,7 +1302,7 @@ class _filledpageState extends State<filledpage> {
   void onPaymentPressed(Map<String, dynamic> filled) {
     // At the start of both methods
     // if (filled == null) return;
-    if (filled == null || filled['customerId'] == null) {
+    if (filled['filledNumber'] == null || filled['customerId'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cannot process payment - invalid filled data')),
       );
@@ -2246,10 +2286,10 @@ class _filledpageState extends State<filledpage> {
                                 // );
                                 // After successful save:
                                 // After successful save:
+                                // After saving the filled:
                                 setState(() {
-                                  _isSaved = true;
                                   _currentFilled = {
-                                    'filledNumber': filledNumber,
+                                    'filledNumber': filledNumber, // Ensure this is included
                                     'grandTotal': _calculateGrandTotal(),
                                     'customerId': _selectedCustomerId!,
                                     'customerName': _selectedCustomerName ?? 'Unknown Customer',
@@ -2257,7 +2297,6 @@ class _filledpageState extends State<filledpage> {
                                     'createdAt': DateTime.now().toIso8601String(),
                                     'items': _filledRows,
                                     'paymentType': _paymentType,
-                                    'remainingBalance': _calculateGrandTotal(), // Add initial balance
                                   };
                                 });
 

@@ -454,6 +454,13 @@ class _filledListpageState extends State<filledListpage> {
 
                 return Card(
                   child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.teal,
+                      child: Text(
+                        '${index + 1}',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
                     // title: Text(
                     //   '${payment['method']}: Rs ${payment['amount']}',
                     //   style: const TextStyle(fontWeight: FontWeight.bold),
