@@ -12,7 +12,157 @@ class FilledProvider with ChangeNotifier {
   List<Item> _items = []; // Initialize the _items list
   List<Item> get items => _items; // Add a getter for _items
   List<Map<String, dynamic>> get filled => _filled;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+  bool _hasMoreData = true;
+  bool get hasMoreData => _hasMoreData;
+  int _lastLoadedIndex = 0;
+  String? _lastKey;
+  // Page size for pagination
+  final int _pageSize = 20;
 
+
+
+
+  // Clear all loaded data and reset pagination
+  void resetPagination() {
+    _filled = [];
+    _hasMoreData = true;
+    _lastLoadedIndex = 0;
+    _lastKey = null;
+    notifyListeners();
+  }
+
+
+  Future<void> fetchFilled() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Clear existing data for fresh load
+      _filled.clear();
+
+      // Query first page ordered by createdAt descending
+      Query query = _db.child('filled')
+          .orderByChild('createdAt')
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? values = snapshot.value as Map?;
+        if (values != null) {
+          _processFilledData(values);
+          // Set last key for next pagination
+          _lastKey = values.keys.last.toString();
+          _hasMoreData = values.length >= _pageSize;
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to fetch filled: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _processFilledData(Map<dynamic, dynamic> values) {
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      _processFilledEntry(entry.key.toString(), entry.value);
+    }
+  }
+
+  DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue is String) return DateTime.parse(dateValue);
+    if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
+    return DateTime.now();
+  }
+
+
+  // Load next page
+  Future<void> loadMoreFilled() async {
+    if (_isLoading || !_hasMoreData) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Get the createdAt value of the last item in the list, not the database key
+      String? lastCreatedAt;
+      if (_filled.isNotEmpty) {
+        lastCreatedAt = _filled.last['createdAt'];
+      } else {
+        _hasMoreData = false;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Use the createdAt value for endBefore, not the database key
+      Query query = _db.child('filled')
+          .orderByChild('createdAt')
+          .endBefore(lastCreatedAt)
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        Map<dynamic, dynamic>? values = snapshot.value as Map?;
+
+        if (values != null && values.isNotEmpty) {
+          // Process data without adding duplicates
+          List<String> existingIds = _filled.map((item) => item['id'].toString()).toList();
+
+          List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+            ..sort((a, b) {
+              dynamic dateA = a.value['createdAt'];
+              dynamic dateB = b.value['createdAt'];
+              // Sort in descending order (newest first)
+              return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+            });
+
+          bool addedNewItems = false;
+
+          for (var entry in sortedEntries) {
+            String key = entry.key.toString();
+            // Only add items that aren't already in the list
+            if (!existingIds.contains(key)) {
+              _processFilledEntry(key, entry.value);
+              addedNewItems = true;
+            }
+          }
+
+          // Only update pagination variables if we actually added new items
+          if (addedNewItems) {
+            // Set the last created date for the next pagination
+            lastCreatedAt = _filled.last['createdAt'];
+            _hasMoreData = values.length >= _pageSize;
+          } else {
+            _hasMoreData = false;
+          }
+        } else {
+          _hasMoreData = false;
+        }
+      } else {
+        _hasMoreData = false;
+      }
+    } catch (e) {
+      print('Error loading more filled: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
 
   Future<int> getNextFilledNumber() async {
@@ -232,31 +382,31 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchFilled() async {
-    try {
-      final snapshot = await _db.child('filled').get();
-      _filled = [];
-
-      if (snapshot.exists) {
-        final dynamic data = snapshot.value;
-
-        if (data is Map<dynamic, dynamic>) {
-          // Handle map structure
-          data.forEach((key, value) {
-            _processFilledEntry(key.toString(), value);
-          });
-        } else if (data is List<dynamic>) {
-          // Handle list structure
-          for (int i = 0; i < data.length; i++) {
-            _processFilledEntry(i.toString(), data[i]);
-          }
-        }
-      }
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Failed to fetch filled: ${e.toString()}');
-    }
-  }
+  // Future<void> fetchFilled() async {
+  //   try {
+  //     final snapshot = await _db.child('filled').get();
+  //     _filled = [];
+  //
+  //     if (snapshot.exists) {
+  //       final dynamic data = snapshot.value;
+  //
+  //       if (data is Map<dynamic, dynamic>) {
+  //         // Handle map structure
+  //         data.forEach((key, value) {
+  //           _processFilledEntry(key.toString(), value);
+  //         });
+  //       } else if (data is List<dynamic>) {
+  //         // Handle list structure
+  //         for (int i = 0; i < data.length; i++) {
+  //           _processFilledEntry(i.toString(), data[i]);
+  //         }
+  //       }
+  //     }
+  //     notifyListeners();
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch filled: ${e.toString()}');
+  //   }
+  // }
 
   void _processFilledEntry(String key, dynamic value) {
     if (value is! Map<dynamic, dynamic>) return;

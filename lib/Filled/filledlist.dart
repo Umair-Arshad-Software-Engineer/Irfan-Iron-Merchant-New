@@ -31,7 +31,10 @@ class _filledListpageState extends State<filledListpage> {
   List<Map<String, dynamic>> _filteredFilled = [];
   String? _selectedBankId;
   String? _selectedBankName;
-
+  // Scroll controller for ListView
+  final ScrollController _scrollController = ScrollController();
+  // Flag to prevent multiple requests
+  bool _isLoadingMore = false;
 
 
 
@@ -41,11 +44,48 @@ class _filledListpageState extends State<filledListpage> {
     _searchController.addListener(() {
       setState(() {}); // Trigger rebuild on text change
     });
+    // Add scroll listener for pagination
+    _scrollController.addListener(_scrollListener);
+
+    // Initial data load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+      filledProvider.resetPagination(); // Clear any previous data
+      filledProvider.fetchFilled(); // Fetch first page
+    });
+  }
+
+  // Scroll listener to detect when user reaches bottom
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 && !_isLoadingMore) {
+      _loadMoreData();
+    }
+  }
+
+  // Load more data when user scrolls to bottom
+  Future<void> _loadMoreData() async {
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+
+    if (!filledProvider.isLoading && filledProvider.hasMoreData) {
+      setState(() {
+        _isLoadingMore = true;
+      });
+
+      await filledProvider.loadMoreFilled();
+
+      setState(() {
+        _isLoadingMore = false;
+        _filteredFilled = _filterFilled(filledProvider.filled);
+      });
+    }
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
     _searchController.dispose();
+    _paymentController.dispose();
     super.dispose();
   }
 
@@ -58,6 +98,70 @@ class _filledListpageState extends State<filledListpage> {
       appBar: _buildAppBar(context, languageProvider, filledProvider),
       body: Column(
         children: [
+          // // Search and Filter Section
+          // SearchAndFilterSection(
+          //   searchController: _searchController,
+          //   selectedDateRange: _selectedDateRange,
+          //   onDateRangeSelected: (range) {
+          //     setState(() {
+          //       _selectedDateRange = range;
+          //     });
+          //   },
+          //   onClearDateFilter: () {
+          //     setState(() {
+          //       _selectedDateRange = null;
+          //     });
+          //   },
+          //   languageProvider: languageProvider,
+          // ),
+          // // Filled List
+          // Expanded(
+          //   child: FutureBuilder(
+          //     future: filledProvider.fetchFilled(),
+          //     builder: (context, snapshot) {
+          //       if (snapshot.connectionState == ConnectionState.active) {
+          //         return const Center(child: CircularProgressIndicator());
+          //       }
+          //       if (snapshot.hasError) {
+          //         return Center(child: Text('Error: ${snapshot.error}'));
+          //       }
+          //       _filteredFilled = _filterFilled(filledProvider.filled);
+          //       if (_filteredFilled.isEmpty) {
+          //         return Center(
+          //           child: Text(
+          //             languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
+          //           ),
+          //         );
+          //       }
+          //       return FilledList(
+          //         filteredFilled: _filteredFilled,
+          //         languageProvider: languageProvider,
+          //         filledProvider: filledProvider,
+          //         onFilledTap: (filled) {
+          //           Navigator.push(
+          //             context,
+          //             MaterialPageRoute(
+          //               builder: (context) => filledpage(filled: filled),
+          //             ),
+          //           );
+          //         },
+          //         onFilledLongPress: (filled) async {
+          //           await _showDeleteConfirmationDialog(
+          //             context,
+          //             filled,
+          //             filledProvider,
+          //             languageProvider,
+          //           );
+          //         },
+          //         onPaymentPressed: (filled) {
+          //           _showFilledPaymentDialog(filled, filledProvider, languageProvider);
+          //         },
+          //         onViewPayments: (filled) => _showPaymentDetails(filled),
+          //
+          //       );
+          //     },
+          //   ),
+          // ),
           // Search and Filter Section
           SearchAndFilterSection(
             searchController: _searchController,
@@ -66,60 +170,111 @@ class _filledListpageState extends State<filledListpage> {
               setState(() {
                 _selectedDateRange = range;
               });
+
+              // When date filter changes, reset pagination
+              final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+              filledProvider.resetPagination();
+              filledProvider.fetchFilled();
             },
             onClearDateFilter: () {
               setState(() {
                 _selectedDateRange = null;
               });
+
+              // When date filter is cleared, reset pagination
+              final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+              filledProvider.resetPagination();
+              filledProvider.fetchFilled();
             },
             languageProvider: languageProvider,
           ),
           // Filled List
           Expanded(
-            child: FutureBuilder(
-              future: filledProvider.fetchFilled(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.active) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                _filteredFilled = _filterFilled(filledProvider.filled);
-                if (_filteredFilled.isEmpty) {
-                  return Center(
-                    child: Text(
-                      languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
-                    ),
-                  );
-                }
-                return FilledList(
-                  filteredFilled: _filteredFilled,
-                  languageProvider: languageProvider,
-                  filledProvider: filledProvider,
-                  onFilledTap: (filled) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => filledpage(filled: filled),
+            child: RefreshIndicator(
+              onRefresh: () async {
+                // Refresh data by resetting pagination and fetching first page
+                final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                filledProvider.resetPagination();
+                await filledProvider.fetchFilled();
+                setState(() {
+                  _filteredFilled = _filterFilled(filledProvider.filled);
+                });
+              },
+              child: Builder(
+                builder: (context) {
+                  _filteredFilled = _filterFilled(filledProvider.filled);
+
+                  if (filledProvider.isLoading && _filteredFilled.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (_filteredFilled.isEmpty) {
+                    return Center(
+                      child: Text(
+                        languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
                       ),
                     );
-                  },
-                  onFilledLongPress: (filled) async {
-                    await _showDeleteConfirmationDialog(
-                      context,
-                      filled,
-                      filledProvider,
-                      languageProvider,
-                    );
-                  },
-                  onPaymentPressed: (filled) {
-                    _showFilledPaymentDialog(filled, filledProvider, languageProvider);
-                  },
-                  onViewPayments: (filled) => _showPaymentDetails(filled),
+                  }
 
-                );
-              },
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: FilledList(
+                          scrollController: _scrollController,
+                          filteredFilled: _filteredFilled,
+                          languageProvider: languageProvider,
+                          filledProvider: filledProvider,
+                          onFilledTap: (filled) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => filledpage(filled: filled),
+                              ),
+                            );
+                          },
+                          onFilledLongPress: (filled) async {
+                            await _showDeleteConfirmationDialog(
+                              context,
+                              filled,
+                              filledProvider,
+                              languageProvider,
+                            );
+                          },
+                          onPaymentPressed: (filled) {
+                            _showFilledPaymentDialog(filled, filledProvider, languageProvider);
+                          },
+                          onViewPayments: (filled) => _showPaymentDetails(filled),
+                        ),
+                      ),
+
+                      // Loading indicator at the bottom
+                      if (filledProvider.isLoading && _filteredFilled.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Center(
+                            child: SizedBox(
+                              height: 30,
+                              width: 30,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // No more data indicator
+                      if (!filledProvider.hasMoreData && _filteredFilled.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            languageProvider.isEnglish ? 'No more records' : 'مزید ریکارڈز نہیں ہیں',
+                            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -199,12 +354,12 @@ class _filledListpageState extends State<filledListpage> {
         return matchesSearch && isInDateRange;
       }
       return matchesSearch;
-    }).toList()
-      ..sort((a, b) {
-        final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
-        final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
-        return dateB.compareTo(dateA); // Newest first
-      });
+    }).toList();
+      // ..sort((a, b) {
+      //   final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
+      //   final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
+      //   return dateB.compareTo(dateA); // Newest first
+      // });
   }
 
   // Show delete confirmation dialog
@@ -1100,6 +1255,7 @@ async {
 
 
 class FilledList extends StatelessWidget {
+  final ScrollController scrollController;
   final List<Map<String, dynamic>> filteredFilled;
   final LanguageProvider languageProvider;
   final FilledProvider filledProvider;
@@ -1109,6 +1265,7 @@ class FilledList extends StatelessWidget {
   final Function(Map<String, dynamic>) onViewPayments;
 
   const FilledList({
+    required this.scrollController,
     required this.filteredFilled,
     required this.languageProvider,
     required this.filledProvider,
@@ -1126,6 +1283,7 @@ class FilledList extends StatelessWidget {
         final bool isWideScreen = constraints.maxWidth > 600;
 
         return ListView.builder(
+          controller: scrollController, // Use the scroll controller for pagination
           itemCount: filteredFilled.length,
           itemBuilder: (context, index) {
             final filled = Map<String, dynamic>.from(filteredFilled[index]);
