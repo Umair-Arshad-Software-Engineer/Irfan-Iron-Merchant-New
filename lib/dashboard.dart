@@ -17,6 +17,7 @@ import 'Provider/lanprovider.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
 import 'bankmanagement/addbank.dart';
+import 'chequePayments/listofchequePayments.dart';
 import 'dailypage/listpageroznamcha.dart';
 import 'items/ItemslistPage.dart';
 import 'items/purchaselistpage.dart';
@@ -157,6 +158,7 @@ class Dashboard extends StatelessWidget {
                 _drawerItem(Icons.account_balance_wallet, 'Transactions', 'لین دین', context, const LedgerSelection(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Bank Management', 'بینک مینجمنٹ', context, BankManagementPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cash Book', 'کیش بک', context, CashbookPage(), languageProvider),
+                _drawerItem(Icons.account_balance, 'Cheque Book', 'چیک بک', context, CheckPaymentsPage(), languageProvider),
                 _drawerItem(Icons.assignment, 'Roznamcha', 'روزنامچہ', context, const Roznamchapage(), languageProvider),
                 _drawerItem(Icons.settings, 'Settings', 'ترتیبات', context, UsersPage(), languageProvider),
 

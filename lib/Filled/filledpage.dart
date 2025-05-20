@@ -54,7 +54,8 @@ class _filledpageState extends State<filledpage> {
   double _remainingBalance = 0.0; // Add this variable to store the remaining balance
   TextEditingController _paymentController = TextEditingController();
   TextEditingController _referenceController = TextEditingController();
-
+  bool _isSaved = false;
+  Map<String, dynamic>? _currentFilled;
 
   Future<void> _fetchRemainingBalance() async {
     if (_selectedCustomerId != null) {
@@ -1260,7 +1261,13 @@ class _filledpageState extends State<filledpage> {
 
   void onPaymentPressed(Map<String, dynamic> filled) {
     // At the start of both methods
-    if (filled == null) return;
+    // if (filled == null) return;
+    if (filled == null || filled['customerId'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot process payment - invalid filled data')),
+      );
+      return;
+    }
     final filledProvider = Provider.of<FilledProvider>(context, listen: false);
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _showFilledPaymentDialog(filled, filledProvider, languageProvider);
@@ -1268,7 +1275,14 @@ class _filledpageState extends State<filledpage> {
 
   void onViewPayments(Map<String, dynamic> filled) {
     // At the start of both methods
-    if (filled == null) return;
+    // if (filled == null) return;
+    // Similar null check
+    if (filled == null || filled['filledNumber'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot view payments - invalid filled data')),
+      );
+      return;
+    }
     _showPaymentDetails(filled);
   }
 
@@ -1318,6 +1332,7 @@ class _filledpageState extends State<filledpage> {
   void initState() {
     super.initState();
     _fetchItems();
+    _currentFilled = widget.filled; // Initialize with existing filled if editing
     _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
 
     if (widget.filled != null) {
@@ -2225,10 +2240,27 @@ class _filledpageState extends State<filledpage> {
                                 // Update qtyOnHand after saving/updating the filled
                                 _updateQtyOnHand(_filledRows);
                                 // Navigate back
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => filledListpage()),
-                                );
+                                // Navigator.pushReplacement(
+                                //   context,
+                                //   MaterialPageRoute(builder: (context) => filledListpage()),
+                                // );
+                                // After successful save:
+                                // After successful save:
+                                setState(() {
+                                  _isSaved = true;
+                                  _currentFilled = {
+                                    'filledNumber': filledNumber,
+                                    'grandTotal': _calculateGrandTotal(),
+                                    'customerId': _selectedCustomerId!,
+                                    'customerName': _selectedCustomerName ?? 'Unknown Customer',
+                                    'referenceNumber': _referenceController.text,
+                                    'createdAt': DateTime.now().toIso8601String(),
+                                    'items': _filledRows,
+                                    'paymentType': _paymentType,
+                                    'remainingBalance': _calculateGrandTotal(), // Add initial balance
+                                  };
+                                });
+
                               } catch (e) {
                                 // Show error message
                                 print(e);
@@ -2257,16 +2289,41 @@ class _filledpageState extends State<filledpage> {
                               backgroundColor: Colors.teal.shade400, // Button background color
                             ),
                           ),
-                          if (widget.filled != null)
+                          // if (widget.filled != null)
+                          //   Row(
+                          //     children: [
+                          //       IconButton(
+                          //         icon: const Icon(Icons.payment),
+                          //         onPressed: () => onPaymentPressed(widget.filled!),
+                          //       ),
+                          //       IconButton(
+                          //         icon: const Icon(Icons.history),
+                          //         onPressed: () => onViewPayments(widget.filled!),
+                          //       ),
+                          //     ],
+                          //   ),
+                          if ((widget.filled != null || _currentFilled != null) && _selectedCustomerId != null)
                             Row(
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.payment),
-                                  onPressed: () => onPaymentPressed(widget.filled!),
+                                  onPressed: () {
+                                    if (widget.filled != null) {
+                                      onPaymentPressed(widget.filled!);
+                                    } else if (_currentFilled != null) {
+                                      onPaymentPressed(_currentFilled!);
+                                    }
+                                  },
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.history),
-                                  onPressed: () => onViewPayments(widget.filled!),
+                                  onPressed: () {
+                                    if (widget.filled != null) {
+                                      onViewPayments(widget.filled!);
+                                    } else if (_currentFilled != null) {
+                                      onViewPayments(_currentFilled!);
+                                    }
+                                  },
                                 ),
                               ],
                             ),
