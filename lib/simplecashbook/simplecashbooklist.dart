@@ -12,16 +12,16 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:ui' as ui;
 import '../Provider/lanprovider.dart';
-import 'cashbookform.dart';
+import 'simplecashbookform.dart';
 
-class CashbookListPage extends StatefulWidget {
+class SimpleCashbookListPage extends StatefulWidget {
   final DatabaseReference databaseRef;
   final DateTime? startDate;
   final DateTime? endDate;
   final Function(DateTime?, DateTime?) onDateRangeChanged;
   final VoidCallback onClearDateFilter;
 
-  const CashbookListPage({
+  const SimpleCashbookListPage({
     Key? key,
     required this.databaseRef,
     this.startDate,
@@ -31,10 +31,10 @@ class CashbookListPage extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _CashbookListPageState createState() => _CashbookListPageState();
+  _SimpleCashbookListPageState createState() => _SimpleCashbookListPageState();
 }
 
-class _CashbookListPageState extends State<CashbookListPage> {
+class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
 
 
   Future<List<CashbookEntry>> _getFilteredEntries() async {
@@ -150,7 +150,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
 
     final Uint8List pdfBytes = await _generatePdfBytes(entries);
     final output = await getTemporaryDirectory();
-    final file = File("${output.path}/cashbook_${DateTime.now().millisecondsSinceEpoch}.pdf");
+    final file = File("${output.path}/simplecashbook_${DateTime.now().millisecondsSinceEpoch}.pdf");
     await file.writeAsBytes(pdfBytes);
 
     await Share.shareXFiles(
@@ -507,7 +507,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CashbookFormPage(
+        builder: (context) => SimpleCashbookFormPage(
           databaseRef: widget.databaseRef,
           editingEntry: entry,
         ),

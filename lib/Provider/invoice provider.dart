@@ -34,28 +34,71 @@ class InvoiceProvider with ChangeNotifier {
   }
 
 
-  Future<void> fetchInvoices() async {
+  // Future<void> fetchInvoices() async {
+  //   try {
+  //     _isLoading = true;
+  //     notifyListeners();
+  //
+  //     // Clear existing data for fresh load
+  //     _invoices.clear();
+  //
+  //     // Query first page ordered by createdAt descending
+  //     Query query = _db.child('invoices')
+  //         .orderByChild('createdAt')
+  //         .limitToLast(_pageSize);
+  //
+  //     final snapshot = await query.get();
+  //
+  //     if (snapshot.exists) {
+  //       final Map<dynamic, dynamic>? values = snapshot.value as Map?;
+  //       if (values != null) {
+  //         _processInvoiceData(values);
+  //         // Set last key for next pagination
+  //         _lastKey = values.keys.last.toString();
+  //         _hasMoreData = values.length >= _pageSize;
+  //       }
+  //     }
+  //
+  //     notifyListeners();
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch invoices: ${e.toString()}');
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
+  Future<void> fetchInvoices({int limit = 20, String? lastKey}) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      // Clear existing data for fresh load
-      _invoices.clear();
-
-      // Query first page ordered by createdAt descending
       Query query = _db.child('invoices')
           .orderByChild('createdAt')
-          .limitToLast(_pageSize);
+          .limitToLast(limit);
+
+      if (lastKey != null) {
+        // Get the last invoice to use its createdAt value for pagination
+        final lastInvoiceSnapshot = await _db.child('invoices').child(lastKey).get();
+        if (lastInvoiceSnapshot.exists) {
+          final lastInvoice = lastInvoiceSnapshot.value as Map<dynamic, dynamic>;
+          final lastCreatedAt = lastInvoice['createdAt'];
+          query = query.endBefore(lastCreatedAt);
+        }
+      }
 
       final snapshot = await query.get();
 
       if (snapshot.exists) {
         final Map<dynamic, dynamic>? values = snapshot.value as Map?;
         if (values != null) {
+          // Clear existing data only on first load
+          if (lastKey == null) {
+            _invoices.clear();
+          }
+
           _processInvoiceData(values);
-          // Set last key for next pagination
           _lastKey = values.keys.last.toString();
-          _hasMoreData = values.length >= _pageSize;
+          _hasMoreData = values.length >= limit;
         }
       }
 
@@ -81,6 +124,30 @@ class InvoiceProvider with ChangeNotifier {
       _processInvoiceEntry(entry.key.toString(), entry.value);
     }
   }
+  // void _processInvoiceData(Map<dynamic, dynamic> values) {
+  //   // Convert to list and sort by date (newest first)
+  //   final sortedEntries = values.entries.toList()
+  //     ..sort((a, b) {
+  //       final dateA = _parseDateTime(a.value['createdAt']);
+  //       final dateB = _parseDateTime(b.value['createdAt']);
+  //       return dateB.compareTo(dateA); // Sort descending
+  //     });
+  //
+  //   // Process only the necessary fields
+  //   for (var entry in sortedEntries) {
+  //     final invoiceData = entry.value as Map<dynamic, dynamic>;
+  //
+  //     _invoices.add({
+  //       'id': entry.key.toString(),
+  //       'invoiceNumber': invoiceData['invoiceNumber']?.toString() ?? 'N/A',
+  //       'referenceNumber': invoiceData['referenceNumber']?.toString() ?? 'N/A',
+  //       'customerName': invoiceData['customerName']?.toString() ?? 'N/A',
+  //       'grandTotal': _parseToDouble(invoiceData['grandTotal']),
+  //       'createdAt': _parseDateTime(invoiceData['createdAt']).toIso8601String(),
+  //       // Only include essential fields
+  //     });
+  //   }
+  // }
 
   DateTime _parseDateTime(dynamic dateValue) {
     if (dateValue is String) return DateTime.parse(dateValue);

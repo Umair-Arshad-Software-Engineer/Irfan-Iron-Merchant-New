@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:iron_project_new/Auth/login.dart';
 import 'package:iron_project_new/cashbook/cashbook.dart';
 import 'package:iron_project_new/roznamchaPage.dart';
+import 'package:iron_project_new/simplecashbook/simplecashbook.dart';
 import 'package:iron_project_new/userspage.dart';
 import 'package:iron_project_new/vendors/viewvendors.dart';
 import 'package:provider/provider.dart';
@@ -159,12 +160,11 @@ class Dashboard extends StatelessWidget {
                 _drawerItem(Icons.account_balance_wallet, 'Transactions', 'لین دین', context, const LedgerSelection(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Bank Management', 'بینک مینجمنٹ', context, BankManagementPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cash Book', 'کیش بک', context, CashbookPage(), languageProvider),
+                _drawerItem(Icons.account_balance, 'Simple Cash Book', 'سمپل کیش بک', context, SimpleCashbookPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cheque Book', 'چیک بک', context, InvoiceCheckPaymentsPage(), languageProvider),
                 _drawerItem(Icons.assignment, 'Roznamcha', 'روزنامچہ', context, const Roznamchapage(), languageProvider),
                 _drawerItem(Icons.settings, 'Settings', 'ترتیبات', context, UsersPage(), languageProvider),
-
-                const Divider(), // Adds a divider before the logout button
-
+                const Divider(),
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
                   title: Text(
