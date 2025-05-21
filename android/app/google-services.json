@@ -1,14 +1,14 @@
 {
   "project_info": {
-    "project_number": "143206628546",
-    "firebase_url": "https://newp-7b77b-default-rtdb.firebaseio.com",
-    "project_id": "newp-7b77b",
-    "storage_bucket": "newp-7b77b.appspot.com"
+    "project_number": "66699206284",
+    "firebase_url": "https://maryam-15bce-default-rtdb.firebaseio.com",
+    "project_id": "maryam-15bce",
+    "storage_bucket": "maryam-15bce.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:143206628546:android:6e9bf254233f58cc0ecf5b",
+        "mobilesdk_app_id": "1:66699206284:android:7a8d0554a5a9a90f1ae5a9",
         "android_client_info": {
           "package_name": "com.example.iron_project_new"
         }
@@ -16,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAAZkULTWeMHOr8PadmPkaWC2RiQGbIkgo"
+          "current_key": "AIzaSyCZRF48Av2CNhH0DqVtdCUPrW24Cqr5NNk"
         }
       ],
       "services": {

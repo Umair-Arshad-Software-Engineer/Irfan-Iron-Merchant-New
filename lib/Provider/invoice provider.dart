@@ -21,7 +21,197 @@ class InvoiceProvider with ChangeNotifier {
   // Page size for pagination
   final int _pageSize = 20;
 
+  Future<void> fetchInvoices({int limit = 20, String? lastKey}) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
 
+      Query query = _db.child('invoices')
+          .orderByChild('createdAt')
+          .limitToLast(limit);
+
+      if (lastKey != null) {
+        // Get the last invoice to use its createdAt value for pagination
+        final lastInvoiceSnapshot = await _db.child('invoices').child(lastKey).get();
+        if (lastInvoiceSnapshot.exists) {
+          final lastInvoice = lastInvoiceSnapshot.value as Map<dynamic, dynamic>;
+          final lastCreatedAt = lastInvoice['createdAt'];
+          query = query.endBefore(lastCreatedAt);
+        }
+      }
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        // Clear existing data only on first load
+        if (lastKey == null) {
+          _invoices.clear();
+        }
+
+        // Handle the response which could be a Map or a List
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processInvoiceData(values);
+
+          if (values.isNotEmpty) {
+            _lastKey = values.keys.last.toString();
+            _hasMoreData = values.length >= limit;
+          }
+        }
+        else if (snapshot.value is List) {
+          // Handle list response (possibly an array in Firebase)
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+
+          // Convert list to map with indices as keys
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+
+          if (valuesMap.isNotEmpty) {
+            _processInvoiceData(valuesMap);
+            _lastKey = valuesMap.keys.last.toString();
+            _hasMoreData = valuesMap.length >= limit;
+          }
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching invoices: ${e.toString()}');
+      throw Exception('Failed to fetch invoices: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+// You should also update the _processInvoiceData method to handle empty or null entries
+  void _processInvoiceData(Map<dynamic, dynamic> values) {
+    // Skip null or empty values
+    if (values.isEmpty) return;
+
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null) // Filter out null entries
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+
+        // Handle null dates
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      _processInvoiceEntry(entry.key.toString(), entry.value);
+    }
+  }
+
+// Also update the loadMoreInvoices method with similar changes
+  Future<void> loadMoreInvoices() async {
+    if (_isLoading || !_hasMoreData) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Get the createdAt value of the last item in the list
+      String? lastCreatedAt;
+      if (_invoices.isNotEmpty) {
+        lastCreatedAt = _invoices.last['createdAt'];
+      } else {
+        _hasMoreData = false;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      Query query = _db.child('invoices')
+          .orderByChild('createdAt')
+          .endBefore(lastCreatedAt)
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        // Handle different return types from Firebase
+        if (snapshot.value is Map) {
+          Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processPaginatedData(values);
+        }
+        else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+
+          // Convert list to map with indices as keys
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+
+          _processPaginatedData(valuesMap);
+        }
+      } else {
+        _hasMoreData = false;
+      }
+    } catch (e) {
+      print('Error loading more invoices: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+// Helper method to process paginated data
+  void _processPaginatedData(Map<dynamic, dynamic> values) {
+    if (values.isEmpty) {
+      _hasMoreData = false;
+      return;
+    }
+
+    // Process data without adding duplicates
+    List<String> existingIds = _invoices.map((item) => item['id'].toString()).toList();
+
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null) // Filter out null entries
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+
+        // Handle null dates
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    bool addedNewItems = false;
+
+    for (var entry in sortedEntries) {
+      String key = entry.key.toString();
+      // Only add items that aren't already in the list
+      if (!existingIds.contains(key)) {
+        _processInvoiceEntry(key, entry.value);
+        addedNewItems = true;
+      }
+    }
+
+    // Only update pagination variables if we actually added new items
+    if (addedNewItems) {
+      _hasMoreData = values.length >= _pageSize;
+    } else {
+      _hasMoreData = false;
+    }
+  }
 
 
   // Clear all loaded data and reset pagination
@@ -67,63 +257,63 @@ class InvoiceProvider with ChangeNotifier {
   //     notifyListeners();
   //   }
   // }
-  Future<void> fetchInvoices({int limit = 20, String? lastKey}) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+  // Future<void> fetchInvoices({int limit = 20, String? lastKey}) async {
+  //   try {
+  //     _isLoading = true;
+  //     notifyListeners();
+  //
+  //     Query query = _db.child('invoices')
+  //         .orderByChild('createdAt')
+  //         .limitToLast(limit);
+  //
+  //     if (lastKey != null) {
+  //       // Get the last invoice to use its createdAt value for pagination
+  //       final lastInvoiceSnapshot = await _db.child('invoices').child(lastKey).get();
+  //       if (lastInvoiceSnapshot.exists) {
+  //         final lastInvoice = lastInvoiceSnapshot.value as Map<dynamic, dynamic>;
+  //         final lastCreatedAt = lastInvoice['createdAt'];
+  //         query = query.endBefore(lastCreatedAt);
+  //       }
+  //     }
+  //
+  //     final snapshot = await query.get();
+  //
+  //     if (snapshot.exists) {
+  //       final Map<dynamic, dynamic>? values = snapshot.value as Map?;
+  //       if (values != null) {
+  //         // Clear existing data only on first load
+  //         if (lastKey == null) {
+  //           _invoices.clear();
+  //         }
+  //
+  //         _processInvoiceData(values);
+  //         _lastKey = values.keys.last.toString();
+  //         _hasMoreData = values.length >= limit;
+  //       }
+  //     }
+  //
+  //     notifyListeners();
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch invoices: ${e.toString()}');
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
 
-      Query query = _db.child('invoices')
-          .orderByChild('createdAt')
-          .limitToLast(limit);
-
-      if (lastKey != null) {
-        // Get the last invoice to use its createdAt value for pagination
-        final lastInvoiceSnapshot = await _db.child('invoices').child(lastKey).get();
-        if (lastInvoiceSnapshot.exists) {
-          final lastInvoice = lastInvoiceSnapshot.value as Map<dynamic, dynamic>;
-          final lastCreatedAt = lastInvoice['createdAt'];
-          query = query.endBefore(lastCreatedAt);
-        }
-      }
-
-      final snapshot = await query.get();
-
-      if (snapshot.exists) {
-        final Map<dynamic, dynamic>? values = snapshot.value as Map?;
-        if (values != null) {
-          // Clear existing data only on first load
-          if (lastKey == null) {
-            _invoices.clear();
-          }
-
-          _processInvoiceData(values);
-          _lastKey = values.keys.last.toString();
-          _hasMoreData = values.length >= limit;
-        }
-      }
-
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Failed to fetch invoices: ${e.toString()}');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  void _processInvoiceData(Map<dynamic, dynamic> values) {
-    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
-      ..sort((a, b) {
-        dynamic dateA = a.value['createdAt'];
-        dynamic dateB = b.value['createdAt'];
-        // Sort in descending order (newest first)
-        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
-      });
-
-    for (var entry in sortedEntries) {
-      _processInvoiceEntry(entry.key.toString(), entry.value);
-    }
-  }
+  // void _processInvoiceData(Map<dynamic, dynamic> values) {
+  //   List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+  //     ..sort((a, b) {
+  //       dynamic dateA = a.value['createdAt'];
+  //       dynamic dateB = b.value['createdAt'];
+  //       // Sort in descending order (newest first)
+  //       return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+  //     });
+  //
+  //   for (var entry in sortedEntries) {
+  //     _processInvoiceEntry(entry.key.toString(), entry.value);
+  //   }
+  // }
   // void _processInvoiceData(Map<dynamic, dynamic> values) {
   //   // Convert to list and sort by date (newest first)
   //   final sortedEntries = values.entries.toList()
@@ -157,79 +347,79 @@ class InvoiceProvider with ChangeNotifier {
 
 
   // Load next page
-  Future<void> loadMoreInvoices() async {
-    if (_isLoading || !_hasMoreData) return;
-
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Get the createdAt value of the last item in the list, not the database key
-      String? lastCreatedAt;
-      if (_invoices.isNotEmpty) {
-        lastCreatedAt = _invoices.last['createdAt'];
-      } else {
-        _hasMoreData = false;
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
-      // Use the createdAt value for endBefore, not the database key
-      Query query = _db.child('invoices')
-          .orderByChild('createdAt')
-          .endBefore(lastCreatedAt)
-          .limitToLast(_pageSize);
-
-      final snapshot = await query.get();
-
-      if (snapshot.exists) {
-        Map<dynamic, dynamic>? values = snapshot.value as Map?;
-
-        if (values != null && values.isNotEmpty) {
-          // Process data without adding duplicates
-          List<String> existingIds = _invoices.map((item) => item['id'].toString()).toList();
-
-          List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
-            ..sort((a, b) {
-              dynamic dateA = a.value['createdAt'];
-              dynamic dateB = b.value['createdAt'];
-              // Sort in descending order (newest first)
-              return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
-            });
-
-          bool addedNewItems = false;
-
-          for (var entry in sortedEntries) {
-            String key = entry.key.toString();
-            // Only add items that aren't already in the list
-            if (!existingIds.contains(key)) {
-              _processInvoiceEntry(key, entry.value);
-              addedNewItems = true;
-            }
-          }
-
-          // Only update pagination variables if we actually added new items
-          if (addedNewItems) {
-            // Set the last created date for the next pagination
-            lastCreatedAt = _invoices.last['createdAt'];
-            _hasMoreData = values.length >= _pageSize;
-          } else {
-            _hasMoreData = false;
-          }
-        } else {
-          _hasMoreData = false;
-        }
-      } else {
-        _hasMoreData = false;
-      }
-    } catch (e) {
-      print('Error loading more invoices: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  // Future<void> loadMoreInvoices() async {
+  //   if (_isLoading || !_hasMoreData) return;
+  //
+  //   try {
+  //     _isLoading = true;
+  //     notifyListeners();
+  //
+  //     // Get the createdAt value of the last item in the list, not the database key
+  //     String? lastCreatedAt;
+  //     if (_invoices.isNotEmpty) {
+  //       lastCreatedAt = _invoices.last['createdAt'];
+  //     } else {
+  //       _hasMoreData = false;
+  //       _isLoading = false;
+  //       notifyListeners();
+  //       return;
+  //     }
+  //
+  //     // Use the createdAt value for endBefore, not the database key
+  //     Query query = _db.child('invoices')
+  //         .orderByChild('createdAt')
+  //         .endBefore(lastCreatedAt)
+  //         .limitToLast(_pageSize);
+  //
+  //     final snapshot = await query.get();
+  //
+  //     if (snapshot.exists) {
+  //       Map<dynamic, dynamic>? values = snapshot.value as Map?;
+  //
+  //       if (values != null && values.isNotEmpty) {
+  //         // Process data without adding duplicates
+  //         List<String> existingIds = _invoices.map((item) => item['id'].toString()).toList();
+  //
+  //         List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+  //           ..sort((a, b) {
+  //             dynamic dateA = a.value['createdAt'];
+  //             dynamic dateB = b.value['createdAt'];
+  //             // Sort in descending order (newest first)
+  //             return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+  //           });
+  //
+  //         bool addedNewItems = false;
+  //
+  //         for (var entry in sortedEntries) {
+  //           String key = entry.key.toString();
+  //           // Only add items that aren't already in the list
+  //           if (!existingIds.contains(key)) {
+  //             _processInvoiceEntry(key, entry.value);
+  //             addedNewItems = true;
+  //           }
+  //         }
+  //
+  //         // Only update pagination variables if we actually added new items
+  //         if (addedNewItems) {
+  //           // Set the last created date for the next pagination
+  //           lastCreatedAt = _invoices.last['createdAt'];
+  //           _hasMoreData = values.length >= _pageSize;
+  //         } else {
+  //           _hasMoreData = false;
+  //         }
+  //       } else {
+  //         _hasMoreData = false;
+  //       }
+  //     } else {
+  //       _hasMoreData = false;
+  //     }
+  //   } catch (e) {
+  //     print('Error loading more invoices: $e');
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
 
   Future<int> getNextInvoiceNumber() async {
     final snapshot = await FirebaseDatabase.instance.ref('invoices').once();

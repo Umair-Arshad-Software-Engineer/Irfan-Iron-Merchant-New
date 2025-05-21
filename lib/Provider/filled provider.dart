@@ -34,31 +34,58 @@ class FilledProvider with ChangeNotifier {
   }
 
 
+  // Future<void> fetchFilled() async {
+  //   try {
+  //     _isLoading = true;
+  //     notifyListeners();
+  //
+  //     // Clear existing data for fresh load
+  //     _filled.clear();
+  //
+  //     // Query first page ordered by createdAt descending
+  //     Query query = _db.child('filled')
+  //         .orderByChild('createdAt')
+  //         .limitToLast(_pageSize);
+  //
+  //     final snapshot = await query.get();
+  //
+  //     if (snapshot.exists) {
+  //       final Map<dynamic, dynamic>? values = snapshot.value as Map?;
+  //       if (values != null) {
+  //         _processFilledData(values);
+  //         // Set last key for next pagination
+  //         _lastKey = values.keys.last.toString();
+  //         _hasMoreData = values.length >= _pageSize;
+  //       }
+  //     }
+  //
+  //     notifyListeners();
+  //   } catch (e) {
+  //     throw Exception('Failed to fetch filled: ${e.toString()}');
+  //   } finally {
+  //     _isLoading = false;
+  //     notifyListeners();
+  //   }
+  // }
   Future<void> fetchFilled() async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      // Clear existing data for fresh load
       _filled.clear();
 
-      // Query first page ordered by createdAt descending
-      Query query = _db.child('filled')
+      final snapshot = await _db.child('filled')
           .orderByChild('createdAt')
-          .limitToLast(_pageSize);
+          .limitToLast(_pageSize)
+          .get();
 
-      final snapshot = await query.get();
-
-      if (snapshot.exists) {
-        final Map<dynamic, dynamic>? values = snapshot.value as Map?;
-        if (values != null) {
-          _processFilledData(values);
-          // Set last key for next pagination
-          _lastKey = values.keys.last.toString();
-          _hasMoreData = values.length >= _pageSize;
-        }
+      // Add explicit null check
+      if (!snapshot.exists || snapshot.value == null) {
+        _hasMoreData = false;
+        return;
       }
 
+      _processFilledData(snapshot.value!);
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to fetch filled: ${e.toString()}');
@@ -68,17 +95,46 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-  void _processFilledData(Map<dynamic, dynamic> values) {
-    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
-      ..sort((a, b) {
-        dynamic dateA = a.value['createdAt'];
-        dynamic dateB = b.value['createdAt'];
-        // Sort in descending order (newest first)
-        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
-      });
+  // void _processFilledData(Map<dynamic, dynamic> values) {
+  //   List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
+  //     ..sort((a, b) {
+  //       dynamic dateA = a.value['createdAt'];
+  //       dynamic dateB = b.value['createdAt'];
+  //       // Sort in descending order (newest first)
+  //       return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+  //     });
+  //
+  //   for (var entry in sortedEntries) {
+  //     _processFilledEntry(entry.key.toString(), entry.value);
+  //   }
+  // }
 
-    for (var entry in sortedEntries) {
-      _processFilledEntry(entry.key.toString(), entry.value);
+  void _processFilledData(dynamic data) {
+    if (data == null) return;
+
+    List<MapEntry<dynamic, dynamic>> entries = [];
+
+    if (data is Map<dynamic, dynamic>) {
+      entries = data.entries.toList();
+    } else if (data is List<dynamic>) {
+      entries = data.asMap().entries.map((entry) {
+        return MapEntry(entry.key.toString(), entry.value);
+      }).toList();
+    }
+
+    // Add null check for entry values
+    entries = entries.where((entry) => entry.value != null).toList();
+
+    entries.sort((a, b) {
+      final dateA = _parseDateTime(a.value['createdAt']);
+      final dateB = _parseDateTime(b.value['createdAt']);
+      return dateB.compareTo(dateA);
+    });
+
+    for (var entry in entries) {
+      if (entry.value != null) {
+        _processFilledEntry(entry.key.toString(), entry.value);
+      }
     }
   }
 
@@ -97,65 +153,29 @@ class FilledProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Get the createdAt value of the last item in the list, not the database key
-      String? lastCreatedAt;
-      if (_filled.isNotEmpty) {
-        lastCreatedAt = _filled.last['createdAt'];
-      } else {
+      final lastCreatedAt = _filled.isNotEmpty
+          ? _filled.last['createdAt']
+          : null;
+
+      if (lastCreatedAt == null) {
         _hasMoreData = false;
-        _isLoading = false;
-        notifyListeners();
         return;
       }
 
-      // Use the createdAt value for endBefore, not the database key
-      Query query = _db.child('filled')
+      final snapshot = await _db.child('filled')
           .orderByChild('createdAt')
           .endBefore(lastCreatedAt)
-          .limitToLast(_pageSize);
+          .limitToLast(_pageSize)
+          .get();
 
-      final snapshot = await query.get();
-
-      if (snapshot.exists) {
-        Map<dynamic, dynamic>? values = snapshot.value as Map?;
-
-        if (values != null && values.isNotEmpty) {
-          // Process data without adding duplicates
-          List<String> existingIds = _filled.map((item) => item['id'].toString()).toList();
-
-          List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries.toList()
-            ..sort((a, b) {
-              dynamic dateA = a.value['createdAt'];
-              dynamic dateB = b.value['createdAt'];
-              // Sort in descending order (newest first)
-              return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
-            });
-
-          bool addedNewItems = false;
-
-          for (var entry in sortedEntries) {
-            String key = entry.key.toString();
-            // Only add items that aren't already in the list
-            if (!existingIds.contains(key)) {
-              _processFilledEntry(key, entry.value);
-              addedNewItems = true;
-            }
-          }
-
-          // Only update pagination variables if we actually added new items
-          if (addedNewItems) {
-            // Set the last created date for the next pagination
-            lastCreatedAt = _filled.last['createdAt'];
-            _hasMoreData = values.length >= _pageSize;
-          } else {
-            _hasMoreData = false;
-          }
-        } else {
-          _hasMoreData = false;
-        }
-      } else {
+      // Add null check
+      if (!snapshot.exists || snapshot.value == null) {
         _hasMoreData = false;
+        return;
       }
+
+      _processFilledData(snapshot.value!);
+      notifyListeners();
     } catch (e) {
       print('Error loading more filled: $e');
     } finally {
@@ -409,6 +429,9 @@ class FilledProvider with ChangeNotifier {
   // }
 
   void _processFilledEntry(String key, dynamic value) {
+    // Add null check for value
+    if (value == null) return;
+
     if (value is! Map<dynamic, dynamic>) return;
 
     final filledData = Map<String, dynamic>.from(value);

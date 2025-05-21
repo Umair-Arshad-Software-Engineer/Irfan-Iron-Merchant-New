@@ -3,20 +3,20 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "newp-7b77b",
-          "appId": "1:143206628546:android:6e9bf254233f58cc0ecf5b",
+          "projectId": "maryam-15bce",
+          "appId": "1:66699206284:android:7a8d0554a5a9a90f1ae5a9",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "newp-7b77b",
+          "projectId": "maryam-15bce",
           "configurations": {
-            "android": "1:143206628546:android:6e9bf254233f58cc0ecf5b",
-            "ios": "1:143206628546:ios:45d93a3750484b180ecf5b",
-            "macos": "1:143206628546:ios:45d93a3750484b180ecf5b",
-            "web": "1:143206628546:web:87f0cc2348a2e2300ecf5b",
-            "windows": "1:143206628546:web:8f09e82914cca5740ecf5b"
+            "android": "1:66699206284:android:7a8d0554a5a9a90f1ae5a9",
+            "ios": "1:66699206284:ios:6b3e943e304308cb1ae5a9",
+            "macos": "1:66699206284:ios:6b3e943e304308cb1ae5a9",
+            "web": "1:66699206284:web:91e60b2168da1bb61ae5a9",
+            "windows": "1:66699206284:web:84df02d61d3a3f5a1ae5a9"
           }
         }
       }

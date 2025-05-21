@@ -1305,6 +1305,13 @@ class FilledList extends StatelessWidget {
               ),
               elevation: 2,
               child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.teal,
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
                 contentPadding: const EdgeInsets.all(8),
                 title: Text(
                   '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['referenceNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
