@@ -345,6 +345,20 @@ class InvoiceProvider with ChangeNotifier {
     return DateTime.now();
   }
 
+  Future<int> getNextInvoiceNumber() async {
+    final counterRef = _db.child('invoiceCounter');
+    final transactionResult = await counterRef.runTransaction((currentData) {
+      int currentCount = (currentData ?? 0) as int;
+      currentCount++;
+      return Transaction.success(currentCount);
+    });
+
+    if (transactionResult.committed) {
+      return transactionResult.snapshot!.value as int;
+    } else {
+      throw Exception('Failed to increment invoice counter.');
+    }
+  }
 
   // Load next page
   // Future<void> loadMoreInvoices() async {
@@ -421,28 +435,28 @@ class InvoiceProvider with ChangeNotifier {
   //   }
   // }
 
-  Future<int> getNextInvoiceNumber() async {
-    final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
-    int maxNumber = 0;
-
-    if (snapshot.snapshot.exists) {
-      final allInvoices = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
-
-      allInvoices.forEach((key, value) {
-        final invoiceData = value as Map<dynamic, dynamic>;
-        if (invoiceData['numberType'] == 'sequential') {
-          final invoiceNumber = int.tryParse(invoiceData['invoiceNumber']?.toString() ?? '');
-
-          // Ensure the invoice number is valid and not a 13-digit number
-          if (invoiceNumber != null && invoiceNumber > maxNumber && invoiceNumber.toString().length < 13) {
-            maxNumber = invoiceNumber;
-          }
-        }
-      });
-    }
-
-    return maxNumber + 1;
-  }
+  // Future<int> getNextInvoiceNumber() async {
+  //   final snapshot = await FirebaseDatabase.instance.ref('invoices').once();
+  //   int maxNumber = 0;
+  //
+  //   if (snapshot.snapshot.exists) {
+  //     final allInvoices = Map<String, dynamic>.from(snapshot.snapshot.value as Map<dynamic, dynamic>);
+  //
+  //     allInvoices.forEach((key, value) {
+  //       final invoiceData = value as Map<dynamic, dynamic>;
+  //       if (invoiceData['numberType'] == 'sequential') {
+  //         final invoiceNumber = int.tryParse(invoiceData['invoiceNumber']?.toString() ?? '');
+  //
+  //         // Ensure the invoice number is valid and not a 13-digit number
+  //         if (invoiceNumber != null && invoiceNumber > maxNumber && invoiceNumber.toString().length < 13) {
+  //           maxNumber = invoiceNumber;
+  //         }
+  //       }
+  //     });
+  //   }
+  //
+  //   return maxNumber + 1;
+  // }
 
   bool _isTimestampNumber(String number) {
     // Only consider numbers longer than 10 digits as timestamps

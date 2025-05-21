@@ -1378,7 +1378,6 @@ class _filledpageState extends State<filledpage> {
     if (widget.filled != null) {
       _filledId = widget.filled!['filledNumber'];
       _referenceController.text = widget.filled!['referenceNumber'] ?? '';
-
     }
     // Initialize customer provider and fetch customers
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);

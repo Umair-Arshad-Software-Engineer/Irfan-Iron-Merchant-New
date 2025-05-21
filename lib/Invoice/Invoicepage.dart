@@ -1233,7 +1233,7 @@ import 'package:intl/intl.dart';
                       if (amount != null && amount > 0) {
                         await invoiceProvider.payInvoiceWithSeparateMethod(
                           context,
-                          invoice['id'],
+                          invoice['invoiceNumber'],
                           amount,
                           selectedPaymentMethod!,
                           description: _description,
@@ -1280,9 +1280,17 @@ import 'package:intl/intl.dart';
 
     void onPaymentPressed(Map<String, dynamic> invoice) {
       // At the start of both methods
-      if (invoice['invoiceNumber'] == null || invoice['customerId'] == null) {
+      // if (invoice == null || invoice['invoiceNumber'] == null || invoice['customerId'] == null) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //     SnackBar(content: Text('Cannot process payment - invalid Invoice data')),
+      //   );
+      //   return;
+      // }
+      if (invoice == null ||
+          invoice['invoiceNumber'] == null ||  // Use invoiceNumber as ID
+          invoice['customerId'] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot process payment - invalid Invocie data')),
+          SnackBar(content: Text('Cannot process payment - invalid Invoice data')),
         );
         return;
       }
@@ -1354,7 +1362,6 @@ import 'package:intl/intl.dart';
       if (widget.invoice != null) {
         _invoiceId = widget.invoice!['invoiceNumber'];
         _referenceController.text = widget.invoice!['referenceNumber'] ?? '';
-
       }
       // Initialize customer provider and fetch customers
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
@@ -2345,9 +2352,49 @@ import 'package:intl/intl.dart';
                                     _updateQtyOnHand(_invoiceRows);
                                     // Navigate back
                                     // After saving the invoice:
+                                    // setState(() {
+                                    //   _currentInvoice = {
+                                    //     'invoiceNumber': invoiceNumber, // Ensure this is included
+                                    //     'grandTotal': _calculateGrandTotal(),
+                                    //     'customerId': _selectedCustomerId!,
+                                    //     'customerName': _selectedCustomerName ?? 'Unknown Customer',
+                                    //     'referenceNumber': _referenceController.text,
+                                    //     'createdAt': DateTime.now().toIso8601String(),
+                                    //     'items': _invoiceRows,
+                                    //     'paymentType': _paymentType,
+                                    //   };
+                                    // });
+                                    // After saving the invoice:
+                                    // setState(() {
+                                    //   _currentInvoice = {
+                                    //     'id': invoiceNumber, // Add this line to include the 'id' field
+                                    //     'invoiceNumber': invoiceNumber,
+                                    //     'grandTotal': _calculateGrandTotal(),
+                                    //     'customerId': _selectedCustomerId!,
+                                    //     'customerName': _selectedCustomerName ?? 'Unknown Customer',
+                                    //     'referenceNumber': _referenceController.text,
+                                    //     'createdAt': DateTime.now().toIso8601String(),
+                                    //     'items': _invoiceRows,
+                                    //     'paymentType': _paymentType,
+                                    //   };
+                                    // });
+                                    // setState(() {
+                                    //   _currentInvoice = {
+                                    //     'invoiceNumber': invoiceNumber, // Ensure this is included
+                                    //     'grandTotal': _calculateGrandTotal(),
+                                    //     'customerId': _selectedCustomerId!,
+                                    //     'customerName': _selectedCustomerName ?? 'Unknown Customer',
+                                    //     'referenceNumber': _referenceController.text,
+                                    //     'createdAt': DateTime.now().toIso8601String(),
+                                    //     'items': _invoiceRows,
+                                    //     'paymentType': _paymentType,
+                                    //   };
+                                    // });
+                                    // After saving the invoice in your save/update logic:
                                     setState(() {
                                       _currentInvoice = {
-                                        'invoiceNumber': invoiceNumber, // Ensure this is included
+                                        'id': invoiceNumber, // Add 'id' field with invoiceNumber
+                                        'invoiceNumber': invoiceNumber,
                                         'grandTotal': _calculateGrandTotal(),
                                         'customerId': _selectedCustomerId!,
                                         'customerName': _selectedCustomerName ?? 'Unknown Customer',
