@@ -23,9 +23,16 @@ class PaymentProvider with ChangeNotifier {
   bool get showPending => _showPending;
   bool get isLoading => _isLoading;
 
+
   PaymentProvider() {
     _loadPayments();
   }
+
+  List<Map<String, dynamic>> get paginatedCombinedCheckPayments =>
+      combinedCheckPayments.take(_invoiceCurrentMax).toList();
+
+  List<Map<String, dynamic>> get combinedCheckPayments =>
+      _filtered([..._invoiceCheckPayments, ..._filledCheckPayments]);
 
   List<Map<String, dynamic>> get paginatedInvoiceCheckPayments =>
       _filtered(_invoiceCheckPayments).take(_invoiceCurrentMax).toList();
@@ -197,7 +204,8 @@ class _InvoiceCheckPaymentsPageState extends State<InvoiceCheckPaymentsPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final payments = provider.paginatedInvoiceCheckPayments;
+          // final payments = provider.paginatedInvoiceCheckPayments;
+          final payments = provider.paginatedCombinedCheckPayments;
 
           if (payments.isEmpty) {
             return const Center(child: Text('No invoice check payments found'));
@@ -258,7 +266,13 @@ class _InvoiceCheckPaymentCard extends StatelessWidget {
           isCleared ? Icons.check_circle : Icons.pending_actions,
           color: isCleared ? Colors.green : Colors.orange,
         ),
-        title: Text('Invoice #${payment['invoiceNumber']}'),
+        // title: Text('Invoice #${payment['invoiceNumber']}'),
+        title: Text(
+          payment.containsKey('invoiceNumber')
+              ? 'Invoice #${payment['invoiceNumber']}'
+              : 'Filled #${payment['filledNumber']}',
+        ),
+
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

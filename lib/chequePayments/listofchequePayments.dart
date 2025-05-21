@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-
 import '../Provider/lanprovider.dart';
 
 class CheckPaymentsPage extends StatelessWidget {

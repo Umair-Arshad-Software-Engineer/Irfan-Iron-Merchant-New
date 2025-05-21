@@ -233,28 +233,129 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
   }
 
   // Show customer selection dialog
+  // Future<void> _selectCustomer(BuildContext context) async {
+  //   // Fetch customers from the provider
+  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  //   await customerProvider.fetchCustomers(); // Fetch customers from Firebase
+  //
+  //   // Show dialog with the customer list
+  //   final customerId = await showDialog<String>(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AlertDialog(
+  //         title: const Text('Select a Customer'),
+  //         content: SingleChildScrollView(
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: customerProvider.customers.map((customer) {
+  //               return ListTile(
+  //                 title: Text(customer.name),
+  //                 onTap: () => Navigator.pop(context, customer.id),
+  //               );
+  //             }).toList(),
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
+  //
+  //   if (customerId != null) {
+  //     // Find the customer name based on the selected customerId
+  //     final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == customerId);
+  //     setState(() {
+  //       _selectedCustomerId = customerId;
+  //       _selectedCustomerName = selectedCustomer.name; // Update the selected customer name
+  //     });
+  //     _fetchReportData(); // Refetch data with the selected customer
+  //   }
+  // }
+  // Show customer selection dialog with search functionality
   Future<void> _selectCustomer(BuildContext context) async {
     // Fetch customers from the provider
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     await customerProvider.fetchCustomers(); // Fetch customers from Firebase
 
-    // Show dialog with the customer list
+    // Track the search query and filtered customers
+    String searchQuery = '';
+    List<Customer> filteredCustomers = customerProvider.customers;
+
+    // Show dialog with the customer list and search functionality
     final customerId = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Select a Customer'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: customerProvider.customers.map((customer) {
-                return ListTile(
-                  title: Text(customer.name),
-                  onTap: () => Navigator.pop(context, customer.id),
-                );
-              }).toList(),
-            ),
-          ),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Filter customers based on search query
+            filteredCustomers = customerProvider.customers.where((customer) {
+              return customer.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                  (customer.phone != null && customer.phone!.contains(searchQuery));
+            }).toList();
+
+            return AlertDialog(
+              title: const Text('Select a Customer'),
+              content: Container(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Search TextField
+                    TextField(
+                      decoration: InputDecoration(
+                        labelText: 'Search by name or phone',
+                        prefixIcon: Icon(Icons.search, color: Colors.teal),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.teal),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.teal, width: 2),
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          searchQuery = value;
+                        });
+                      },
+                    ),
+                    SizedBox(height: 10),
+                    // Customer list
+                    Expanded(
+                      child: filteredCustomers.isEmpty
+                          ? Center(child: Text('No customers found'))
+                          : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filteredCustomers.length,
+                        itemBuilder: (context, index) {
+                          final customer = filteredCustomers[index];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.teal.shade100,
+                              child: Text(
+                                customer.name[0].toUpperCase(),
+                                style: TextStyle(color: Colors.teal.shade800),
+                              ),
+                            ),
+                            title: Text(customer.name),
+                            subtitle: customer.phone != null
+                                ? Text(customer.phone!)
+                                : null,
+                            onTap: () => Navigator.pop(context, customer.id),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
