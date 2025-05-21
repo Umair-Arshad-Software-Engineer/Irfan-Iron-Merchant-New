@@ -1,0 +1,2 @@
+C:/Users/umair/StudioProjects/Iron_Project/android/app/.cxx/RelWithDebInfo/2x6w5k1c/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/umair/StudioProjects/Iron_Project/android/app/.cxx/RelWithDebInfo/2x6w5k1c/arm64-v8a/CMakeFiles/rebuild_cache.dir
