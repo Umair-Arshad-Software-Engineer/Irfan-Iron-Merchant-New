@@ -751,11 +751,32 @@ class InvoiceProvider with ChangeNotifier {
       final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(invoice['items']);
 
       // Reverse the qtyOnHand deduction for each item
+      // for (var item in items) {
+      //   final itemName = item['itemName'] as String;
+      //   final weight = (item['weight'] as num).toDouble(); // Get the weight from the invoice
+      //
+      //   // Fetch the item from the database
+      //   final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
+      //
+      //   if (itemSnapshot.exists) {
+      //     final itemData = itemSnapshot.value as Map<dynamic, dynamic>;
+      //     final itemKey = itemData.keys.first;
+      //     final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
+      //
+      //     // Get the current qtyOnHand
+      //     double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
+      //
+      //     // Add back the weight to qtyOnHand
+      //     double updatedQtyOnHand = currentQtyOnHand + weight;
+      //
+      //     // Update the item in the database
+      //     await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
+      //   }
+      // }
       for (var item in items) {
         final itemName = item['itemName'] as String;
-        final weight = (item['weight'] as num).toDouble(); // Get the weight from the invoice
+        final weight = _parseToDouble(item['weight']); // Use helper function
 
-        // Fetch the item from the database
         final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
 
         if (itemSnapshot.exists) {
@@ -763,13 +784,11 @@ class InvoiceProvider with ChangeNotifier {
           final itemKey = itemData.keys.first;
           final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
 
-          // Get the current qtyOnHand
-          double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
+          // NULL-SAFE ACCESS: Use helper function for qtyOnHand
+          double currentQtyOnHand = _parseToDouble(currentItem['qtyOnHand']);
 
-          // Add back the weight to qtyOnHand
           double updatedQtyOnHand = currentQtyOnHand + weight;
 
-          // Update the item in the database
           await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
         }
       }

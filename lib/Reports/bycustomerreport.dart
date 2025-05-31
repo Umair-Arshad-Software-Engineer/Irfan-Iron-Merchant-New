@@ -74,7 +74,6 @@ class _byCustomerReportState extends State<byCustomerReport> {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     return Scaffold(
       appBar: AppBar(
-        // title: Text('Customer Report'),
         title: Text(
           languageProvider.isEnglish ? 'Customer Report' : 'کسٹمر رپورٹ',
           style: TextStyle(
