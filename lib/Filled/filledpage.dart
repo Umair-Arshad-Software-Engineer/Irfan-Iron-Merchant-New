@@ -57,6 +57,11 @@ class _filledpageState extends State<filledpage> {
   bool _isSaved = false;
   Map<String, dynamic>? _currentFilled;
   List<Map<String, dynamic>> _cachedBanks = [];
+// In your _filledpageState class
+  double _mazdoori = 0.0;
+  TextEditingController _mazdooriController = TextEditingController();
+
+
 
   Future<void> _fetchRemainingBalance() async {
     if (_selectedCustomerId != null) {
@@ -140,7 +145,7 @@ class _filledpageState extends State<filledpage> {
     double subtotal = _calculateSubtotal();
     // Discount is directly subtracted from subtotal
     double discountAmount = _discount;
-    return subtotal - discountAmount;
+    return subtotal - discountAmount + _mazdoori;
   }
 
   Future<Uint8List> _generatePDFBytes(String filledNumber) async {
@@ -328,6 +333,14 @@ class _filledpageState extends State<filledpage> {
                 children: [
                   pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
                   pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                ],
+              ),
+              // In your _generatePDFBytes method, add this after the discount row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
               pw.Row(
@@ -1374,7 +1387,10 @@ class _filledpageState extends State<filledpage> {
     _fetchItems();
     _currentFilled = widget.filled; // Initialize with existing filled if editing
     _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
-
+    if (widget.filled != null) {
+      _mazdoori = (widget.filled!['mazdoori'] as num).toDouble();
+      _mazdooriController.text = _mazdoori.toStringAsFixed(2);
+    }
     if (widget.filled != null) {
       _filledId = widget.filled!['filledNumber'];
       _referenceController.text = widget.filled!['referenceNumber'] ?? '';
@@ -1455,6 +1471,7 @@ class _filledpageState extends State<filledpage> {
     _discountController.dispose(); // Dispose discount controller
     _customerController.dispose();
     _dateController.dispose();
+    _mazdooriController.dispose();
     _referenceController.dispose();
     super.dispose();
   }
@@ -1875,6 +1892,19 @@ class _filledpageState extends State<filledpage> {
                         },
                         decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter discount' : 'رعایت درج کریں'),
                       ),
+                      // After the discount TextField
+                      const SizedBox(height: 20),
+                      Text(languageProvider.isEnglish ? 'Router Mazdoori:' : 'روٹر مزدوری:', style: const TextStyle(fontSize: 18)),
+                      TextField(
+                        controller: _mazdooriController,
+                        keyboardType: TextInputType.number,
+                        onChanged: (value) {
+                          setState(() {
+                            _mazdoori = double.tryParse(value) ?? 0.0;
+                          });
+                        },
+                        decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter mazdoori amount' : 'مزدوری کی رقم درج کریں'),
+                      ),
                       // Grand Total row
                       const SizedBox(height: 20),
                       Row(
@@ -2206,6 +2236,7 @@ class _filledpageState extends State<filledpage> {
                                     subtotal: subtotal,
                                     discount: _discount,
                                     grandTotal: grandTotal,
+                                    mazdoori: _mazdoori, // Add this
                                     paymentType: _paymentType,
                                     referenceNumber: _referenceController.text, // Add this
                                     paymentMethod: _instantPaymentMethod,
@@ -2238,6 +2269,7 @@ class _filledpageState extends State<filledpage> {
                                     customerId: _selectedCustomerId!,
                                     customerName: _selectedCustomerName ?? 'Unknown Customer',
                                     subtotal: subtotal,
+                                    mazdoori: _mazdoori, // Add this
                                     discount: _discount,
                                     grandTotal: grandTotal,
                                     paymentType: _paymentType,

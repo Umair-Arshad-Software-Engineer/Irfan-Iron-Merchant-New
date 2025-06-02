@@ -215,6 +215,7 @@ class FilledProvider with ChangeNotifier {
     required String customerName, // Accept the customer name as a parameter
     required double subtotal,
     required double discount,
+    required double mazdoori, // Add this parameter
     required double grandTotal,
     required String paymentType,
     required String referenceNumber, // Add this
@@ -247,6 +248,7 @@ class FilledProvider with ChangeNotifier {
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'createdAt': createdAt, // Use the provided date
+        'mazdoori': mazdoori, // Add this line
         'numberType': _isTimestampNumber(filledNumber) ? 'timestamp' : 'sequential',
 
       };
@@ -287,6 +289,7 @@ class FilledProvider with ChangeNotifier {
     required String customerName,
     required double subtotal,
     required double discount,
+    required double mazdoori, // Add this parameter
     required double grandTotal,
     required String paymentType,
     String? paymentMethod,
@@ -326,6 +329,7 @@ class FilledProvider with ChangeNotifier {
         'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName,
+        'mazdoori': mazdoori, // Add this line
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -482,6 +486,7 @@ class FilledProvider with ChangeNotifier {
       'customerName': filledData['customerName']?.toString() ?? 'N/A',
       'subtotal': parseDouble(filledData['subtotal']),
       'discount': parseDouble(filledData['discount']),
+      'mazdoori': parseDouble(filledData['mazdoori'] ?? 0.0), // Add this line
       'grandTotal': parseDouble(filledData['grandTotal']),
       'paymentType': filledData['paymentType']?.toString() ?? '',
       'paymentMethod': filledData['paymentMethod']?.toString() ?? '',
