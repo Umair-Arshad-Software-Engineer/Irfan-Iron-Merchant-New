@@ -21,6 +21,8 @@ import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 import 'package:share_plus/share_plus.dart';
 
+import '../bankmanagement/banknames.dart';
+
 
 
 class filledpage extends StatefulWidget {
@@ -1006,54 +1008,43 @@ class _filledpageState extends State<filledpage> {
 
 
     // Future<void> _selectBank(BuildContext context) async {
-    //   final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+    //   if (_cachedBanks.isEmpty) {
+    //     final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+    //     if (bankSnapshot.snapshot.value == null) return;
     //
-    //   if (bankSnapshot.snapshot.value == null) {
-    //     ScaffoldMessenger.of(context).showSnackBar(
-    //       SnackBar(content: Text(languageProvider.isEnglish
-    //           ? 'No banks available'
-    //           : 'کوئی بینک دستیاب نہیں')),
-    //     );
-    //     return;
-    //   }
-    //
-    //   final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
-    //   final bankList = banks.entries.map((e) {
-    //     return {
+    //     final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+    //     _cachedBanks = banks.entries.map((e) => {
     //       'id': e.key,
     //       'name': e.value['name'],
-    //       'balance': e.value['balance'],
-    //     };
-    //   }).toList();
+    //       'balance': e.value['balance']
+    //     }).toList();
+    //   }
     //
     //   await showDialog(
     //     context: context,
     //     builder: (context) => AlertDialog(
-    //       title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
     //       content: SizedBox(
     //         width: double.maxFinite,
     //         child: ListView.builder(
     //           shrinkWrap: true,
-    //           itemCount: bankList.length,
-    //           itemBuilder: (context, index) {
-    //             final bank = bankList[index];
-    //             return ListTile(
-    //               title: Text(bank['name']),
-    //               subtitle: Text('${bank['balance']} Rs'),
-    //               onTap: () {
-    //                 setState(() {
-    //                   _selectedBankId = bank['id'];
-    //                   _selectedBankName = bank['name'];
-    //                 });
-    //                 Navigator.pop(context);
-    //               },
-    //             );
-    //           },
+    //           itemCount: _cachedBanks.length,
+    //           itemBuilder: (context, index) => ListTile(
+    //             title: Text(_cachedBanks[index]['name']),
+    //             subtitle: Text('${_cachedBanks[index]['balance']} Rs'),
+    //             onTap: () {
+    //               setState(() {
+    //                 _selectedBankId = _cachedBanks[index]['id'];
+    //                 _selectedBankName = _cachedBanks[index]['name'];
+    //               });
+    //               Navigator.pop(context);
+    //             },
+    //           ),
     //         ),
     //       ),
     //     ),
     //   );
     // }
+
     Future<void> _selectBank(BuildContext context) async {
       if (_cachedBanks.isEmpty) {
         final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
@@ -1067,27 +1058,67 @@ class _filledpageState extends State<filledpage> {
         }).toList();
       }
 
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
+          title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
           content: SizedBox(
             width: double.maxFinite,
+            height: 300,
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: _cachedBanks.length,
-              itemBuilder: (context, index) => ListTile(
-                title: Text(_cachedBanks[index]['name']),
-                subtitle: Text('${_cachedBanks[index]['balance']} Rs'),
-                onTap: () {
-                  setState(() {
-                    _selectedBankId = _cachedBanks[index]['id'];
-                    _selectedBankName = _cachedBanks[index]['name'];
-                  });
-                  Navigator.pop(context);
-                },
-              ),
+              itemBuilder: (context, index) {
+                final bankData = _cachedBanks[index];
+                final bankName = bankData['name'];
+
+                // Find matching bank from pakistaniBanks list
+                Bank? matchedBank = pakistaniBanks.firstWhere(
+                      (b) => b.name.toLowerCase() == bankName.toLowerCase(),
+                  orElse: () => Bank(
+                      name: bankName,
+                      iconPath: 'assets/default_bank.png'
+                  ),
+                );
+
+                return Card(
+                  margin: EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    leading: Image.asset(
+                      matchedBank.iconPath,
+                      width: 40,
+                      height: 40,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Icon(Icons.account_balance, size: 40);
+                      },
+                    ),
+                    title: Text(
+                      bankName,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedBankId = bankData['id'];
+                        _selectedBankName = bankName;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                );
+              },
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+            ),
+          ],
         ),
       );
     }
