@@ -46,7 +46,7 @@ class _RegisterItemPageState extends State<RegisterItemPage> {
     _selectedUnit = widget.itemData?['unit'];
     _selectedVendor = widget.itemData?['vendor'];
     _selectedCategory = widget.itemData?['category'];
-// Listen for vendor search input changes
+    // Listen for vendor search input changes
     _vendorsearchController.addListener(() {
       _filterVendors(_vendorsearchController.text);
     });
