@@ -19,6 +19,7 @@ import 'Provider/lanprovider.dart';
 import 'Reports/ledgerselcttion.dart';
 import 'Reports/reportselecttionpage.dart';
 import 'bankmanagement/addbank.dart';
+import 'chequeManagement/chequeManagement.dart';
 import 'chequePayments/listofchequePayments.dart';
 import 'chequePayments/newchequelist.dart';
 import 'dailypage/listpageroznamcha.dart';
@@ -160,6 +161,7 @@ class Dashboard extends StatelessWidget {
                 _drawerItem(Icons.store, 'Vendors', 'بیچنے والا', context, const ViewVendorsPage(), languageProvider),
                 _drawerItem(Icons.account_balance_wallet, 'Transactions', 'لین دین', context, const LedgerSelection(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Bank Management', 'بینک مینجمنٹ', context, BankManagementPage(), languageProvider),
+                _drawerItem(Icons.account_balance, 'Cheque Management', 'چیک مینجمنٹ', context, ChequeManagementPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cash Book', 'کیش بک', context, CashbookPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Simple Cash Book', 'سمپل کیش بک', context, SimpleCashbookPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Rajkot Cash Book', 'سمپل کیش بک', context, RajkotCashbookPage(), languageProvider),

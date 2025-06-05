@@ -62,7 +62,10 @@ class _filledpageState extends State<filledpage> {
 // In your _filledpageState class
   double _mazdoori = 0.0;
   TextEditingController _mazdooriController = TextEditingController();
-
+  String? _selectedBankId;
+  String? _selectedBankName;
+  TextEditingController _chequeNumberController = TextEditingController();
+  DateTime? _selectedChequeDate;
 
 
   Future<void> _fetchRemainingBalance() async {
@@ -989,6 +992,612 @@ class _filledpageState extends State<filledpage> {
     return imageBytes;
   }
 
+
+
+  // Future<void> _showFilledPaymentDialog(
+  //     Map<String, dynamic> filled,
+  //     FilledProvider filledProvider,
+  //     LanguageProvider languageProvider,
+  //     )
+  // async {
+  //   String? selectedPaymentMethod;
+  //   _paymentController.clear();
+  //   bool _isPaymentButtonPressed = false;
+  //   String? _description;
+  //   Uint8List? _imageBytes;
+  //   DateTime _selectedPaymentDate = DateTime.now();
+  //   // Move these inside the dialog state
+  //   String? _selectedBankId;
+  //   String? _selectedBankName;
+  //
+  //
+  //
+  //
+  //   Future<void> _selectBank(BuildContext context) async {
+  //     if (_cachedBanks.isEmpty) {
+  //       final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+  //       if (bankSnapshot.snapshot.value == null) return;
+  //
+  //       final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+  //       _cachedBanks = banks.entries.map((e) => {
+  //         'id': e.key,
+  //         'name': e.value['name'],
+  //         'balance': e.value['balance']
+  //       }).toList();
+  //     }
+  //
+  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //     await showDialog(
+  //       context: context,
+  //       builder: (context) => AlertDialog(
+  //         title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+  //         content: SizedBox(
+  //           width: double.maxFinite,
+  //           height: 300,
+  //           child: ListView.builder(
+  //             shrinkWrap: true,
+  //             itemCount: _cachedBanks.length,
+  //             itemBuilder: (context, index) {
+  //               final bankData = _cachedBanks[index];
+  //               final bankName = bankData['name'];
+  //
+  //               // Find matching bank from pakistaniBanks list
+  //               Bank? matchedBank = pakistaniBanks.firstWhere(
+  //                     (b) => b.name.toLowerCase() == bankName.toLowerCase(),
+  //                 orElse: () => Bank(
+  //                     name: bankName,
+  //                     iconPath: 'assets/default_bank.png'
+  //                 ),
+  //               );
+  //
+  //               return Card(
+  //                 margin: EdgeInsets.symmetric(vertical: 4),
+  //                 child: ListTile(
+  //                   leading: Image.asset(
+  //                     matchedBank.iconPath,
+  //                     width: 40,
+  //                     height: 40,
+  //                     errorBuilder: (context, error, stackTrace) {
+  //                       return Icon(Icons.account_balance, size: 40);
+  //                     },
+  //                   ),
+  //                   title: Text(
+  //                     bankName,
+  //                     style: TextStyle(fontWeight: FontWeight.bold),
+  //                   ),
+  //                   subtitle: Text(
+  //                     '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
+  //                   ),
+  //                   onTap: () {
+  //                     setState(() {
+  //                       _selectedBankId = bankData['id'];
+  //                       _selectedBankName = bankName;
+  //                     });
+  //                     Navigator.pop(context);
+  //                   },
+  //                 ),
+  //               );
+  //             },
+  //           ),
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () => Navigator.pop(context),
+  //             child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+  //           ),
+  //         ],
+  //       ),
+  //     );
+  //   }
+  //   Future<void> _selectchequeBank(BuildContext context) async {
+  //     if (_cachedBanks.isEmpty) {
+  //       final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+  //       if (bankSnapshot.snapshot.value == null) return;
+  //
+  //       final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+  //       _cachedBanks = banks.entries.map((e) => {
+  //         'id': e.key,
+  //         'name': e.value['name'],
+  //         'balance': e.value['balance']
+  //       }).toList();
+  //     }
+  //
+  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //     await showDialog(
+  //       context: context,
+  //       builder: (context) => AlertDialog(
+  //         title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+  //         content: SizedBox(
+  //           width: double.maxFinite,
+  //           height: 300,
+  //           child: ListView.builder(
+  //             shrinkWrap: true,
+  //             itemCount: _cachedBanks.length,
+  //             itemBuilder: (context, index) {
+  //               final bankData = _cachedBanks[index];
+  //               final bankName = bankData['name'];
+  //
+  //               // Find matching bank from pakistaniBanks list
+  //               Bank? matchedBank = pakistaniBanks.firstWhere(
+  //                     (b) => b.name.toLowerCase() == bankName.toLowerCase(),
+  //                 orElse: () => Bank(
+  //                     name: bankName,
+  //                     iconPath: 'assets/default_bank.png'
+  //                 ),
+  //               );
+  //
+  //               return Card(
+  //                 margin: EdgeInsets.symmetric(vertical: 4),
+  //                 child: ListTile(
+  //                   leading: Image.asset(
+  //                     matchedBank.iconPath,
+  //                     width: 40,
+  //                     height: 40,
+  //                     errorBuilder: (context, error, stackTrace) {
+  //                       return Icon(Icons.account_balance, size: 40);
+  //                     },
+  //                   ),
+  //                   title: Text(
+  //                     bankName,
+  //                     style: TextStyle(fontWeight: FontWeight.bold),
+  //                   ),
+  //                   subtitle: Text(
+  //                     '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
+  //                   ),
+  //                   onTap: () {
+  //                     setState(() {
+  //                       _selectedChequeBankId = bankData['id'];
+  //                       _selectedChequeBankName = bankName;
+  //                     });
+  //                     Navigator.pop(context);
+  //                   },
+  //                 ),
+  //               );
+  //             },
+  //           ),
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () => Navigator.pop(context),
+  //             child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+  //           ),
+  //         ],
+  //       ),
+  //     );
+  //   }
+  //
+  //
+  //   await showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return StatefulBuilder(
+  //         builder: (context, setState) {
+  //           return AlertDialog(
+  //             title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'انوائس کی رقم ادا کریں'),
+  //             content: SingleChildScrollView(
+  //               child: Column(
+  //                 mainAxisSize: MainAxisSize.min,
+  //                 children: [
+  //                   // Add this widget to the payment dialog content
+  //                   ListTile(
+  //                     title: Text(languageProvider.isEnglish
+  //                         ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
+  //                         : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
+  //                     trailing: const Icon(Icons.calendar_today),
+  //                     onTap: () async {
+  //                       final pickedDate = await showDatePicker(
+  //                         context: context,
+  //                         initialDate: _selectedPaymentDate,
+  //                         firstDate: DateTime(2000),
+  //                         lastDate: DateTime.now().add(const Duration(days: 365)),
+  //                       );
+  //                       if (pickedDate != null) {
+  //                         final pickedTime = await showTimePicker(
+  //                           context: context,
+  //                           initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
+  //                         );
+  //                         if (pickedTime != null) {
+  //                           setState(() {
+  //                             _selectedPaymentDate = DateTime(
+  //                               pickedDate.year,
+  //                               pickedDate.month,
+  //                               pickedDate.day,
+  //                               pickedTime.hour,
+  //                               pickedTime.minute,
+  //                             );
+  //                           });
+  //                         }
+  //                       }
+  //                     },
+  //                   ),
+  //                   DropdownButtonFormField<String>(
+  //                     value: selectedPaymentMethod,
+  //                     items: [
+  //                       DropdownMenuItem(
+  //                         value: 'Cash',
+  //                         child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Online',
+  //                         child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Check',
+  //                         child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Bank',
+  //                         child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Slip',
+  //                         child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+  //                       ),
+  //                     ],
+  //                     onChanged: (value) {
+  //                       setState(() {
+  //                         selectedPaymentMethod = value;
+  //                         if (value != 'Bank') {
+  //                           _selectedBankId = null;
+  //                           _selectedBankName = null;
+  //                         }
+  //                       });
+  //                     },
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   // Bank selection UI
+  //                   if (selectedPaymentMethod == 'Bank')
+  //                     Padding(
+  //                       padding: const EdgeInsets.only(top: 8.0),
+  //                       child: Card(
+  //                         child: ListTile(
+  //                           title: Text(_selectedBankName ??
+  //                               (languageProvider.isEnglish
+  //                                   ? 'Select Bank'
+  //                                   : 'بینک منتخب کریں')),
+  //                           trailing: const Icon(Icons.arrow_drop_down),
+  //                           onTap: () => _selectBank(context),
+  //                         ),
+  //                       ),
+  //                     ),
+  //                   // Inside _showFilledPaymentDialog
+  //                   // Inside _showFilledPaymentDialog, in the cheque payment section:
+  //                   if (selectedPaymentMethod == 'Check')
+  //                     Column(
+  //                       children: [
+  //                         TextField(
+  //                           controller: _chequeNumberController,
+  //                           decoration: InputDecoration(
+  //                             labelText: languageProvider.isEnglish
+  //                                 ? 'Cheque Number'
+  //                                 : 'چیک نمبر',
+  //                           ),
+  //                         ),
+  //                         ListTile(
+  //                           title: Text(
+  //                             _selectedChequeDate == null
+  //                                 ? (languageProvider.isEnglish
+  //                                 ? 'Select Cheque Date'
+  //                                 : 'چیک کی تاریخ منتخب کریں')
+  //                                 : DateFormat('yyyy-MM-dd').format(_selectedChequeDate!),
+  //                           ),
+  //                           trailing: const Icon(Icons.calendar_today),
+  //                           onTap: () async {
+  //                             final pickedDate = await showDatePicker(
+  //                               context: context,
+  //                               initialDate: DateTime.now(),
+  //                               firstDate: DateTime(2000),
+  //                               lastDate: DateTime(2100),
+  //                             );
+  //                             if (pickedDate != null) {
+  //                               setState(() => _selectedChequeDate = pickedDate);
+  //                             }
+  //                           },
+  //                         ),
+  //                         // Bank selection for cheque
+  //                         Card(
+  //                           child: ListTile(
+  //                             title: Text(_selectedChequeBankName ??
+  //                                 (languageProvider.isEnglish
+  //                                     ? 'Select Bank'
+  //                                     : 'بینک منتخب کریں')),
+  //                             trailing: const Icon(Icons.arrow_drop_down),
+  //                             onTap: () async {
+  //                               await _selectchequeBank(context);
+  //                               setState(() {}); // Refresh the UI after bank selection
+  //                             },
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                   const SizedBox(height: 16),
+  //                   TextField(
+  //                     controller: _paymentController,
+  //                     keyboardType: TextInputType.number,
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   TextField(
+  //                     onChanged: (value) {
+  //                       setState(() {
+  //                         _description = value;
+  //                       });
+  //                     },
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   ElevatedButton(
+  //                     onPressed: () async {
+  //                       Uint8List? imageBytes = await _pickImage(context);
+  //                       if (imageBytes != null && imageBytes.isNotEmpty) {
+  //                         print('Image selected with ${imageBytes.length} bytes'); // Debug log
+  //                         setState(() {
+  //                           _imageBytes = imageBytes;
+  //                         });
+  //                       } else {
+  //                         print('No image selected or empty bytes'); // Debug log
+  //                       }
+  //                     },
+  //                     child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
+  //                   ),
+  //                   // Display selected image
+  //                   if (_imageBytes != null)
+  //                     Container(
+  //                       margin: const EdgeInsets.only(top: 16),
+  //                       height: 100,
+  //                       width: 100,
+  //                       child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
+  //                     ),
+  //                 ],
+  //               ),
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.of(context).pop(),
+  //                 child: Text(languageProvider.isEnglish ? 'Cancel' : 'انکار'),
+  //               ),
+  //               TextButton(
+  //                 onPressed: _isPaymentButtonPressed
+  //                     ? null
+  //                     : () async {
+  //                   setState(() {
+  //                     _isPaymentButtonPressed = true;
+  //                   });
+  //
+  //                   if (selectedPaymentMethod == null) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(
+  //                         content: Text(languageProvider.isEnglish
+  //                             ? 'Please select a payment method.'
+  //                             : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
+  //                       ),
+  //                     );
+  //                     setState(() {
+  //                       _isPaymentButtonPressed = false;
+  //                     });
+  //                     return;
+  //                   }
+  //
+  //                   final amount = double.tryParse(_paymentController.text);
+  //                   if (amount != null && amount > 0) {
+  //                     // await filledProvider.payFilledWithSeparateMethod(
+  //                     //   context,
+  //                     //   filled['filledNumber'],
+  //                     //   amount,
+  //                     //   selectedPaymentMethod!,
+  //                     //   description: _description,
+  //                     //   imageBytes: _imageBytes,
+  //                     //   paymentDate: _selectedPaymentDate, // Pass selected date
+  //                     //   bankId: _selectedBankId,
+  //                     //   bankName: _selectedBankName,
+  //                     //   chequeNumber: _chequeNumberController.text, // Add this
+  //                     //   chequeDate: _selectedChequeDate, // Add this
+  //                     //   chequeBankId: _selectedChequeBankId, // Add this
+  //                     //   chequeBankName: _selectedChequeBankName, // Add this
+  //                     // );
+  //                     await filledProvider.payFilledWithSeparateMethod(
+  //                       context,
+  //                       filled['filledNumber'],
+  //                       amount,
+  //                       selectedPaymentMethod!,
+  //                       description: _description,
+  //                       imageBytes: _imageBytes,
+  //                       paymentDate: _selectedPaymentDate,
+  //                       chequeNumber: _chequeNumberController.text,
+  //                       chequeDate: _selectedChequeDate!,
+  //                       chequeBankId: _selectedChequeBankId!,
+  //                       chequeBankName: _selectedChequeBankName!,
+  //                     );
+  //                     // if (mounted) {
+  //                     //   ScaffoldMessenger.of(context).showSnackBar(
+  //                     //     SnackBar(
+  //                     //       content: Text(
+  //                     //         languageProvider.isEnglish
+  //                     //             ? 'Payment processed and cash book updated'
+  //                     //             : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
+  //                     //       ),
+  //                     //     ),
+  //                     //   );
+  //                     // }
+  //                     Navigator.of(context).pop();
+  //                   } else {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(
+  //                         content: Text(languageProvider.isEnglish
+  //                             ? 'Please enter a valid payment amount.'
+  //                             : 'براہ کرم ایک درست رقم درج کریں۔'),
+  //                       ),
+  //                     );
+  //                   }
+  //
+  //                   setState(() {
+  //                     _isPaymentButtonPressed = false;
+  //                   });
+  //                 },
+  //                 child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
+  //               ),
+  //             ],
+  //           );
+  //         },
+  //       );
+  //     },
+  //   );
+  // }
+  Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
+    if (_cachedBanks.isEmpty) {
+      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+      if (bankSnapshot.snapshot.value == null) return null;
+
+      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+      _cachedBanks = banks.entries.map((e) => {
+        'id': e.key,
+        'name': e.value['name'],
+        'balance': e.value['balance']
+      }).toList();
+    }
+
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    Map<String, dynamic>? selectedBank;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _cachedBanks.length,
+            itemBuilder: (context, index) {
+              final bankData = _cachedBanks[index];
+              final bankName = bankData['name'];
+
+              // Find matching bank from pakistaniBanks list
+              Bank? matchedBank = pakistaniBanks.firstWhere(
+                    (b) => b.name.toLowerCase() == bankName.toLowerCase(),
+                orElse: () => Bank(
+                    name: bankName,
+                    iconPath: 'assets/default_bank.png'
+                ),
+              );
+
+              return Card(
+                margin: EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: Image.asset(
+                    matchedBank.iconPath,
+                    width: 40,
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(Icons.account_balance, size: 40);
+                    },
+                  ),
+                  title: Text(
+                    bankName,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
+                  ),
+                  onTap: () {
+                    selectedBank = {
+                      'id': bankData['id'],
+                      'name': bankName,
+                      'balance': bankData['balance']
+                    };
+                    Navigator.pop(context);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+        ],
+      ),
+    );
+
+    return selectedBank;
+  }
+  // Future<Map<String, String>?> _selectBank(BuildContext context) async {
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //   // Fetch banks if not already cached
+  //   if (_cachedBanks.isEmpty) {
+  //     final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+  //     if (bankSnapshot.snapshot.value == null) return null;
+  //
+  //     final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+  //     _cachedBanks = banks.entries.map((e) => {
+  //       'id': e.key.toString(),
+  //       'name': e.value['name'].toString(),
+  //       'balance': (e.value['balance'] ?? 0).toString(),
+  //     }).toList();
+  //   }
+  //
+  //   String? selectedBankId;
+  //   String? selectedBankName;
+  //
+  //   await showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+  //       content: SizedBox(
+  //         width: double.maxFinite,
+  //         height: 300,
+  //         child: ListView.builder(
+  //           shrinkWrap: true,
+  //           itemCount: _cachedBanks.length,
+  //           itemBuilder: (context, index) {
+  //             final bank = _cachedBanks[index];
+  //             return Card(
+  //               margin: const EdgeInsets.symmetric(vertical: 4),
+  //               child: ListTile(
+  //                 leading: const Icon(Icons.account_balance, size: 40),
+  //                 title: Text(bank['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+  //                 subtitle: Text('${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bank['balance']} Rs'),
+  //                 onTap: () {
+  //                   selectedBankId = bank['id'];
+  //                   selectedBankName = bank['name'];
+  //                   Navigator.pop(context);
+  //                 },
+  //               ),
+  //             );
+  //           },
+  //         ),
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  //
+  //   return selectedBankId != null
+  //       ? {'id': selectedBankId!, 'name': selectedBankName!}
+  //       : null;
+  // }
+
+
+
   Future<void> _showFilledPaymentDialog(
       Map<String, dynamic> filled,
       FilledProvider filledProvider,
@@ -1001,128 +1610,12 @@ class _filledpageState extends State<filledpage> {
     String? _description;
     Uint8List? _imageBytes;
     DateTime _selectedPaymentDate = DateTime.now();
-    // Move these inside the dialog state
-    String? _selectedBankId;
-    String? _selectedBankName;
 
-
-
-    // Future<void> _selectBank(BuildContext context) async {
-    //   if (_cachedBanks.isEmpty) {
-    //     final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
-    //     if (bankSnapshot.snapshot.value == null) return;
-    //
-    //     final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
-    //     _cachedBanks = banks.entries.map((e) => {
-    //       'id': e.key,
-    //       'name': e.value['name'],
-    //       'balance': e.value['balance']
-    //     }).toList();
-    //   }
-    //
-    //   await showDialog(
-    //     context: context,
-    //     builder: (context) => AlertDialog(
-    //       content: SizedBox(
-    //         width: double.maxFinite,
-    //         child: ListView.builder(
-    //           shrinkWrap: true,
-    //           itemCount: _cachedBanks.length,
-    //           itemBuilder: (context, index) => ListTile(
-    //             title: Text(_cachedBanks[index]['name']),
-    //             subtitle: Text('${_cachedBanks[index]['balance']} Rs'),
-    //             onTap: () {
-    //               setState(() {
-    //                 _selectedBankId = _cachedBanks[index]['id'];
-    //                 _selectedBankName = _cachedBanks[index]['name'];
-    //               });
-    //               Navigator.pop(context);
-    //             },
-    //           ),
-    //         ),
-    //       ),
-    //     ),
-    //   );
-    // }
-
-    Future<void> _selectBank(BuildContext context) async {
-      if (_cachedBanks.isEmpty) {
-        final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
-        if (bankSnapshot.snapshot.value == null) return;
-
-        final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
-        _cachedBanks = banks.entries.map((e) => {
-          'id': e.key,
-          'name': e.value['name'],
-          'balance': e.value['balance']
-        }).toList();
-      }
-
-      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _cachedBanks.length,
-              itemBuilder: (context, index) {
-                final bankData = _cachedBanks[index];
-                final bankName = bankData['name'];
-
-                // Find matching bank from pakistaniBanks list
-                Bank? matchedBank = pakistaniBanks.firstWhere(
-                      (b) => b.name.toLowerCase() == bankName.toLowerCase(),
-                  orElse: () => Bank(
-                      name: bankName,
-                      iconPath: 'assets/default_bank.png'
-                  ),
-                );
-
-                return Card(
-                  margin: EdgeInsets.symmetric(vertical: 4),
-                  child: ListTile(
-                    leading: Image.asset(
-                      matchedBank.iconPath,
-                      width: 40,
-                      height: 40,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(Icons.account_balance, size: 40);
-                      },
-                    ),
-                    title: Text(
-                      bankName,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _selectedBankId = bankData['id'];
-                        _selectedBankName = bankName;
-                      });
-                      Navigator.pop(context);
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
-            ),
-          ],
-        ),
-      );
-    }
-
+    // Add these controllers and variables for cheque payments
+    TextEditingController _chequeNumberController = TextEditingController();
+    DateTime? _selectedChequeDate;
+    String? _selectedChequeBankId;
+    String? _selectedChequeBankName;
 
     await showDialog(
       context: context,
@@ -1135,7 +1628,7 @@ class _filledpageState extends State<filledpage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Add this widget to the payment dialog content
+                    // Payment date selection
                     ListTile(
                       title: Text(languageProvider.isEnglish
                           ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
@@ -1167,6 +1660,8 @@ class _filledpageState extends State<filledpage> {
                         }
                       },
                     ),
+
+                    // Payment method dropdown
                     DropdownButtonFormField<String>(
                       value: selectedPaymentMethod,
                       items: [
@@ -1194,10 +1689,6 @@ class _filledpageState extends State<filledpage> {
                       onChanged: (value) {
                         setState(() {
                           selectedPaymentMethod = value;
-                          if (value != 'Bank') {
-                            _selectedBankId = null;
-                            _selectedBankName = null;
-                          }
                         });
                       },
                       decoration: InputDecoration(
@@ -1205,21 +1696,84 @@ class _filledpageState extends State<filledpage> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
-                    // Bank selection UI
-                    if (selectedPaymentMethod == 'Bank')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Card(
-                          child: ListTile(
-                            title: Text(_selectedBankName ??
-                                (languageProvider.isEnglish
-                                    ? 'Select Bank'
-                                    : 'بینک منتخب کریں')),
-                            trailing: const Icon(Icons.arrow_drop_down),
-                            onTap: () => _selectBank(context),
-                          ),
+
+                    // Cheque payment fields (only shown when Check is selected)
+                    if (selectedPaymentMethod == 'Check') ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _chequeNumberController,
+                        decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish ? 'Cheque Number' : 'چیک نمبر',
+                          border: const OutlineInputBorder(),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        title: Text(
+                          _selectedChequeDate == null
+                              ? (languageProvider.isEnglish
+                              ? 'Select Cheque Date'
+                              : 'چیک کی تاریخ منتخب کریں')
+                              : DateFormat('yyyy-MM-dd').format(_selectedChequeDate!),
+                        ),
+                        trailing: const Icon(Icons.calendar_today),
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (pickedDate != null) {
+                            setState(() => _selectedChequeDate = pickedDate);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Card(
+                        child: ListTile(
+                          title: Text(_selectedChequeBankName ??
+                              (languageProvider.isEnglish
+                                  ? 'Select Bank'
+                                  : 'بینک منتخب کریں')),
+                          trailing: const Icon(Icons.arrow_drop_down),
+                          onTap: () async {
+                            final selectedBank = await _selectBank(context);
+                            if (selectedBank != null) {
+                              setState(() {
+                                _selectedChequeBankId = selectedBank['id'];
+                                _selectedChequeBankName = selectedBank['name'];
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+
+                    // Bank payment fields (only shown when Bank is selected)
+                    if (selectedPaymentMethod == 'Bank') ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        child: ListTile(
+                          title: Text(_selectedBankName ??
+                              (languageProvider.isEnglish
+                                  ? 'Select Bank'
+                                  : 'بینک منتخب کریں')),
+                          trailing: const Icon(Icons.arrow_drop_down),
+                          onTap: () async {
+                            final selectedBank = await _selectBank(context);
+                            if (selectedBank != null) {
+                              setState(() {
+                                _selectedBankId = selectedBank['id'];
+                                _selectedBankName = selectedBank['name'];
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+
+                    // Common fields for all payment methods
                     const SizedBox(height: 16),
                     TextField(
                       controller: _paymentController,
@@ -1231,11 +1785,7 @@ class _filledpageState extends State<filledpage> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      onChanged: (value) {
-                        setState(() {
-                          _description = value;
-                        });
-                      },
+                      onChanged: (value) => _description = value,
                       decoration: InputDecoration(
                         labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
                         border: const OutlineInputBorder(),
@@ -1245,24 +1795,18 @@ class _filledpageState extends State<filledpage> {
                     ElevatedButton(
                       onPressed: () async {
                         Uint8List? imageBytes = await _pickImage(context);
-                        if (imageBytes != null && imageBytes.isNotEmpty) {
-                          print('Image selected with ${imageBytes.length} bytes'); // Debug log
-                          setState(() {
-                            _imageBytes = imageBytes;
-                          });
-                        } else {
-                          print('No image selected or empty bytes'); // Debug log
+                        if (imageBytes != null) {
+                          setState(() => _imageBytes = imageBytes);
                         }
                       },
                       child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
                     ),
-                    // Display selected image
                     if (_imageBytes != null)
                       Container(
                         margin: const EdgeInsets.only(top: 16),
                         height: 100,
                         width: 100,
-                        child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
+                        child: Image.memory(_imageBytes!),
                       ),
                   ],
                 ),
@@ -1276,26 +1820,73 @@ class _filledpageState extends State<filledpage> {
                   onPressed: _isPaymentButtonPressed
                       ? null
                       : () async {
-                    setState(() {
-                      _isPaymentButtonPressed = true;
-                    });
+                    setState(() => _isPaymentButtonPressed = true);
 
+                    // Validate inputs
                     if (selectedPaymentMethod == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(languageProvider.isEnglish
-                              ? 'Please select a payment method.'
-                              : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
-                        ),
+                        SnackBar(content: Text(languageProvider.isEnglish
+                            ? 'Please select a payment method.'
+                            : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔')),
                       );
-                      setState(() {
-                        _isPaymentButtonPressed = false;
-                      });
+                      setState(() => _isPaymentButtonPressed = false);
                       return;
                     }
 
                     final amount = double.tryParse(_paymentController.text);
-                    if (amount != null && amount > 0) {
+                    if (amount == null || amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(languageProvider.isEnglish
+                            ? 'Please enter a valid payment amount.'
+                            : 'براہ کرم ایک درست رقم درج کریں۔')),
+                      );
+                      setState(() => _isPaymentButtonPressed = false);
+                      return;
+                    }
+
+                    // Validate cheque-specific fields
+                    if (selectedPaymentMethod == 'Check') {
+                      if (_selectedChequeBankId == null || _selectedChequeBankName == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(languageProvider.isEnglish
+                              ? 'Please select a bank for the cheque'
+                              : 'براہ کرم چیک کے لیے بینک منتخب کریں')),
+                        );
+                        setState(() => _isPaymentButtonPressed = false);
+                        return;
+                      }
+                      if (_chequeNumberController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(languageProvider.isEnglish
+                              ? 'Please enter cheque number'
+                              : 'براہ کرم چیک نمبر درج کریں')),
+                        );
+                        setState(() => _isPaymentButtonPressed = false);
+                        return;
+                      }
+                      if (_selectedChequeDate == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(languageProvider.isEnglish
+                              ? 'Please select cheque date'
+                              : 'براہ کرم چیک کی تاریخ منتخب کریں')),
+                        );
+                        setState(() => _isPaymentButtonPressed = false);
+                        return;
+                      }
+                    }
+
+                    // Validate bank-specific fields
+                    if (selectedPaymentMethod == 'Bank' && (_selectedBankId == null || _selectedBankName == null)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(languageProvider.isEnglish
+                            ? 'Please select a bank'
+                            : 'براہ کرم بینک منتخب کریں')),
+                      );
+                      setState(() => _isPaymentButtonPressed = false);
+                      return;
+                    }
+
+                    try {
                       await filledProvider.payFilledWithSeparateMethod(
                         context,
                         filled['filledNumber'],
@@ -1303,35 +1894,22 @@ class _filledpageState extends State<filledpage> {
                         selectedPaymentMethod!,
                         description: _description,
                         imageBytes: _imageBytes,
-                        paymentDate: _selectedPaymentDate, // Pass selected date
+                        paymentDate: _selectedPaymentDate,
                         bankId: _selectedBankId,
                         bankName: _selectedBankName,
+                        chequeNumber: _chequeNumberController.text,
+                        chequeDate: _selectedChequeDate,
+                        chequeBankId: _selectedChequeBankId,
+                        chequeBankName: _selectedChequeBankName,
                       );
-                      // if (mounted) {
-                      //   ScaffoldMessenger.of(context).showSnackBar(
-                      //     SnackBar(
-                      //       content: Text(
-                      //         languageProvider.isEnglish
-                      //             ? 'Payment processed and cash book updated'
-                      //             : 'ادائیگی پراسیس ہو گئی اور کیش بک اپ ڈیٹ ہو گئی',
-                      //       ),
-                      //     ),
-                      //   );
-                      // }
                       Navigator.of(context).pop();
-                    } else {
+                    } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(languageProvider.isEnglish
-                              ? 'Please enter a valid payment amount.'
-                              : 'براہ کرم ایک درست رقم درج کریں۔'),
-                        ),
+                        SnackBar(content: Text('Error: ${e.toString()}')),
                       );
+                    } finally {
+                      setState(() => _isPaymentButtonPressed = false);
                     }
-
-                    setState(() {
-                      _isPaymentButtonPressed = false;
-                    });
                   },
                   child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
                 ),

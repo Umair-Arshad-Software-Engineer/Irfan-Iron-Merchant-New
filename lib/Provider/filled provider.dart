@@ -20,7 +20,10 @@ class FilledProvider with ChangeNotifier {
   String? _lastKey;
   // Page size for pagination
   final int _pageSize = 20;
-
+  String? _selectedChequeBankId;
+  String? _selectedChequeBankName;
+  TextEditingController _chequeNumberController = TextEditingController();
+  DateTime? _selectedChequeDate;
 
 
 
@@ -635,6 +638,324 @@ class FilledProvider with ChangeNotifier {
     return 0.0;
   }
 
+  Future<List<Map<String, dynamic>>> getChequesByBank(String bankId) async {
+    final snapshot = await _db.child('cheques')
+        .orderByChild('bankId')
+        .equalTo(bankId)
+        .get();
+    try {
+      // final snapshot = await _db.child('cheques')
+      //     .orderByChild('bankId')
+      //     .equalTo(bankId)
+      //     .get();
+
+      if (!snapshot.exists) return [];
+
+      final cheques = <Map<String, dynamic>>[];
+      final data = snapshot.value as Map<dynamic, dynamic>;
+
+      data.forEach((key, value) {
+        cheques.add({
+          'id': key,
+          ...Map<String, dynamic>.from(value),
+        });
+      });
+
+      // Sort by date (newest first)
+      cheques.sort((a, b) {
+        final dateA = DateTime.parse(a['createdAt']);
+        final dateB = DateTime.parse(b['createdAt']);
+        return dateB.compareTo(dateA);
+      });
+
+      return cheques;
+    } catch (e) {
+      throw Exception('Failed to fetch cheques: $e');
+    }
+  }
+
+  Future<void> updateChequeStatus({
+    required String chequeId,
+    required String status,
+    String? bankId,
+  }) async {
+    await _db.child('cheques').child(chequeId).update({
+      'status': status,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+
+    if (status == 'cleared' && bankId != null) {
+      // Update bank balance
+      final chequeSnapshot = await _db.child('cheques').child(chequeId).get();
+      if (chequeSnapshot.exists) {
+        final cheque = Map<String, dynamic>.from(chequeSnapshot.value as Map);
+        final amount = (cheque['amount'] as num).toDouble();
+
+        final bankBalanceRef = _db.child('banks/$bankId/balance');
+        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+        await bankBalanceRef.set(currentBalance + amount);
+      }
+    }
+  }
+  Future<List<Map<String, dynamic>>> getAllCheques() async {
+    try {
+      final snapshot = await _db.child('cheques').get();
+
+
+      if (!snapshot.exists) return [];
+
+      final cheques = <Map<String, dynamic>>[];
+      final data = snapshot.value as Map<dynamic, dynamic>;
+
+      data.forEach((key, value) {
+        cheques.add({
+          'id': key,
+          ...Map<String, dynamic>.from(value),
+        });
+      });
+
+      // Sort by date (newest first)
+      cheques.sort((a, b) {
+        final dateA = DateTime.parse(a['createdAt']);
+        final dateB = DateTime.parse(b['createdAt']);
+        return dateB.compareTo(dateA);
+      });
+
+      return cheques;
+    } catch (e) {
+      throw Exception('Failed to fetch cheques: $e');
+    }
+  }
+
+  // Future<void> payFilledWithSeparateMethod(
+  //     BuildContext context,
+  //     String filledId,
+  //     double paymentAmount,
+  //     String paymentMethod, {
+  //       String? description,
+  //       Uint8List? imageBytes,
+  //       required DateTime paymentDate, // Add this parameter
+  //       String? bankId,
+  //       String? bankName,
+  //
+  //     })
+  // async {
+  //   try {
+  //     // Fetch the current filled data from the database
+  //     final filledSnapshot = await _db.child('filled').child(filledId).get();
+  //     if (!filledSnapshot.exists) {
+  //       throw Exception("Filled not found.");
+  //     }
+  //
+  //     // Convert the retrieved data to Map<String, dynamic>
+  //     final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
+  //
+  //     // Helper function to parse values safely
+  //     double _parseToDouble(dynamic value) {
+  //       if (value == null) {
+  //         return 0.0; // Default to 0.0 if null
+  //       }
+  //       if (value is int) {
+  //         return value.toDouble(); // Convert int to double
+  //       } else if (value is double) {
+  //         return value;
+  //       } else {
+  //         try {
+  //           return double.parse(value.toString()); // Try parsing as double
+  //         } catch (e) {
+  //           return 0.0; // Return 0.0 in case of a parsing failure
+  //         }
+  //       }
+  //     }
+  //     if (paymentMethod == 'Bank' && bankId != null) {
+  //       final bankRef = _db.child('banks/$bankId/transactions');
+  //       final transactionData = {
+  //         'amount': paymentAmount,
+  //         'description': description ?? 'Filled Payment: ${filled['referenceNumber']}',
+  //         'type': 'cash_in',
+  //         'timestamp': paymentDate.millisecondsSinceEpoch,
+  //         'filledId': filledId,
+  //         'bankName': bankName,
+  //       };
+  //       await bankRef.push().set(transactionData);
+  //
+  //       // Update bank balance
+  //       final bankBalanceRef = _db.child('banks/$bankId/balance');
+  //       final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+  //       await bankBalanceRef.set(currentBalance + paymentAmount);
+  //     }
+  //
+  //
+  //
+  //     // Retrieve and parse all necessary values
+  //     final remainingBalance = _parseToDouble(filled['remainingBalance']);
+  //     final currentCashPaid = _parseToDouble(filled['cashPaidAmount']);
+  //     final currentOnlinePaid = _parseToDouble(filled['onlinePaidAmount']);
+  //     final grandTotal = _parseToDouble(filled['grandTotal']);
+  //     final currentSlipPaid = _parseToDouble(filled['slipPaidAmount'] ?? 0.0);
+  //     final currentBankPaid = _parseToDouble(filled['bankPaidAmount'] ?? 0.0);
+  //     final currentCheckPaid = _parseToDouble(filled['checkPaidAmount'] ?? 0.0); // Initialize check paid amount
+  //
+  //     // Calculate the total paid so far
+  //     final totalPaid = currentCashPaid + currentOnlinePaid + currentCheckPaid + currentSlipPaid + currentBankPaid;
+  //
+  //
+  //     // // Add the new payment to the appropriate field
+  //     double updatedCashPaid = currentCashPaid;
+  //     double updatedOnlinePaid = currentOnlinePaid;
+  //     double updatedCheckPaid = _parseToDouble(filled['checkPaidAmount']);
+  //     double updatedSlipPaid = currentSlipPaid;
+  //     double updatedBankPaid = currentBankPaid;
+  //
+  //     // Create a payment object to store in the database
+  //     final paymentData = {
+  //       'amount': paymentAmount,
+  //       'date': paymentDate.toIso8601String(), // Use selected date
+  //       'paymentMethod': paymentMethod,
+  //       'description': description,
+  //       'bankId': bankId,
+  //       'bankName': bankName,
+  //     };
+  //     // Inside the cash payment handling block:
+  //     if (paymentMethod == 'Cash') {
+  //       // Create cashbook entry using push key
+  //       final cashbookEntryRef = _db.child('cashbook').push();
+  //       final cashbookEntryId = cashbookEntryRef.key!;
+  //
+  //       final cashbookEntry = CashbookEntry(
+  //         id: cashbookEntryId,
+  //         description: description ?? 'Filled Payment ${filled['referenceNumber']}',
+  //         amount: paymentAmount,
+  //         dateTime: paymentDate,
+  //         type: 'cash_in',
+  //       );
+  //
+  //       await cashbookEntryRef.set(cashbookEntry.toJson());
+  //
+  //       // Store cashbook entry ID in payment datas
+  //       paymentData['cashbookEntryId'] = cashbookEntryId;
+  //
+  //       // Remove the following redundant call:
+  //       // await addCashBookEntry(...);
+  //     }
+  //
+  //     // Inside payFilledWithSeparateMethod
+  //     // Inside payFilledWithSeparateMethod
+  //     // In FilledProvider's payFilledWithSeparateMethod method
+  //     if (paymentMethod == 'Check') {
+  //       if (_selectedChequeBankId == null) {
+  //         throw Exception("Bank not selected for cheque payment");
+  //       }
+  //
+  //       // Save cheque under the selected bank
+  //       final bankChequesRef = _db.child('banks/${_selectedChequeBankId}/cheques');
+  //       final chequeData = {
+  //         'filledId': filledId,
+  //         'filledNumber': filled['filledNumber'],
+  //         'customerId': filled['customerId'],
+  //         'customerName': filled['customerName'],
+  //         'amount': paymentAmount,
+  //         'chequeNumber': _chequeNumberController.text,
+  //         'chequeDate': _selectedChequeDate?.toIso8601String(),
+  //         'status': 'pending',
+  //         'createdAt': DateTime.now().toIso8601String(),
+  //       };
+  //
+  //       final newChequeRef = bankChequesRef.push();
+  //       await newChequeRef.set(chequeData);
+  //
+  //       paymentData['chequeTransactionId'] = newChequeRef.key;
+  //       paymentData['bankId'] = _selectedChequeBankId;
+  //     }
+  //     // If an image is provided, encode it to base64 and add it to the payment data
+  //     if (imageBytes != null) {
+  //       paymentData['image'] = base64Encode(imageBytes);
+  //     }
+  //
+  //
+  //     DatabaseReference paymentRef;
+  //     if (paymentMethod == 'Cash') {
+  //       updatedCashPaid += paymentAmount;
+  //       paymentRef = _db.child('filled').child(filledId).child('cashPayments').push();
+  //     } else if (paymentMethod == 'Online') {
+  //       updatedOnlinePaid += paymentAmount;
+  //       paymentRef = _db.child('filled').child(filledId).child('onlinePayments').push();
+  //     } else if (paymentMethod == 'Check') {
+  //       updatedCheckPaid += paymentAmount;
+  //       paymentRef = _db.child('filled').child(filledId).child('checkPayments').push();
+  //     } else if (paymentMethod == 'Bank') {
+  //       updatedBankPaid += paymentAmount;
+  //       paymentRef = _db.child('filled').child(filledId).child('bankPayments').push();
+  //     } else if (paymentMethod == 'Slip') {
+  //       updatedSlipPaid += paymentAmount;
+  //       paymentRef = _db.child('filled').child(filledId).child('slipPayments').push();
+  //     } else {
+  //       throw Exception("Invalid payment method.");
+  //     }
+  //
+  //     // Add the payment key to the payment data
+  //     paymentData['key'] = paymentRef.key;
+  //
+  //     // Save the payment data
+  //     await paymentRef.set(paymentData);
+  //
+  //     // Retrieve and parse the current debit amount
+  //     final currentDebit = _parseToDouble(filled['debitAmount']);
+  //
+  //     final updatedDebit = currentDebit + paymentAmount;
+  //     final debitAt = DateTime.now().toIso8601String();
+  //
+  //     await _db.child('filled').child(filledId).update({
+  //       // 'cashPaidAmount': updatedCashPaid,
+  //       // 'onlinePaidAmount': updatedOnlinePaid,
+  //       // 'checkPaidAmount': updatedCheckPaid,
+  //       // 'debitAmount': updatedDebit, // Make sure this is updated correctly
+  //       // 'debitAt': debitAt,
+  //       // 'slipPaidAmount': updatedSlipPaid, // Add this line
+  //       'cashPaidAmount': updatedCashPaid,
+  //       'onlinePaidAmount': updatedOnlinePaid,
+  //       'checkPaidAmount': updatedCheckPaid,
+  //       'bankPaidAmount': updatedBankPaid,
+  //       'slipPaidAmount': updatedSlipPaid,
+  //       'debitAmount': updatedDebit,
+  //       'debitAt': debitAt,
+  //
+  //     });
+  //     // Update the local state without fetching all filled
+  //     final filledIndex = _filled.indexWhere((inv) => inv['id'] == filledId);
+  //     if (filledIndex != -1) {
+  //       _filled[filledIndex]['cashPaidAmount'] = updatedCashPaid;
+  //       _filled[filledIndex]['onlinePaidAmount'] = updatedOnlinePaid;
+  //       _filled[filledIndex]['checkPaidAmount'] = updatedCheckPaid;
+  //       _filled[filledIndex]['bankPaidAmount'] = updatedBankPaid;
+  //       _filled[filledIndex]['slipPaidAmount'] = updatedSlipPaid;
+  //       _filled[filledIndex]['debitAmount'] = updatedDebit;
+  //       _filled[filledIndex]['debitAt'] = debitAt;
+  //       notifyListeners(); // Trigger UI update
+  //     }
+  //     // Update the ledger with the calculated remaining balance
+  //     await _updateCustomerLedger(
+  //         filled['customerId'],
+  //         creditAmount: 0.0,
+  //         debitAmount: paymentAmount,
+  //         remainingBalance: grandTotal - updatedDebit,
+  //         filledNumber: filled['filledNumber'],
+  //         referenceNumber: filled['referenceNumber']
+  //     );
+  //
+  //     // Refresh the filled list
+  //     await fetchFilled();
+  //
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Payment of Rs. $paymentAmount recorded successfully as $paymentMethod.')),
+  //     );
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
+  //     );
+  //     throw Exception('Failed to save payment: $e');
+  //   }
+  // }
   Future<void> payFilledWithSeparateMethod(
       BuildContext context,
       String filledId,
@@ -642,12 +963,14 @@ class FilledProvider with ChangeNotifier {
       String paymentMethod, {
         String? description,
         Uint8List? imageBytes,
-        required DateTime paymentDate, // Add this parameter
+        required DateTime paymentDate,
         String? bankId,
         String? bankName,
-
-      })
-  async {
+        String? chequeNumber,  // Add this parameter
+        DateTime? chequeDate,  // Add this parameter
+        String? chequeBankId,  // Add this parameter
+        String? chequeBankName,  // Add this parameter
+      }) async {
     try {
       // Fetch the current filled data from the database
       final filledSnapshot = await _db.child('filled').child(filledId).get();
@@ -660,21 +983,17 @@ class FilledProvider with ChangeNotifier {
 
       // Helper function to parse values safely
       double _parseToDouble(dynamic value) {
-        if (value == null) {
-          return 0.0; // Default to 0.0 if null
-        }
-        if (value is int) {
-          return value.toDouble(); // Convert int to double
-        } else if (value is double) {
-          return value;
-        } else {
-          try {
-            return double.parse(value.toString()); // Try parsing as double
-          } catch (e) {
-            return 0.0; // Return 0.0 in case of a parsing failure
-          }
+        if (value == null) return 0.0;
+        if (value is int) return value.toDouble();
+        if (value is double) return value;
+        try {
+          return double.parse(value.toString());
+        } catch (e) {
+          return 0.0;
         }
       }
+
+      // Handle bank transactions
       if (paymentMethod == 'Bank' && bankId != null) {
         final bankRef = _db.child('banks/$bankId/transactions');
         final transactionData = {
@@ -700,31 +1019,30 @@ class FilledProvider with ChangeNotifier {
       final grandTotal = _parseToDouble(filled['grandTotal']);
       final currentSlipPaid = _parseToDouble(filled['slipPaidAmount'] ?? 0.0);
       final currentBankPaid = _parseToDouble(filled['bankPaidAmount'] ?? 0.0);
-      final currentCheckPaid = _parseToDouble(filled['checkPaidAmount'] ?? 0.0); // Initialize check paid amount
+      final currentCheckPaid = _parseToDouble(filled['checkPaidAmount'] ?? 0.0);
 
       // Calculate the total paid so far
       final totalPaid = currentCashPaid + currentOnlinePaid + currentCheckPaid + currentSlipPaid + currentBankPaid;
 
-
-      // // Add the new payment to the appropriate field
+      // Initialize updated payment amounts
       double updatedCashPaid = currentCashPaid;
       double updatedOnlinePaid = currentOnlinePaid;
-      double updatedCheckPaid = _parseToDouble(filled['checkPaidAmount']);
+      double updatedCheckPaid = currentCheckPaid;
       double updatedSlipPaid = currentSlipPaid;
       double updatedBankPaid = currentBankPaid;
 
       // Create a payment object to store in the database
       final paymentData = {
         'amount': paymentAmount,
-        'date': paymentDate.toIso8601String(), // Use selected date
+        'date': paymentDate.toIso8601String(),
         'paymentMethod': paymentMethod,
         'description': description,
         'bankId': bankId,
         'bankName': bankName,
       };
-      // Inside the cash payment handling block:
+
+      // Handle cash payments
       if (paymentMethod == 'Cash') {
-        // Create cashbook entry using push key
         final cashbookEntryRef = _db.child('cashbook').push();
         final cashbookEntryId = cashbookEntryRef.key!;
 
@@ -737,37 +1055,75 @@ class FilledProvider with ChangeNotifier {
         );
 
         await cashbookEntryRef.set(cashbookEntry.toJson());
-
-        // Store cashbook entry ID in payment datas
         paymentData['cashbookEntryId'] = cashbookEntryId;
-
-        // Remove the following redundant call:
-        // await addCashBookEntry(...);
       }
-      // If an image is provided, encode it to base64 and add it to the payment data
+
+      // Handle cheque payments
+      if (paymentMethod == 'Check') {
+        if (chequeBankId == null || chequeBankName == null) {
+          throw Exception("Bank not selected for cheque payment");
+        }
+        if (chequeNumber == null || chequeNumber.isEmpty) {
+          throw Exception("Cheque number is required");
+        }
+        if (chequeDate == null) {
+          throw Exception("Cheque date is required");
+        }
+
+        // Save cheque under the selected bank
+        final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
+        final chequeData = {
+          'filledId': filledId,
+          'filledNumber': filled['filledNumber'],
+          'customerId': filled['customerId'],
+          'customerName': filled['customerName'],
+          'amount': paymentAmount,
+          'chequeNumber': chequeNumber,
+          'chequeDate': chequeDate.toIso8601String(),
+          'status': 'pending',
+          'createdAt': DateTime.now().toIso8601String(),
+          'bankName': chequeBankName,
+        };
+
+        final newChequeRef = bankChequesRef.push();
+        await newChequeRef.set(chequeData);
+
+        paymentData['chequeTransactionId'] = newChequeRef.key;
+        paymentData['bankId'] = chequeBankId;
+        paymentData['chequeNumber'] = chequeNumber;
+        paymentData['chequeDate'] = chequeDate.toIso8601String();
+      }
+
+      // If an image is provided, encode it to base64
       if (imageBytes != null) {
         paymentData['image'] = base64Encode(imageBytes);
       }
 
-
+      // Determine the payment reference based on payment method
       DatabaseReference paymentRef;
-      if (paymentMethod == 'Cash') {
-        updatedCashPaid += paymentAmount;
-        paymentRef = _db.child('filled').child(filledId).child('cashPayments').push();
-      } else if (paymentMethod == 'Online') {
-        updatedOnlinePaid += paymentAmount;
-        paymentRef = _db.child('filled').child(filledId).child('onlinePayments').push();
-      } else if (paymentMethod == 'Check') {
-        updatedCheckPaid += paymentAmount;
-        paymentRef = _db.child('filled').child(filledId).child('checkPayments').push();
-      } else if (paymentMethod == 'Bank') {
-        updatedBankPaid += paymentAmount;
-        paymentRef = _db.child('filled').child(filledId).child('bankPayments').push();
-      } else if (paymentMethod == 'Slip') {
-        updatedSlipPaid += paymentAmount;
-        paymentRef = _db.child('filled').child(filledId).child('slipPayments').push();
-      } else {
-        throw Exception("Invalid payment method.");
+      switch (paymentMethod) {
+        case 'Cash':
+          updatedCashPaid += paymentAmount;
+          paymentRef = _db.child('filled').child(filledId).child('cashPayments').push();
+          break;
+        case 'Online':
+          updatedOnlinePaid += paymentAmount;
+          paymentRef = _db.child('filled').child(filledId).child('onlinePayments').push();
+          break;
+        case 'Check':
+          updatedCheckPaid += paymentAmount;
+          paymentRef = _db.child('filled').child(filledId).child('checkPayments').push();
+          break;
+        case 'Bank':
+          updatedBankPaid += paymentAmount;
+          paymentRef = _db.child('filled').child(filledId).child('bankPayments').push();
+          break;
+        case 'Slip':
+          updatedSlipPaid += paymentAmount;
+          paymentRef = _db.child('filled').child(filledId).child('slipPayments').push();
+          break;
+        default:
+          throw Exception("Invalid payment method.");
       }
 
       // Add the payment key to the payment data
@@ -776,19 +1132,11 @@ class FilledProvider with ChangeNotifier {
       // Save the payment data
       await paymentRef.set(paymentData);
 
-      // Retrieve and parse the current debit amount
-      final currentDebit = _parseToDouble(filled['debitAmount']);
-
-      final updatedDebit = currentDebit + paymentAmount;
+      // Update the filled with new payment amounts
+      final updatedDebit = _parseToDouble(filled['debitAmount']) + paymentAmount;
       final debitAt = DateTime.now().toIso8601String();
 
       await _db.child('filled').child(filledId).update({
-        // 'cashPaidAmount': updatedCashPaid,
-        // 'onlinePaidAmount': updatedOnlinePaid,
-        // 'checkPaidAmount': updatedCheckPaid,
-        // 'debitAmount': updatedDebit, // Make sure this is updated correctly
-        // 'debitAt': debitAt,
-        // 'slipPaidAmount': updatedSlipPaid, // Add this line
         'cashPaidAmount': updatedCashPaid,
         'onlinePaidAmount': updatedOnlinePaid,
         'checkPaidAmount': updatedCheckPaid,
@@ -796,9 +1144,9 @@ class FilledProvider with ChangeNotifier {
         'slipPaidAmount': updatedSlipPaid,
         'debitAmount': updatedDebit,
         'debitAt': debitAt,
-
       });
-      // Update the local state without fetching all filled
+
+      // Update the local state
       final filledIndex = _filled.indexWhere((inv) => inv['id'] == filledId);
       if (filledIndex != -1) {
         _filled[filledIndex]['cashPaidAmount'] = updatedCashPaid;
@@ -808,8 +1156,9 @@ class FilledProvider with ChangeNotifier {
         _filled[filledIndex]['slipPaidAmount'] = updatedSlipPaid;
         _filled[filledIndex]['debitAmount'] = updatedDebit;
         _filled[filledIndex]['debitAt'] = debitAt;
-        notifyListeners(); // Trigger UI update
+        notifyListeners();
       }
+
       // Update the ledger with the calculated remaining balance
       await _updateCustomerLedger(
           filled['customerId'],
@@ -900,6 +1249,15 @@ class FilledProvider with ChangeNotifier {
           await _db.child('cashbook').child(cashbookEntryId).remove();
         } else {
           print('Warning: cashbookEntryId is missing for cash payment.');
+        }
+      }
+      // Inside deletePaymentEntry
+      if (paymentMethod.toLowerCase() == 'check') {
+        final chequeTransactionId = paymentData['chequeTransactionId'];
+        final bankId = paymentData['bankId'];
+
+        if (bankId != null && chequeTransactionId != null) {
+          await _db.child('banks/$bankId/cheques/$chequeTransactionId').remove();
         }
       }
 
