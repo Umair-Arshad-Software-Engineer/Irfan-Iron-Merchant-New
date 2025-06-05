@@ -470,6 +470,7 @@ class InvoiceProvider with ChangeNotifier {
     required String customerName, // Accept the customer name as a parameter
     required double subtotal,
     required double discount,
+    required double mazdoori, // Add this parameter
     required double grandTotal,
     required String paymentType,
     required String referenceNumber, // Add this
@@ -502,6 +503,7 @@ class InvoiceProvider with ChangeNotifier {
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
+        'mazdoori': mazdoori, // Add this line
         'createdAt': createdAt, // Use the provided date
         'numberType': _isTimestampNumber(invoiceNumber) ? 'timestamp' : 'sequential',
 
@@ -543,6 +545,7 @@ class InvoiceProvider with ChangeNotifier {
     required double subtotal,
     required double discount,
     required double grandTotal,
+    required double mazdoori, // Add this parameter
     required String paymentType,
     String? paymentMethod,
     required String referenceNumber, // Add this
@@ -582,6 +585,7 @@ class InvoiceProvider with ChangeNotifier {
         'invoiceNumber': invoiceNumber,
         'customerId': customerId,
         'customerName': customerName,
+        'mazdoori': mazdoori, // Add this line
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -722,6 +726,7 @@ class InvoiceProvider with ChangeNotifier {
       'paymentType': invoiceData['paymentType']?.toString() ?? '',
       'paymentMethod': invoiceData['paymentMethod']?.toString() ?? '',
       'cashPaidAmount': parseDouble(invoiceData['cashPaidAmount']),
+      'mazdoori': parseDouble(invoiceData['mazdoori'] ?? 0.0), // Add this line
       'onlinePaidAmount': parseDouble(invoiceData['onlinePaidAmount']),
       'checkPaidAmount': parseDouble(invoiceData['checkPaidAmount'] ?? 0.0),
       'slipPaidAmount': parseDouble(invoiceData['slipPaidAmount'] ?? 0.0),

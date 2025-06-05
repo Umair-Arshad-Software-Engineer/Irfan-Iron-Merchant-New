@@ -59,6 +59,8 @@ import '../bankmanagement/banknames.dart';
     bool _isSaved = false;
     Map<String, dynamic>? _currentInvoice;
     List<Map<String, dynamic>> _cachedBanks = [];
+    double _mazdoori = 0.0;
+    TextEditingController _mazdooriController = TextEditingController();
 
     Future<void> _fetchRemainingBalance() async {
       if (_selectedCustomerId != null) {
@@ -1438,7 +1440,10 @@ import '../bankmanagement/banknames.dart';
       _fetchItems();
       _currentInvoice = widget.invoice; // Initialize with existing invoice if editing
       _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
-
+      if (widget.invoice != null) {
+        _mazdoori = (widget.invoice!['mazdoori'] as num).toDouble();
+        _mazdooriController.text = _mazdoori.toStringAsFixed(2);
+      }
       if (widget.invoice != null) {
         _invoiceId = widget.invoice!['invoiceNumber'];
         _referenceController.text = widget.invoice!['referenceNumber'] ?? '';
@@ -1526,6 +1531,7 @@ import '../bankmanagement/banknames.dart';
       }
       _discountController.dispose(); // Dispose discount controller
       _customerController.dispose();
+      _mazdooriController.dispose();
       _dateController.dispose();
       _referenceController.dispose();
       super.dispose();
@@ -2011,6 +2017,18 @@ import '../bankmanagement/banknames.dart';
                           },
                           decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter discount' : 'رعایت درج کریں'),
                         ),
+                        const SizedBox(height: 20),
+                        Text(languageProvider.isEnglish ? 'Router Mazdoori:' : 'روٹر مزدوری:', style: const TextStyle(fontSize: 18)),
+                        TextField(
+                          controller: _mazdooriController,
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            setState(() {
+                              _mazdoori = double.tryParse(value) ?? 0.0;
+                            });
+                          },
+                          decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter mazdoori amount' : 'مزدوری کی رقم درج کریں'),
+                        ),
                         // Grand Total row
                         const SizedBox(height: 20),
                         Row(
@@ -2352,6 +2370,7 @@ import '../bankmanagement/banknames.dart';
                                       await Provider.of<InvoiceProvider>(context, listen: false).updateInvoice(
                                         invoiceId: _invoiceId!, // Pass the correct ID for updating
                                         invoiceNumber: invoiceNumber,
+                                        mazdoori: _mazdoori, // Add this
                                         customerId: _selectedCustomerId!,
                                         customerName: _selectedCustomerName ?? 'Unknown Customer',
                                         subtotal: subtotal,
@@ -2386,6 +2405,7 @@ import '../bankmanagement/banknames.dart';
                                       await Provider.of<InvoiceProvider>(context, listen: false).saveInvoice(
                                         invoiceId: invoiceNumber,
                                         invoiceNumber: invoiceNumber,
+                                        mazdoori: _mazdoori, // Add this
                                         customerId: _selectedCustomerId!,
                                         customerName: _selectedCustomerName ?? 'Unknown Customer',
                                         subtotal: subtotal,
