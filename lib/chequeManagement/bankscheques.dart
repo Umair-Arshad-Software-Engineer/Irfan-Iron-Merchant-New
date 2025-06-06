@@ -56,46 +56,74 @@ class _BankChequesPageState extends State<BankChequesPage> {
     }
   }
 
+  Future<void> createCheque({
+    required String bankId,
+    required String chequeNumber,
+    required double amount,
+  })
+  async {
+    final dbRef = FirebaseDatabase.instance.ref();
+
+    try {
+      final newChequeRef = dbRef.child('cheques').push(); // Global path
+      final chequeId = newChequeRef.key!;
+      final createdAt = DateTime.now().toIso8601String();
+
+      final chequeData = {
+        'chequeNumber': chequeNumber,
+        'amount': amount,
+        'status': 'pending',
+        'createdAt': createdAt,
+      };
+
+      // Save in global cheques path
+      await newChequeRef.set(chequeData);
+
+      // Save in bank-specific cheques path
+      await dbRef.child('banks/$bankId/cheques/$chequeId').set(chequeData);
+
+      print("Cheque saved successfully.");
+    } catch (e) {
+      print("Error creating cheque: $e");
+    }
+  }
+
+
   Future<void> _updateChequeStatus(String chequeId, String newStatus) async {
     try {
-      final chequeSnapshot = await _dbRef.child('cheques/$chequeId').get();
-      if (!chequeSnapshot.exists) throw Exception("Cheque not found");
+      DatabaseEvent chequeSnapshot = await _dbRef.child('cheques/$chequeId').once();
 
-      final cheque = Map<String, dynamic>.from(chequeSnapshot.value as Map);
-      final amount = (cheque['amount'] as num?)?.toDouble() ?? 0.0;
+      if (!chequeSnapshot.snapshot.exists) {
+        // Fallback: Try getting from bank path
+        chequeSnapshot = await _dbRef.child('banks/${widget.bankId}/cheques/$chequeId').once();
 
-      // Update in global cheques
-      await _dbRef.child('cheques/$chequeId').update({
-        'status': newStatus,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-
-      // Update in bank-specific path
-      await _dbRef
-          .child('banks/${widget.bankId}/cheques/$chequeId')
-          .update({
-        'status': newStatus,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-
-      // If status changed to cleared, update bank balance
-      if (newStatus == 'cleared') {
-        final balanceRef =
-        _dbRef.child('banks/${widget.bankId}/balance');
-        final currentBalance =
-            (await balanceRef.get()).value as num? ?? 0.0;
-        await balanceRef.set(currentBalance + amount);
+        if (!chequeSnapshot.snapshot.exists) {
+          throw Exception("Cheque not found in both global and bank paths");
+        }
       }
 
-      await _fetchCheques();
+      final cheque = Map<String, dynamic>.from(chequeSnapshot.snapshot.value as Map);
+      final amount = (cheque['amount'] as num?)?.toDouble() ?? 0.0;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cheque status updated to $newStatus')),
-      );
+      final now = DateTime.now().toIso8601String();
+
+      // Update in global if exists
+      _dbRef.child('cheques/$chequeId').update({
+        'status': newStatus,
+        'updatedAt': now,
+      }).catchError((_) {}); // Ignore if not found
+
+      // Update in bank
+      await _dbRef.child('banks/${widget.bankId}/cheques/$chequeId').update({
+        'status': newStatus,
+        'updatedAt': now,
+      });
+
+      print("Cheque status updated");
+      // 🔄 Refresh cheques list to update the UI
+      await _fetchCheques();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update status: ${e.toString()}')),
-      );
+      print("Error updating cheque status: $e");
     }
   }
 

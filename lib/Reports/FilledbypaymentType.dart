@@ -5,6 +5,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart'; // For formatting dates
+import 'package:iron_project_new/bankmanagement/banknames.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -38,7 +39,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
   DateTimeRange? _selectedDateRange; // Date range picker
   String? _selectedPaymentMethod = 'all'; // Filter by payment method (online, cash)
   FirebaseDatabase _db = FirebaseDatabase.instance;  // Initialize Firebase Database
-
+  Map<String, pw.MemoryImage> _bankIcons = {};
   List<Map<String, dynamic>> _reportData = [];
 
   @override
@@ -46,7 +47,78 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
     super.initState();
     _fetchTodayReportData(); // Fetch today's report by default
   }
+  // Helper method to get bank asset path
+  String? _getBankAssetPath(String bankName) {
+    Bank? matchedBank = pakistaniBanks.firstWhere(
+          (b) => b.name == bankName,
+      orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
+    );
+    return matchedBank.iconPath;
+  }
 
+  // Load all bank icons needed for the report
+  Future<void> _loadBankIcons() async {
+    _bankIcons.clear();
+
+    // Get unique bank names from report data
+    Set bankNames = _reportData
+        .where((invoice) => invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
+        .map((invoice) => invoice['bankName'])
+        .toSet();
+
+    for (String bankName in bankNames) {
+      String? assetPath = _getBankAssetPath(bankName);
+      if (assetPath != null) {
+        try {
+          final ByteData imageData = await rootBundle.load(assetPath);
+          final Uint8List bytes = imageData.buffer.asUint8List();
+          _bankIcons[bankName] = pw.MemoryImage(bytes);
+        } catch (e) {
+          print("Failed to load icon for $bankName: $e");
+        }
+      }
+    }
+  }
+  // Helper method to get bank icon
+  Widget _getBankIcon(String? bankName) {
+    if (bankName == null) return Icon(Icons.account_balance, size: 20);
+
+    Bank? matchedBank = pakistaniBanks.firstWhere(
+          (b) => b.name == bankName,
+      orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
+    );
+
+    return Image.asset(
+      matchedBank.iconPath,
+      height: 20,
+      width: 20,
+      errorBuilder: (context, error, stackTrace) {
+        return Icon(Icons.account_balance, size: 20);
+      },
+    );
+  }
+
+  // Helper method to format payment method with bank icon for display
+  Widget _getPaymentMethodWidget(Map<String, dynamic> invoice) {
+    if (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _getBankIcon(invoice['bankName']),
+          SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              '${invoice['paymentMethod']} (${invoice['bankName']})',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+    return Text(invoice['paymentMethod'] ?? 'N/A');
+  }
+
+  // Fe
   // Fetch today's report data by default
   Future<void> _fetchTodayReportData() async {
     final DateTime now = DateTime.now();
@@ -60,153 +132,6 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
     _fetchReportData();
   }
 
-  // Fetch report data based on filters
-//   Future<void> _fetchReportData() async {
-//     try {
-//       DatabaseReference _filledsRef = _db.ref('filled'); // Reference to 'filled' node
-//
-//       final filledsSnapshot = await _filledsRef.get(); // Fetch data
-//
-//       if (!filledsSnapshot.exists) {
-//         throw Exception("No filled found.");
-//       }
-//
-//       List<Map<String, dynamic>> reportData = [];
-//
-//       // Iterate through all filled
-//       for (var filledsSnapshot in filledsSnapshot.children) {
-//         final filledId = filledsSnapshot.key;
-//         final filled = Map<String, dynamic>.from(filledsSnapshot.value as Map);
-//
-//         // Filter by customer ID if selected
-//         if (_selectedCustomerId != null && filled['customerId'] != _selectedCustomerId) {
-//           continue;
-//         }
-//
-//         // Filter by payment type if selected
-//         if (_selectedPaymentType != 'all' && filled['paymentType'] != _selectedPaymentType) {
-//           continue;
-//         }
-//
-//         // Filter by date range if selected
-//         if (_selectedDateRange != null) {
-//           DateTime filledDate = DateTime.parse(filled['createdAt']);
-//           if (filledDate.isBefore(_selectedDateRange!.start) || filledDate.isAfter(_selectedDateRange!.end)) {
-//             continue;
-//           }
-//         }
-//
-//         // Fetch and process cash payments if the selected payment method includes 'cash'
-//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'cash') {
-//           final cashPayments = filled['cashPayments'] != null
-//               ? Map<String, dynamic>.from(filled['cashPayments'])
-//               : {};
-//           for (var payment in cashPayments.values) {
-//             reportData.add({
-//               'filledId': filledId,
-//               'referenceNumber': filled['referenceNumber'],
-//               'customerId': filled['customerId'],
-//               'customerName': filled['customerName'],
-//               'paymentType': filled['paymentType'],
-//               'paymentMethod': 'Cash',
-//               'amount': payment['amount'],
-//               'date': payment['date'],
-//               'createdAt': filled['createdAt'],
-//             });
-//           }
-//         }
-//
-//         // Fetch and process online payments if the selected payment method includes 'online'
-//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'online') {
-//           final onlinePayments = filled['onlinePayments'] != null
-//               ? Map<String, dynamic>.from(filled['onlinePayments'])
-//               : {};
-//           for (var payment in onlinePayments.values) {
-//             reportData.add({
-//               'filledId': filledId,
-//               'referenceNumber': filled['referenceNumber'],
-//               'customerId': filled['customerId'],
-//               'customerName': filled['customerName'],
-//               'paymentType': filled['paymentType'],
-//               'paymentMethod': 'Online',
-//               'amount': payment['amount'],
-//               'date': payment['date'],
-//               'createdAt': filled['createdAt'],
-//             });
-//           }
-//         }
-//
-//         // Fetch and process check payments if the selected payment method includes 'check'
-//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'check') {
-//           final checkPayments = filled['checkPayments'] != null
-//               ? Map<String, dynamic>.from(filled['checkPayments'])
-//               : {};
-//           for (var payment in checkPayments.values) {
-//             reportData.add({
-//               'filledId': filledId,
-//               'referenceNumber': filled['referenceNumber'],
-//               'customerId': filled['customerId'],
-//               'customerName': filled['customerName'],
-//               'paymentType': filled['paymentType'],
-//               'paymentMethod': 'Check',
-//               'amount': payment['amount'],
-//               'date': payment['date'],
-//               'createdAt': filled['createdAt'],
-//             });
-//           }
-//         }
-//         // Bank Payments
-//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'bank') {
-//           final bankPayments = filled['bankPayments'] != null
-//               ? Map<String, dynamic>.from(filled['bankPayments'])
-//               : {};
-//           for (var payment in bankPayments.values) {
-//             reportData.add({
-//               'filledId': filledId,
-//               'referenceNumber': filled['referenceNumber'],
-//               'customerId': filled['customerId'],
-//               'customerName': filled['customerName'],
-//               'paymentType': filled['paymentType'],
-//               'paymentMethod': 'Bank',
-//               'bankName': payment['bankName'], // Add bank name
-//               'amount': payment['amount'],
-//               'date': payment['date'],
-//               'createdAt': filled['createdAt'],
-//             });
-//           }
-//         }
-//
-// // Slip Payments
-//         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'slip') {
-//           final slipPayments = filled['slipPayments'] != null
-//               ? Map<String, dynamic>.from(filled['slipPayments'])
-//               : {};
-//           for (var payment in slipPayments.values) {
-//             reportData.add({
-//               'filledId': filledId,
-//               'referenceNumber': filled['referenceNumber'],
-//               'customerId': filled['customerId'],
-//               'customerName': filled['customerName'],
-//               'paymentType': filled['paymentType'],
-//               'paymentMethod': 'Slip',
-//               'amount': payment['amount'],
-//               'date': payment['date'],
-//               'createdAt': filled['createdAt'],
-//             });
-//           }
-//         }
-//       }
-//
-//       // Update the report data with the fetched information
-//       setState(() {
-//         _reportData = reportData;
-//       });
-//     } catch (e) {
-//       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to fetch report: $e')));
-//     }
-//   }
-
-  // Fetch report data based on filters
   Future<void> _fetchReportData() async {
     try {
       DatabaseReference _filledsRef = _db.ref('filled'); // Reference to 'filled' node
@@ -405,44 +330,6 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
     }
   }
 
-  // Show customer selection dialog
-  // Future<void> _selectCustomer(BuildContext context) async {
-  //   // Fetch customers from the provider
-  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-  //   await customerProvider.fetchCustomers(); // Fetch customers from Firebase
-  //
-  //   // Show dialog with the customer list
-  //   final customerId = await showDialog<String>(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AlertDialog(
-  //         title: const Text('Select a Customer'),
-  //         content: SingleChildScrollView(
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: customerProvider.customers.map((customer) {
-  //               return ListTile(
-  //                 title: Text(customer.name),
-  //                 onTap: () => Navigator.pop(context, customer.id),
-  //               );
-  //             }).toList(),
-  //           ),
-  //         ),
-  //       );
-  //     },
-  //   );
-  //
-  //   if (customerId != null) {
-  //     // Find the customer name based on the selected customerId
-  //     final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == customerId);
-  //     setState(() {
-  //       _selectedCustomerId = customerId;
-  //       _selectedCustomerName = selectedCustomer.name; // Update the selected customer name
-  //     });
-  //     _fetchReportData(); // Refetch data with the selected customer
-  //   }
-  // }
-  // Show customer selection dialog with search functionality
   Future<void> _selectCustomer(BuildContext context) async {
     // Fetch customers from the provider
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
@@ -620,6 +507,8 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
   }
 
   Future<Uint8List> _generatePdfBytes() async {
+    await _loadBankIcons();
+
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
@@ -711,7 +600,11 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                   return [
                     pw.Image(customerNameImage, width: 50, height: 20),
                     filled['paymentType'] ?? 'N/A',
-                    filled['paymentMethod'] ?? 'N/A',
+                    // filled['paymentMethod'] ?? 'N/A',
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8.0),
+                      child: _buildPdfPaymentMethodWidget(filled),
+                    ),
                     'Rs ${filled['amount']}',
                     DateFormat.yMMMd().format(DateTime.parse(filled['createdAt'])),
                   ];
@@ -733,6 +626,27 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
     // Print PDF
     // await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
+
+  pw.Widget _buildPdfPaymentMethodWidget(Map<String, dynamic> filled) {
+    if (filled['paymentMethod'] == 'Bank' &&
+        filled['bankName'] != null &&
+        _bankIcons.containsKey(filled['bankName'])) {
+      return pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 20,
+            height: 20,
+            child: pw.Image(_bankIcons[filled['bankName']]!),
+          ),
+          pw.SizedBox(width: 5),
+          pw.Text('${filled['paymentMethod']} (${filled['bankName']})'),
+        ],
+      );
+    }
+    return pw.Text(filled['paymentMethod'] ?? 'N/A');
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -985,11 +899,12 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                               DataCell(Text(filled['paymentType'] ?? 'N/A')),
                               DataCell(Text(filled['referenceNumber'] ?? filled['filledId'])),
                               // DataCell(Text(filled['paymentMethod'] ?? 'N/A')),
-                              DataCell(Text(
-                                  (filled['paymentMethod'] == 'Bank' && filled['bankName'] != null)
-                                      ? '${filled['paymentMethod']} (${filled['bankName']})'
-                                      : filled['paymentMethod'] ?? 'N/A'
-                              )),
+                              // DataCell(Text(
+                              //     (filled['paymentMethod'] == 'Bank' && filled['bankName'] != null)
+                              //         ? '${filled['paymentMethod']} (${filled['bankName']})'
+                              //         : filled['paymentMethod'] ?? 'N/A'
+                              // )),
+                              DataCell(_getPaymentMethodWidget(filled)), // Use the new widget method
                               DataCell(Text(filled['amount'].toString())),
                               DataCell(Text(DateFormat.yMMMd().format(DateTime.parse(filled['date'])))),
                             ],

@@ -970,7 +970,8 @@ class FilledProvider with ChangeNotifier {
         DateTime? chequeDate,  // Add this parameter
         String? chequeBankId,  // Add this parameter
         String? chequeBankName,  // Add this parameter
-      }) async {
+      })
+  async {
     try {
       // Fetch the current filled data from the database
       final filledSnapshot = await _db.child('filled').child(filledId).get();

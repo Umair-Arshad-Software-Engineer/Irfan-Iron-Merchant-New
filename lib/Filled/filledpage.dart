@@ -1508,9 +1508,9 @@ class _filledpageState extends State<filledpage> {
                     bankName,
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Text(
-                    '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
-                  ),
+                  // subtitle: Text(
+                  //   '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
+                  // ),
                   onTap: () {
                     selectedBank = {
                       'id': bankData['id'],

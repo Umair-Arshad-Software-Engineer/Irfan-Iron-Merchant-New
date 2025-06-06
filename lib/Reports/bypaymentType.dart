@@ -13,6 +13,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:ui' as ui;
 import '../Provider/lanprovider.dart';
+import '../bankmanagement/banknames.dart';
 
 
 
@@ -38,12 +39,85 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
   DateTimeRange? _selectedDateRange; // Date range picker
   String? _selectedPaymentMethod = 'all'; // Filter by payment method (online, cash)
   FirebaseDatabase _db = FirebaseDatabase.instance;  // Initialize Firebase Database
-
+  Map<String, pw.MemoryImage> _bankIcons = {};
   List<Map<String, dynamic>> _reportData = [];
+
+
   @override
   void initState() {
     super.initState();
     _fetchTodayReportData(); // Fetch today's report by default
+  }
+
+  // Helper method to get bank asset path
+  String? _getBankAssetPath(String bankName) {
+    Bank? matchedBank = pakistaniBanks.firstWhere(
+          (b) => b.name == bankName,
+      orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
+    );
+    return matchedBank.iconPath;
+  }
+
+  // Load all bank icons needed for the report
+  Future<void> _loadBankIcons() async {
+    _bankIcons.clear();
+
+    // Get unique bank names from report data
+    Set bankNames = _reportData
+        .where((invoice) => invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
+        .map((invoice) => invoice['bankName'])
+        .toSet();
+
+    for (String bankName in bankNames) {
+      String? assetPath = _getBankAssetPath(bankName);
+      if (assetPath != null) {
+        try {
+          final ByteData imageData = await rootBundle.load(assetPath);
+          final Uint8List bytes = imageData.buffer.asUint8List();
+          _bankIcons[bankName] = pw.MemoryImage(bytes);
+        } catch (e) {
+          print("Failed to load icon for $bankName: $e");
+        }
+      }
+    }
+  }
+  // Helper method to get bank icon
+  Widget _getBankIcon(String? bankName) {
+    if (bankName == null) return Icon(Icons.account_balance, size: 20);
+
+    Bank? matchedBank = pakistaniBanks.firstWhere(
+          (b) => b.name == bankName,
+      orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
+    );
+
+    return Image.asset(
+      matchedBank.iconPath,
+      height: 20,
+      width: 20,
+      errorBuilder: (context, error, stackTrace) {
+        return Icon(Icons.account_balance, size: 20);
+      },
+    );
+  }
+
+  // Helper method to format payment method with bank icon for display
+  Widget _getPaymentMethodWidget(Map<String, dynamic> invoice) {
+    if (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _getBankIcon(invoice['bankName']),
+          SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              '${invoice['paymentMethod']} (${invoice['bankName']})',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+    return Text(invoice['paymentMethod'] ?? 'N/A');
   }
 
   // Fetch today's report data by default
@@ -232,44 +306,6 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
     }
   }
 
-  // Show customer selection dialog
-  // Future<void> _selectCustomer(BuildContext context) async {
-  //   // Fetch customers from the provider
-  //   final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-  //   await customerProvider.fetchCustomers(); // Fetch customers from Firebase
-  //
-  //   // Show dialog with the customer list
-  //   final customerId = await showDialog<String>(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AlertDialog(
-  //         title: const Text('Select a Customer'),
-  //         content: SingleChildScrollView(
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: customerProvider.customers.map((customer) {
-  //               return ListTile(
-  //                 title: Text(customer.name),
-  //                 onTap: () => Navigator.pop(context, customer.id),
-  //               );
-  //             }).toList(),
-  //           ),
-  //         ),
-  //       );
-  //     },
-  //   );
-  //
-  //   if (customerId != null) {
-  //     // Find the customer name based on the selected customerId
-  //     final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == customerId);
-  //     setState(() {
-  //       _selectedCustomerId = customerId;
-  //       _selectedCustomerName = selectedCustomer.name; // Update the selected customer name
-  //     });
-  //     _fetchReportData(); // Refetch data with the selected customer
-  //   }
-  // }
-  // Show customer selection dialog with search functionality
   Future<void> _selectCustomer(BuildContext context) async {
     // Fetch customers from the provider
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
@@ -435,6 +471,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
     }
   }
 
+
 // Updated print function
   Future<void> _generateAndPrintPDF() async {
     try {
@@ -448,6 +485,8 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
   }
 
   Future<Uint8List> _generatePdfBytes() async {
+    await _loadBankIcons();
+
     final pdf = pw.Document();
 
     // Load the logo image
@@ -462,6 +501,9 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
 
     // Generate the customer name image
     final customerNameImage = await _createTextImage(_selectedCustomerName ?? 'All');
+
+
+
 
     pdf.addPage(
       pw.MultiPage(
@@ -539,9 +581,14 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                     invoice['paymentType'] ?? 'N/A',
                     // invoice['paymentMethod'] ?? 'N/A',
                     // 'Rs ${invoice['amount']}',
-                    (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
-                        ? '${invoice['paymentMethod']} (${invoice['bankName']})'
-                        : invoice['paymentMethod'] ?? 'N/A',
+
+                    // (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
+                    //     ? '${invoice['paymentMethod']} (${invoice['bankName']})'
+                    //     : invoice['paymentMethod'] ?? 'N/A',
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8.0),
+                      child: _buildPdfPaymentMethodWidget(invoice),
+                    ),
                     'Rs ${invoice['amount']}',
                     DateFormat.yMMMd().format(DateTime.parse(invoice['createdAt'])),
                   ];
@@ -563,6 +610,27 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
     // Print PDF
     // await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
+// Build payment method widget for PDF with bank icons
+  pw.Widget _buildPdfPaymentMethodWidget(Map<String, dynamic> invoice) {
+    if (invoice['paymentMethod'] == 'Bank' &&
+        invoice['bankName'] != null &&
+        _bankIcons.containsKey(invoice['bankName'])) {
+      return pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.SizedBox(
+            width: 20,
+            height: 20,
+            child: pw.Image(_bankIcons[invoice['bankName']]!),
+          ),
+          pw.SizedBox(width: 5),
+          pw.Text('${invoice['paymentMethod']} (${invoice['bankName']})'),
+        ],
+      );
+    }
+    return pw.Text(invoice['paymentMethod'] ?? 'N/A');
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -782,11 +850,12 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                             DataCell(Text(invoice['paymentType'] ?? 'N/A')),
                             DataCell(Text(invoice['referenceNumber'] ?? invoice['invoiceId'])),
                             // DataCell(Text(invoice['paymentMethod'] ?? 'N/A')),
-                            DataCell(Text(
-                                (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
-                                    ? '${invoice['paymentMethod']} (${invoice['bankName']})'
-                                    : invoice['paymentMethod'] ?? 'N/A'
-                            )),
+                            // DataCell(Text(
+                            //     (invoice['paymentMethod'] == 'Bank' && invoice['bankName'] != null)
+                            //         ? '${invoice['paymentMethod']} (${invoice['bankName']})'
+                            //         : invoice['paymentMethod'] ?? 'N/A'
+                            // )),
+                            DataCell(_getPaymentMethodWidget(invoice)), // Use the new widget method
                             DataCell(Text(invoice['amount'].toString())),
                             DataCell(Text(DateFormat.yMMMd().format(DateTime.parse(invoice['date'])))),
                           ]);
