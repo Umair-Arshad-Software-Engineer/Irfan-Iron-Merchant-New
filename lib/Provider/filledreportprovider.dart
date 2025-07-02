@@ -117,6 +117,8 @@ class FilledCustomerReportProvider with ChangeNotifier {
             'date': value['createdAt'],
             'filledNumber': value['filledNumber'],
             'referenceNumber': value['referenceNumber'],
+            'bankName':value['bankName'],
+            'paymentMethod':value['paymentMethod'],
             'debit': debit,
             'credit': credit,
           });

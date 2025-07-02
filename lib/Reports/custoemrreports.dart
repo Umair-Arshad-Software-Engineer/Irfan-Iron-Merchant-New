@@ -1,17 +1,21 @@
 import 'dart:io';
-
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../Provider/lanprovider.dart';
-import '../Provider/reportprovider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'dart:ui' as ui; // Keep this import only once
 import 'package:share_plus/share_plus.dart';
+import '../Provider/lanprovider.dart';
+import '../Provider/reportprovider.dart';
+import '../bankmanagement/banknames.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:universal_html/html.dart' as html;
+
+
 
 class CustomerReportPage extends StatefulWidget {
   final String customerId;
@@ -31,7 +35,40 @@ class CustomerReportPage extends StatefulWidget {
 
 class _CustomerReportPageState extends State<CustomerReportPage> {
   DateTimeRange? selectedDateRange;
+  static final Map<String, String> _bankIconMap = _createBankIconMap();
 
+  static Map<String, String> _createBankIconMap() {
+    return {
+      for (var bank in pakistaniBanks)
+        bank.name.toLowerCase(): bank.iconPath
+    };
+  }
+
+  // Helper method to get bank name from transaction data
+  String? _getBankName(Map<String, dynamic> transaction) {
+    // First try to get bankName directly
+    if (transaction['bankName'] != null && transaction['bankName'].toString().isNotEmpty) {
+      return transaction['bankName'].toString();
+    }
+
+    // Then check for chequeBankName if payment method is cheque
+    String paymentMethod = transaction['paymentMethod']?.toString().toLowerCase() ?? '';
+    if (paymentMethod == 'cheque' || paymentMethod == 'check') {
+      if (transaction['chequeBankName'] != null && transaction['chequeBankName'].toString().isNotEmpty) {
+        return transaction['chequeBankName'].toString();
+      }
+    }
+
+    // Return null if none found
+    return null;
+  }
+
+  // Helper method to get bank logo path
+  String? _getBankLogoPath(String? bankName) {
+    if (bankName == null) return null;
+    final key = bankName.toLowerCase();
+    return _bankIconMap[key];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,11 +78,13 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
       create: (_) => CustomerReportProvider()..fetchCustomerReport(widget.customerId),
       child: Scaffold(
         appBar: AppBar(
-          title:  Text(
-              // 'Customer Ledger For Sarya'
-            languageProvider.isEnglish ? 'Customer Ledger For Sarya' : 'سریا کے لیے کسٹمر لیجر', style: TextStyle(color: Colors.white),
+          title: Text(
+            languageProvider.isEnglish
+                ? 'Customer Ledger For Sarya'
+                : 'سریا کے لیے کسٹمر لیجر',
+            style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: Colors.teal,  // Customize the AppBar color
+          backgroundColor: Colors.teal,
           actions: [
             Consumer<CustomerReportProvider>(
               builder: (context, provider, _) {
@@ -55,14 +94,6 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                       icon: Icon(Icons.picture_as_pdf, color: Colors.white),
                       onPressed: () {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
-                        //
-                        // final transactions = selectedDateRange == null
-                        //     ? provider.transactions
-                        //     : provider.transactions.where((transaction) {
-                        //   final date = DateTime.parse(transaction['date']);
-                        //   return date.isAfter(selectedDateRange!.start.subtract(const Duration(days: 1))) &&
-                        //       date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
-                        // }).toList();
                         final transactions = selectedDateRange == null
                             ? provider.transactions
                             : provider.transactions.where((transaction) {
@@ -71,18 +102,13 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                               date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
                         }).toList();
 
-                        // Additional filter to ensure no zero entries (redundant but safe)
-                        transactions.removeWhere((transaction) =>
-                        transaction['debit'] == 0.0 && transaction['credit'] == 0.0);
-
-                        _generateAndPrintPDF(provider.report, transactions, false); // Save PDF
+                        _generateAndPrintPDF(provider.report, transactions, false);
                       },
                     ),
                     IconButton(
                       icon: Icon(Icons.share, color: Colors.white),
                       onPressed: () async {
                         if (provider.isLoading || provider.error.isNotEmpty) return;
-
                         final transactions = selectedDateRange == null
                             ? provider.transactions
                             : provider.transactions.where((transaction) {
@@ -91,7 +117,7 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                               date.isBefore(selectedDateRange!.end.add(const Duration(days: 1)));
                         }).toList();
 
-                        await _generateAndPrintPDF(provider.report, transactions, true); // Share PDF
+                        await _generateAndPrintPDF(provider.report, transactions, true);
                       },
                     ),
                   ],
@@ -124,18 +150,15 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildCustomerInfo(context, languageProvider),
-                    // Date Range Selector
                     _buildDateRangeSelector(languageProvider),
-                    // Summary
                     _buildSummaryCards(provider.report),
                     Text(
                       'No. of Entries: ${transactions.length} (Filtered)',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         color: Colors.teal.shade700,
-                        fontSize: 12,  // Smaller font size
+                        fontSize: 12,
                       ),
                     ),
-                    // Transaction Table
                     _buildTransactionTable(transactions, languageProvider),
                     const SizedBox(height: 20),
                   ],
@@ -148,44 +171,40 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
     );
   }
 
-
   Future<pw.MemoryImage> _createTextImage(String text) async {
-    // Create a custom painter with the Urdu text
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromPoints(Offset(0, 0), Offset(500, 50)));
     final paint = Paint()..color = Colors.black;
 
-    final textStyle = TextStyle(fontSize: 18, fontFamily: 'JameelNoori',color: Colors.black,fontWeight: FontWeight.bold);  // Set custom font here if necessary
+    final textStyle = TextStyle(fontSize: 18, fontFamily: 'JameelNoori',color: Colors.black,fontWeight: FontWeight.bold);
     final textSpan = TextSpan(text: text, style: textStyle);
     final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left,
-      // textDirection: TextDirection.ltr,
+        text: textSpan,
+        textAlign: TextAlign.left,
         textDirection: ui.TextDirection.ltr
     );
 
     textPainter.layout();
     textPainter.paint(canvas, Offset(0, 0));
 
-    // Create image from the canvas
     final picture = recorder.endRecording();
     final img = await picture.toImage(textPainter.width.toInt(), textPainter.height.toInt());
     final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
     final buffer = byteData!.buffer.asUint8List();
 
-    return pw.MemoryImage(buffer);  // Return the image as MemoryImage
+    return pw.MemoryImage(buffer);
   }
 
   Future<void> _generateAndPrintPDF(
       Map<String, dynamic> report,
       List<Map<String, dynamic>> transactions,
       bool shouldShare,
-      ) async {
+      )
+  async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final font = await PdfGoogleFonts.robotoRegular();
 
-    // Calculate total debit, total credit, and balance
     double totalDebit = 0.0;
     double totalCredit = 0.0;
 
@@ -207,6 +226,18 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
     final image = pw.MemoryImage(buffer);
 
     final customerDetailsImage = await _createTextImage('Customer Name: ${widget.customerName}');
+
+    // Preload bank logos for PDF
+    Map<String, pw.MemoryImage> bankLogoImages = {};
+    for (var bank in pakistaniBanks) {
+      try {
+        final logoBytes = await rootBundle.load(bank.iconPath);
+        final logoBuffer = logoBytes.buffer.asUint8List();
+        bankLogoImages[bank.name.toLowerCase()] = pw.MemoryImage(logoBuffer);
+      } catch (e) {
+        print('Error loading bank logo: ${bank.iconPath} - $e');
+      }
+    }
 
     pdf.addPage(
       pw.MultiPage(
@@ -238,50 +269,87 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
               style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 20),
           pw.Image(customerDetailsImage, width: 300, dpi: 1000),
-          pw.Text('Phone Number:', style: pw.TextStyle(fontSize: 18)),
+          pw.Text('Phone Number: ${widget.customerPhone}', style: pw.TextStyle(fontSize: 18)),
           pw.SizedBox(height: 10),
           pw.Text('Print Date: $printDate',
               style: pw.TextStyle(fontSize: 16, color: PdfColors.grey)),
           pw.SizedBox(height: 20),
           pw.Text('Transactions:',
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-          // Transaction Table
-          pw.Table.fromTextArray(
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            cellStyle: pw.TextStyle(font: font),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            context: context,
-            data: [
-              ['Date', 'Transaction #', 'T-Type', 'Debit(-)', 'Credit(+)', 'Balance'],
+          // Transaction Table with Payment Method and Bank Logo
+          pw.Table(
+            columnWidths: {
+              0: const pw.FlexColumnWidth(1.5),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(1),
+              3: const pw.FlexColumnWidth(1.5),
+              4: const pw.FlexColumnWidth(1.5),
+              5: const pw.FlexColumnWidth(1),
+              6: const pw.FlexColumnWidth(1),
+              7: const pw.FlexColumnWidth(1),
+            },
+            children: [
+              // Header row
+              pw.TableRow(
+                children: [
+                  _buildPdfHeaderCell('Date'),
+                  _buildPdfHeaderCell('Transaction #'),
+                  _buildPdfHeaderCell('T-Type'),
+                  _buildPdfHeaderCell('Payment Method'),
+                  _buildPdfHeaderCell('Bank'),
+                  _buildPdfHeaderCell('Debit(-)'),
+                  _buildPdfHeaderCell('Credit(+)'),
+                  _buildPdfHeaderCell('Balance'),
+                ],
+              ),
+              // Data rows
               ...transactions.map((transaction) {
-                return [
-                  DateFormat('dd MMM yyyy, hh:mm a')
-                      .format(DateTime.parse(transaction['date'])),
-                  transaction['referenceNumber'] ?? transaction['invoiceNumber'],
-                  transaction['credit'] != 0.0
-                      ? 'Invoice'
-                      : (transaction['debit'] != 0.0 ? 'Bill' : '-'),
-                  transaction['debit'] != 0.0
-                      ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}'
-                      : '-',
-                  transaction['credit'] != 0.0
-                      ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}'
-                      : '-',
-                  'Rs ${transaction['balance']?.toStringAsFixed(2)}',
-                ];
+                final bankName = _getBankName(transaction);
+                final bankLogo = bankName != null ? bankLogoImages[bankName.toLowerCase()] : null;
+
+                return pw.TableRow(
+                  children: [
+                    _buildPdfCell(DateFormat('dd MMM yyyy, hh:mm a')
+                        .format(DateTime.parse(transaction['date']))),
+                    _buildPdfCell(transaction['referenceNumber'] ?? transaction['invoiceNumber'] ?? '-'),
+                    _buildPdfCell(transaction['credit'] != 0.0
+                        ? 'Invoice'
+                        : (transaction['debit'] != 0.0 ? 'Bill' : '-')),
+                    _buildPdfCell(transaction['paymentMethod'] ?? '-'),
+                    bankLogo != null
+                        ? pw.Container(
+                      height: 20,
+                      child: pw.Image(bankLogo),
+                    )
+                        : _buildPdfCell(bankName ?? '-'),
+                    _buildPdfCell(transaction['debit'] != 0.0
+                        ? 'Rs ${transaction['debit']?.toStringAsFixed(2)}'
+                        : '-'),
+                    _buildPdfCell(transaction['credit'] != 0.0
+                        ? 'Rs ${transaction['credit']?.toStringAsFixed(2)}'
+                        : '-'),
+                    _buildPdfCell('Rs ${transaction['balance']?.toStringAsFixed(2)}'),
+                  ],
+                );
               }).toList(),
-              [
-                'Total', '', '', 'Rs ${totalDebit.toStringAsFixed(2)}',
-                'Rs ${totalCredit.toStringAsFixed(2)}',
-                'Rs ${totalBalance.toStringAsFixed(2)}'
-              ],
+              // Total row
+              pw.TableRow(
+                children: [
+                  _buildPdfCell('Total', isHeader: true),
+                  _buildPdfCell(''),
+                  _buildPdfCell(''),
+                  _buildPdfCell(''),
+                  _buildPdfCell(''),
+                  _buildPdfCell('Rs ${totalDebit.toStringAsFixed(2)}', isHeader: true),
+                  _buildPdfCell('Rs ${totalCredit.toStringAsFixed(2)}', isHeader: true),
+                  _buildPdfCell('Rs ${totalBalance.toStringAsFixed(2)}', isHeader: true),
+                ],
+              ),
             ],
           ),
-
           pw.SizedBox(height: 20),
           pw.Divider(),
           pw.Spacer(),
-          // Footer
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
@@ -301,25 +369,119 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
       ),
     );
 
-    // Save the PDF to a temporary file
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/customer_report.pdf');
-    await file.writeAsBytes(await pdf.save());
+    // final tempDir = await getTemporaryDirectory();
+    // final file = File('${tempDir.path}/customer_report.pdf');
+    // await file.writeAsBytes(await pdf.save());
+    //
+    // if (shouldShare) {
+    //   await Share.shareXFiles(
+    //     [XFile(file.path)],
+    //     text: 'Customer Ledger Report for ${widget.customerName}',
+    //     subject: 'Customer Ledger Report',
+    //   );
+    // } else {
+    //   await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+    // }
 
-    if (shouldShare) {
-      // Share the PDF via WhatsApp
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Customer Ledger Report for ${widget.customerName}',
-        subject: 'Customer Ledger Report',
-      );
+    final pdfBytes = await pdf.save();
+
+    if (kIsWeb) {
+      // Web handling
+      if (shouldShare) {
+        // Try web share API first
+        try {
+          final blob = html.Blob([pdfBytes], 'application/pdf');
+          final file = html.File([blob], 'customer_report.pdf', {'type': 'application/pdf'});
+          if (html.window.navigator is html.Navigator &&
+              (html.window.navigator as dynamic).canShare != null &&
+              (html.window.navigator as dynamic).canShare({'files': [file]})) {
+            await (html.window.navigator as dynamic).share({
+              'title': 'Customer Ledger Report',
+              'text': 'Customer Ledger Report for ${widget.customerName}',
+              'files': [file],
+            });
+            return;
+          }
+        } catch (e) {
+          print('Web share failed: $e');
+        }
+        // Fallback to download
+        _downloadPdfWeb(pdfBytes);
+      } else {
+        // Try printing on web
+        try {
+          await Printing.layoutPdf(
+            onLayout: (PdfPageFormat format) async => pdfBytes,
+            usePrinterSettings: false,
+          );
+        } catch (e) {
+          print('Web printing failed: $e');
+          // Fallback to download
+          _downloadPdfWeb(pdfBytes);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Printing not supported, PDF downloaded instead')),
+          );
+        }
+      }
     } else {
-      // Print the PDF
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+      // Mobile handling
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/customer_report.pdf');
+      await file.writeAsBytes(pdfBytes);
+
+      if (shouldShare) {
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Customer Ledger Report for ${widget.customerName}',
+          subject: 'Customer Ledger Report',
+        );
+      } else {
+        await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdfBytes);
+      }
     }
   }
 
+  pw.Widget _buildPdfHeaderCell(String text) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(6),
+      decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+      child: pw.Text(
+        text,
+        style:  pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+      ),
+    );
+  }
 
+  pw.Widget _buildPdfCell(String text, {bool isHeader = false}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+          fontSize: 9,
+        ),
+      ),
+    );
+  }
+
+  void _downloadPdfWeb(Uint8List bytes) {
+    final blob = html.Blob([bytes], 'application/pdf');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.document.createElement('a') as html.AnchorElement
+      ..href = url
+      ..style.display = 'none'
+      ..download = 'customer_report_${widget.customerName}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
+
+    html.document.body?.children.add(anchor);
+    anchor.click();
+    html.document.body?.children.remove(anchor);
+    html.Url.revokeObjectUrl(url);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('PDF downloaded successfully')),
+    );
+  }
 
   Widget _buildCustomerInfo(BuildContext context, LanguageProvider languageProvider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
@@ -434,26 +596,77 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
           DataColumn(label: Text(languageProvider.isEnglish ? 'Date' : 'ڈیٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Type' : 'قسم')),
+          DataColumn(label: Text(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ')),
+          DataColumn(label: Text(languageProvider.isEnglish ? 'Bank' : 'بینک')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
         ],
         rows: transactions.map((transaction) {
+          final bankName = _getBankName(transaction);
+          final bankLogoPath = _getBankLogoPath(bankName);
+
           return DataRow(cells: [
-            DataCell(Text(DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])), style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            // DataCell(Text(transaction['invoiceNumber'] ?? 'N/A', style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text(transaction['referenceNumber'] ?? transaction['invoiceNumber'], style: TextStyle(fontSize: isMobile ? 10 : 12))), // Changed to referenceNumber
-            DataCell(Text(transaction['credit'] < 0.0 ? 'Filled (Edited)' :
-            (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
-                style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            // DataCell(Text(transaction['credit'] != 0.0 ? 'Invoice' : 'Bill', style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text('Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text('Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
-            DataCell(Text('Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(fontSize: isMobile ? 10 : 12))),
+          DataCell(Text(
+          DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
+          style: TextStyle(fontSize: isMobile ? 10 : 12)
+          )),
+          DataCell(Text(
+          transaction['referenceNumber'] ?? transaction['invoiceNumber'] ?? '-',
+          style: TextStyle(fontSize: isMobile ? 10 : 12)
+          )),
+          DataCell(Text(
+          transaction['credit'] < 0.0 ? 'Filled (Edited)' :
+          (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
+          style: TextStyle(fontSize: isMobile ? 10 : 12)
+          )),
+          DataCell(Text(
+          _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
+          style: TextStyle(fontSize: isMobile ? 10 : 12),
+          )),
+            DataCell(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (bankLogoPath != null)
+                    Image.asset(bankLogoPath, width: 70, height: 70),
+                  if (bankLogoPath != null)
+                    const SizedBox(width: 8), // Add some spacing between logo and name
+                  Text(bankName ?? '-', style: TextStyle(fontSize: isMobile ? 10 : 12)),
+                ],
+              ),
+            ),
+          DataCell(Text(
+          'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
+          style: TextStyle(fontSize: isMobile ? 10 : 12)
+          )),
+          DataCell(Text(
+          'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
+          style: TextStyle(fontSize: isMobile ? 10 : 12)
+          )),
+          DataCell(Text(
+          'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
+          style: TextStyle(fontSize: isMobile ? 10 : 12)
+          )),
           ]);
         }).toList(),
       ),
     );
   }
 
+  // Helper to translate payment methods
+  String _getPaymentMethodText(String? method, LanguageProvider languageProvider) {
+    if (method == null) return '-';
+    switch (method.toLowerCase()) {
+      case 'cash': return languageProvider.isEnglish ? 'Cash' : 'نقد';
+      case 'online': return languageProvider.isEnglish ? 'Online' : 'آن لائن';
+      case 'check':
+      case 'cheque': return languageProvider.isEnglish ? 'Cheque' : 'چیک';
+      case 'bank': return languageProvider.isEnglish ? 'Bank Transfer' : 'بینک ٹرانسفر';
+      case 'slip': return languageProvider.isEnglish ? 'Slip' : 'پرچی';
+      case 'udhaar': return languageProvider.isEnglish ? 'Udhaar' : 'ادھار';
+      default: return method;
+    }
+  }
 }
+

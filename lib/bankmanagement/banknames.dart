@@ -20,7 +20,7 @@ final List<Bank> pakistaniBanks = [
   Bank(name: 'Bank Al-Habib Limited (BAHL)', iconPath: 'assets/bank_icons/bahl.png'),
   Bank(name: 'JazzCash', iconPath: 'assets/bank_icons/jazzcash.png'),
   Bank(name: 'EasyPaisa', iconPath: 'assets/bank_icons/easypaisa.png'),
-  Bank(name: 'NayaPay', iconPath: 'assets/bank_icons/nayapay.png'),
-  Bank(name: 'SadaPay', iconPath: 'assets/bank_icons/sadaapay.png'),
+  Bank(name: 'NayaPay', iconPath: 'assets/bank_icons/nayapay.jpeg'),
+  Bank(name: 'SadaPay', iconPath: 'assets/bank_icons/sadapay.jpeg'),
   // Add more banks as needed
 ];
