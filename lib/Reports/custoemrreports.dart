@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import '../Provider/invoice provider.dart';
 import '../Provider/lanprovider.dart';
 import '../Provider/reportprovider.dart';
 import '../bankmanagement/banknames.dart';
@@ -36,7 +38,7 @@ class CustomerReportPage extends StatefulWidget {
 class _CustomerReportPageState extends State<CustomerReportPage> {
   DateTimeRange? selectedDateRange;
   static final Map<String, String> _bankIconMap = _createBankIconMap();
-
+  final DatabaseReference _db = FirebaseDatabase.instance.ref();
   static Map<String, String> _createBankIconMap() {
     return {
       for (var bank in pakistaniBanks)
@@ -585,8 +587,80 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
     );
   }
 
+  // Widget _buildTransactionTable(List<Map<String, dynamic>> transactions, LanguageProvider languageProvider) {
+  //   final isMobile = MediaQuery.of(context).size.width < 600;
+  //
+  //   return SingleChildScrollView(
+  //     scrollDirection: Axis.horizontal,
+  //     child: DataTable(
+  //       headingTextStyle: const TextStyle(fontWeight: FontWeight.bold),
+  //       columns: [
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Date' : 'ڈیٹ')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Type' : 'قسم')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Bank' : 'بینک')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
+  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
+  //       ],
+  //       rows: transactions.map((transaction) {
+  //         final bankName = _getBankName(transaction);
+  //         final bankLogoPath = _getBankLogoPath(bankName);
+  //
+  //         return DataRow(cells: [
+  //         DataCell(Text(
+  //         DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
+  //         )),
+  //         DataCell(Text(
+  //         transaction['referenceNumber'] ?? transaction['invoiceNumber'] ?? '-',
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
+  //         )),
+  //         DataCell(Text(
+  //         transaction['credit'] < 0.0 ? 'Filled (Edited)' :
+  //         (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
+  //         )),
+  //         DataCell(Text(
+  //         _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12),
+  //         )),
+  //           DataCell(
+  //             Row(
+  //               mainAxisSize: MainAxisSize.min,
+  //               children: [
+  //                 if (bankLogoPath != null)
+  //                   Image.asset(bankLogoPath, width: 70, height: 70),
+  //                 if (bankLogoPath != null)
+  //                   const SizedBox(width: 8), // Add some spacing between logo and name
+  //                 Text(bankName ?? '-', style: TextStyle(fontSize: isMobile ? 10 : 12)),
+  //               ],
+  //             ),
+  //           ),
+  //         DataCell(Text(
+  //         'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
+  //         )),
+  //         DataCell(Text(
+  //         'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
+  //         )),
+  //         DataCell(Text(
+  //         'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
+  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
+  //         )),
+  //         ]);
+  //       }).toList(),
+  //     ),
+  //   );
+  // }
+
+  // Helper to translate payment methods
+
   Widget _buildTransactionTable(List<Map<String, dynamic>> transactions, LanguageProvider languageProvider) {
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final reportProvider = Provider.of<CustomerReportProvider>(context, listen: false);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -601,29 +675,30 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
           DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
+          DataColumn(label: Text(languageProvider.isEnglish ? 'Actions' : 'اقدامات')), // Add actions column
         ],
         rows: transactions.map((transaction) {
           final bankName = _getBankName(transaction);
           final bankLogoPath = _getBankLogoPath(bankName);
 
           return DataRow(cells: [
-          DataCell(Text(
-          DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
-          style: TextStyle(fontSize: isMobile ? 10 : 12)
-          )),
-          DataCell(Text(
-          transaction['referenceNumber'] ?? transaction['invoiceNumber'] ?? '-',
-          style: TextStyle(fontSize: isMobile ? 10 : 12)
-          )),
-          DataCell(Text(
-          transaction['credit'] < 0.0 ? 'Filled (Edited)' :
-          (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
-          style: TextStyle(fontSize: isMobile ? 10 : 12)
-          )),
-          DataCell(Text(
-          _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
-          style: TextStyle(fontSize: isMobile ? 10 : 12),
-          )),
+            DataCell(Text(
+                DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
+                style: TextStyle(fontSize: isMobile ? 10 : 12)
+            )),
+            DataCell(Text(
+                transaction['referenceNumber'] ?? transaction['invoiceNumber'] ?? '-',
+                style: TextStyle(fontSize: isMobile ? 10 : 12)
+            )),
+            DataCell(Text(
+                transaction['credit'] < 0.0 ? 'Filled (Edited)' :
+                (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
+                style: TextStyle(fontSize: isMobile ? 10 : 12)
+            )),
+            DataCell(Text(
+              _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
+              style: TextStyle(fontSize: isMobile ? 10 : 12),
+            )),
             DataCell(
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -631,30 +706,132 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
                   if (bankLogoPath != null)
                     Image.asset(bankLogoPath, width: 70, height: 70),
                   if (bankLogoPath != null)
-                    const SizedBox(width: 8), // Add some spacing between logo and name
+                    const SizedBox(width: 8),
                   Text(bankName ?? '-', style: TextStyle(fontSize: isMobile ? 10 : 12)),
                 ],
               ),
             ),
-          DataCell(Text(
-          'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
-          style: TextStyle(fontSize: isMobile ? 10 : 12)
-          )),
-          DataCell(Text(
-          'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
-          style: TextStyle(fontSize: isMobile ? 10 : 12)
-          )),
-          DataCell(Text(
-          'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
-          style: TextStyle(fontSize: isMobile ? 10 : 12)
-          )),
+            DataCell(Text(
+                'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
+                style: TextStyle(fontSize: isMobile ? 10 : 12)
+            )),
+            DataCell(Text(
+                'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
+                style: TextStyle(fontSize: isMobile ? 10 : 12)
+            )),
+            DataCell(Text(
+                'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
+                style: TextStyle(fontSize: isMobile ? 10 : 12)
+            )),
+            DataCell(
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () => _showDeleteConfirmationDialog(
+                  context,
+                  transaction['id'],
+                  transaction['invoiceNumber'],
+                  transaction['paymentMethod'],
+                  transaction['debit'] ?? 0.0,
+                  reportProvider,
+                ),
+              ),
+            ),
           ]);
         }).toList(),
       ),
     );
   }
 
-  // Helper to translate payment methods
+  Future<void> _showDeleteConfirmationDialog(
+      BuildContext context,
+      String transactionId,
+      String? invoiceNumber,
+      String? paymentMethod,
+      double amount,
+      CustomerReportProvider reportProvider,
+      )
+  async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
+        content: Text(
+          languageProvider.isEnglish
+              ? 'Are you sure you want to delete this payment of Rs. ${amount.toStringAsFixed(2)}?'
+              : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟ Rs. ${amount.toStringAsFixed(2)}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _deletePaymentEntry(
+                context,
+                transactionId,
+                invoiceNumber,
+                paymentMethod,
+                amount,
+                reportProvider,
+              );
+            },
+            child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں', style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Future<void> _deletePaymentEntry(
+      BuildContext context,
+      String transactionId,
+      String? invoiceNumber,
+      String? paymentMethod,
+      double amount,
+      CustomerReportProvider reportProvider,
+      )
+  async {
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    try {
+      // First delete the ledger entry
+      await _db.child('ledger').child(widget.customerId).child(transactionId).remove();
+
+      // Then delete the payment from the invoice (if it's an invoice payment)
+      if (invoiceNumber != null && paymentMethod != null) {
+        await invoiceProvider.deletePaymentEntry(
+          context: context,
+          invoiceId: invoiceNumber,
+          paymentKey: transactionId,
+          paymentMethod: paymentMethod,
+          paymentAmount: amount,
+        );
+      }
+
+      // Refresh the report
+      await reportProvider.fetchCustomerReport(widget.customerId);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(languageProvider.isEnglish
+            ? 'Payment deleted successfully'
+            : 'ادائیگی کامیابی سے حذف ہوگئی')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(languageProvider.isEnglish
+            ? 'Failed to delete payment: ${e.toString()}'
+            : 'ادائیگی حذف کرنے میں ناکام: ${e.toString()}')),
+      );
+    }
+  }
+
+
   String _getPaymentMethodText(String? method, LanguageProvider languageProvider) {
     if (method == null) return '-';
     switch (method.toLowerCase()) {

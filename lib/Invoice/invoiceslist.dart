@@ -92,70 +92,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       appBar: _buildAppBar(context, languageProvider, invoiceProvider),
       body: Column(
         children: [
-          // // Search and Filter Section
-          // SearchAndFilterSection(
-          //   searchController: _searchController,
-          //   selectedDateRange: _selectedDateRange,
-          //   onDateRangeSelected: (range) {
-          //     setState(() {
-          //       _selectedDateRange = range;
-          //     });
-          //   },
-          //   onClearDateFilter: () {
-          //     setState(() {
-          //       _selectedDateRange = null;
-          //     });
-          //   },
-          //   languageProvider: languageProvider,
-          // ),
-          // // Invoice List
-          // Expanded(
-          //   child: FutureBuilder(
-          //     future: invoiceProvider.fetchInvoices(),
-          //     builder: (context, snapshot) {
-          //       if (snapshot.connectionState == ConnectionState.active) {
-          //         return const Center(child: CircularProgressIndicator());
-          //       }
-          //       if (snapshot.hasError) {
-          //         return Center(child: Text('Error: ${snapshot.error}'));
-          //       }
-          //       _filteredInvoices = _filterInvoices(invoiceProvider.invoices);
-          //       if (_filteredInvoices.isEmpty) {
-          //         return Center(
-          //           child: Text(
-          //             languageProvider.isEnglish ? 'No Invoice Found' : 'کوئی انوائس موجود نہیں',
-          //           ),
-          //         );
-          //       }
-          //       return InvoiceList(
-          //         filteredInvoices: _filteredInvoices,
-          //         languageProvider: languageProvider,
-          //         invoiceProvider: invoiceProvider,
-          //         onInvoiceTap: (invoice) {
-          //           Navigator.push(
-          //             context,
-          //             MaterialPageRoute(
-          //               builder: (context) => InvoicePage(invoice: invoice),
-          //             ),
-          //           );
-          //         },
-          //         onInvoiceLongPress: (invoice) async {
-          //           await _showDeleteConfirmationDialog(
-          //             context,
-          //             invoice,
-          //             invoiceProvider,
-          //             languageProvider,
-          //           );
-          //         },
-          //         onPaymentPressed: (invoice) {
-          //           _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
-          //         },
-          //         onViewPayments: (invoice) => _showPaymentDetails(invoice),
-          //
-          //       );
-          //     },
-          //   ),
-          // ),
           SearchAndFilterSection(
             searchController: _searchController,
             selectedDateRange: _selectedDateRange,
@@ -327,8 +263,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     return invoices.where((invoice) {
       final searchQuery = _searchController.text.toLowerCase();
       final invoiceNumber = (invoice['invoiceNumber'] ?? '').toString().toLowerCase();
+      final referenceNumber = (invoice['referenceNumber'] ?? '').toString().toLowerCase();
       final customerName = (invoice['customerName'] ?? '').toString().toLowerCase();
-      final matchesSearch = invoiceNumber.contains(searchQuery) || customerName.contains(searchQuery);
+      final matchesSearch = invoiceNumber.contains(searchQuery) || customerName.contains(searchQuery) || referenceNumber.contains(searchQuery);
 
       if (_selectedDateRange != null) {
         final invoiceDateStr = invoice['createdAt'];
@@ -1242,6 +1179,13 @@ class InvoiceList extends StatelessWidget {
                     ),
                     Text(
                       '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
+                      style: TextStyle(
+                        fontSize: isWideScreen ? 14 : 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${invoice['weight']}',
                       style: TextStyle(
                         fontSize: isWideScreen ? 14 : 12,
                         color: Colors.grey[600],

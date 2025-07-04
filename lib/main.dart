@@ -12,6 +12,7 @@ import 'Provider/filledreportprovider.dart';
 import 'Provider/invoice provider.dart';
 import 'Provider/lanprovider.dart';
 import 'Provider/purchaseprovider.dart';
+import 'Provider/reportprovider.dart';
 import 'chequePayments/listofchequePayments.dart';
 import 'chequePayments/newchequelist.dart';
 import 'dashboard.dart';
@@ -36,6 +37,7 @@ void main() async{
         ChangeNotifierProvider(create: (_) => PurchaseProvider()),
         ChangeNotifierProvider(create: (_) => CheckPaymentProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
+        ChangeNotifierProvider(create: (_) => CustomerReportProvider()),
       ],
       child: const MyApp(),
     ),
@@ -52,7 +54,7 @@ class MyApp extends StatelessWidget {
       builder: (context, languageProvider, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          home:  Dashboard(),
+          home:  LoginPage(),
           theme: ThemeData(
             fontFamily: languageProvider.isEnglish ? 'Roboto' : 'JameelNoori',
           ),

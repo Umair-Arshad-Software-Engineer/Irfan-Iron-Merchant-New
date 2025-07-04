@@ -159,6 +159,17 @@ import '../bankmanagement/banknames.dart';
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
       // final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
       // Add null checks for customer selection
+      // Get invoice data
+      final invoice = widget.invoice ?? _currentInvoice;
+      if (invoice == null) {
+        throw Exception("No invoice data available");
+      }
+
+      // Get payment details
+      double paidAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
+      double grandTotal = _calculateGrandTotal();
+      double remainingAmount = grandTotal - paidAmount;
+
       if (_selectedCustomerId == null) {
         throw Exception("No customer selected");
       }
@@ -172,9 +183,6 @@ import '../bankmanagement/banknames.dart';
           )
       );
       // // Get current date and time
-      // final DateTime now = DateTime.now();
-      // final String formattedDate = '${now.day}/${now.month}/${now.year}';
-      // final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
       DateTime invoiceDate;
       if (widget.invoice != null) {
         invoiceDate = DateTime.parse(widget.invoice!['createdAt']);
@@ -358,6 +366,14 @@ import '../bankmanagement/banknames.dart';
                     pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
+                // Payment Information
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Amount Paid:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
                 pw.SizedBox(height: 20),
 
                 // Footer Section (Remaining Balance)
@@ -532,6 +548,7 @@ import '../bankmanagement/banknames.dart';
       if (snapshot.snapshot.exists) {
         final Map<dynamic, dynamic> itemsMap = snapshot.snapshot.value as Map<dynamic, dynamic>;
         return itemsMap.entries.map((entry) {
+          // print(entry);
           return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
         }).toList();
       } else {
@@ -962,53 +979,6 @@ import '../bankmanagement/banknames.dart';
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
 
-    // Future<Uint8List?> _pickImage(BuildContext context) async {
-    //   Uint8List? imageBytes;
-    //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    //
-    //   if (kIsWeb) {
-    //     // For web, use file_picker
-    //     FilePickerResult? result = await FilePicker.platform.pickFiles(
-    //       type: FileType.image,
-    //       allowMultiple: false,
-    //     );
-    //
-    //     if (result != null && result.files.isNotEmpty) {
-    //       imageBytes = result.files.first.bytes;
-    //     }
-    //   } else {
-    //     // For mobile, show source selection dialog
-    //     final ImagePicker _picker = ImagePicker();
-    //
-    //     // Show dialog to choose camera or gallery
-    //     final ImageSource? source = await showDialog<ImageSource>(
-    //       context: context,
-    //       builder: (context) => AlertDialog(
-    //         title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
-    //         actions: [
-    //           TextButton(
-    //             child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
-    //             onPressed: () => Navigator.pop(context, ImageSource.camera),
-    //           ),
-    //           TextButton(
-    //             child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
-    //             onPressed: () => Navigator.pop(context, ImageSource.gallery),
-    //           ),
-    //         ],
-    //       ),
-    //     );
-    //
-    //     if (source == null) return null; // User canceled
-    //
-    //     XFile? pickedFile = await _picker.pickImage(source: source);
-    //     if (pickedFile != null) {
-    //       final file = File(pickedFile.path);
-    //       imageBytes = await file.readAsBytes();
-    //     }
-    //   }
-    //
-    //   return imageBytes;
-    // }
 
     Future<Uint8List?> _pickImage(BuildContext context) async {
       final ImagePicker _picker = ImagePicker();
@@ -1091,19 +1061,19 @@ import '../bankmanagement/banknames.dart';
                 );
 
                 return Card(
-                  margin: EdgeInsets.symmetric(vertical: 4),
+                  margin: const EdgeInsets.symmetric(vertical: 4),
                   child: ListTile(
                     leading: Image.asset(
                       matchedBank.iconPath,
                       width: 40,
                       height: 40,
                       errorBuilder: (context, error, stackTrace) {
-                        return Icon(Icons.account_balance, size: 40);
+                        return const Icon(Icons.account_balance, size: 40);
                       },
                     ),
                     title: Text(
                       bankName,
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     // subtitle: Text(
                     //   '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
@@ -1470,7 +1440,7 @@ import '../bankmanagement/banknames.dart';
           invoice['invoiceNumber'] == null ||  // Use invoiceNumber as ID
           invoice['customerId'] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot process payment - invalid Invoice data')),
+          const SnackBar(content: Text('Cannot process payment - invalid Invoice data')),
         );
         return;
       }
@@ -1483,7 +1453,7 @@ import '../bankmanagement/banknames.dart';
       // At the start of both methods
       if (invoice == null || invoice['invoiceNumber'] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot view payments - invalid Invoice data')),
+          const SnackBar(content: Text('Cannot view payments - invalid Invoice data')),
         );
         return;
       }
@@ -1536,17 +1506,16 @@ import '../bankmanagement/banknames.dart';
     void initState() {
       super.initState();
       _fetchItems();
-      _currentInvoice = widget.invoice; // Initialize with existing invoice if editing
-      _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
+      _currentInvoice = widget.invoice;
+      _fetchRemainingBalance();
+
       if (widget.invoice != null) {
         _mazdoori = (widget.invoice!['mazdoori'] as num).toDouble();
         _mazdooriController.text = _mazdoori.toStringAsFixed(2);
-      }
-      if (widget.invoice != null) {
         _invoiceId = widget.invoice!['invoiceNumber'];
         _referenceController.text = widget.invoice!['referenceNumber'] ?? '';
       }
-      // Initialize customer provider and fetch customers
+
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
       customerProvider.fetchCustomers().then((_) {
         if (widget.invoice != null) {
@@ -1569,7 +1538,6 @@ import '../bankmanagement/banknames.dart';
 
       if (widget.invoice != null) {
         final invoice = widget.invoice!;
-        // _discount = (invoice['discount'] as num).toDouble();
         _discount = (invoice['discount'] as num?)?.toDouble() ?? 0.0;
         _discountController.text = _discount.toStringAsFixed(2);
         _invoiceId = invoice['invoiceNumber'];
@@ -1578,24 +1546,31 @@ import '../bankmanagement/banknames.dart';
 
         // Initialize rows with calculated totals
         _invoiceRows = List<Map<String, dynamic>>.from(invoice['items']).map((row) {
-          // double rate = (row['rate'] as num).toDouble();
-          // double weight = (row['weight'] as num).toDouble();
           double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
           double weight = (row['weight'] as num?)?.toDouble() ?? 0.0;
-          double total = rate * weight; // Calculate total here
+          double qty = (row['qty'] as num?)?.toDouble() ?? 0.0;
+          double total = rate * weight;
+
+          // Print debug information
+          print('Initializing row with:');
+          print('  - Item Name: ${row['itemName']}');
+          print('  - Rate: $rate');
+          print('  - Weight: $weight');
+          print('  - Qty: $qty');
+          print('  - Total: $total');
 
           return {
             'itemName': row['itemName'],
             'rate': rate,
             'weight': weight,
-            'initialWeight': weight, // Store initial weight for delta calculation
-            'qty': (row['qty'] as num).toDouble(),
+            'initialWeight': weight,
+            'qty': qty,
             'description': row['description'],
-            'total': total, // Use calculated total
+            'total': total,
             'itemNameController': TextEditingController(text: row['itemName']),
-            'weightController': TextEditingController(text: weight.toString()),
-            'rateController': TextEditingController(text: rate.toString()),
-            'qtyController': TextEditingController(text: row['qty'].toString()),
+            'weightController': TextEditingController(text: weight.toStringAsFixed(4)), // Use toStringAsFixed for weight
+            'rateController': TextEditingController(text: rate.toStringAsFixed(2)),
+            'qtyController': TextEditingController(text: qty.toStringAsFixed(0)),
             'descriptionController': TextEditingController(text: row['description']),
           };
         }).toList();
@@ -1607,7 +1582,7 @@ import '../bankmanagement/banknames.dart';
             'qty': 0.0,
             'weight': 0.0,
             'description': '',
-            'itemNameController': TextEditingController(), // Add this
+            'itemNameController': TextEditingController(),
             'weightController': TextEditingController(),
             'rateController': TextEditingController(),
             'qtyController': TextEditingController(),

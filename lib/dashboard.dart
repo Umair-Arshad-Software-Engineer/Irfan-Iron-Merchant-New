@@ -24,6 +24,7 @@ import 'chequePayments/listofchequePayments.dart';
 import 'chequePayments/newchequelist.dart';
 import 'dailypage/listpageroznamcha.dart';
 import 'items/ItemslistPage.dart';
+import 'items/inandoutpage.dart';
 import 'items/purchaselistpage.dart';
 
 
@@ -167,6 +168,7 @@ class Dashboard extends StatelessWidget {
                 _drawerItem(Icons.account_balance, 'Rajkot Cash Book', 'سمپل کیش بک', context, RajkotCashbookPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cheque Book', 'چیک بک', context, InvoiceCheckPaymentsPage(), languageProvider),
                 _drawerItem(Icons.assignment, 'Roznamcha', 'روزنامچہ', context, const Roznamchapage(), languageProvider),
+                _drawerItem(Icons.assignment, 'Item In & Out', 'سٹاک رپورٹ', context,  ItemTransactionReportPage(), languageProvider),
                 _drawerItem(Icons.settings, 'Settings', 'ترتیبات', context, UsersPage(), languageProvider),
                 const Divider(),
                 ListTile(
