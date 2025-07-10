@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-
 import '../Models/cashbookModel.dart';
 import '../Models/itemModel.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:photo_view/photo_view.dart';
+
+
 
 class InvoiceProvider with ChangeNotifier {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
@@ -25,6 +25,14 @@ class InvoiceProvider with ChangeNotifier {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
 
+
+  String _imageToBase64(Uint8List imageBytes) {
+    return base64Encode(imageBytes);
+  }
+
+  Uint8List _base64ToImage(String base64String) {
+    return base64Decode(base64String);
+  }
 
   Future<String> _uploadImage(Uint8List imageBytes, String invoiceId) async {
     try {
@@ -524,6 +532,7 @@ class InvoiceProvider with ChangeNotifier {
               'itemName': item['itemName']?.toString() ?? '',
               'rate': parseDouble(item['rate']),
               'qty': parseDouble(item['qty']),
+              'weight': parseDouble(item['weight']),
               'description': item['description']?.toString() ?? '',
               'total': parseDouble(item['total']),
             };
@@ -727,12 +736,16 @@ class InvoiceProvider with ChangeNotifier {
         String? chequeBankName,
       })
   async {
-    String? imageUrl;
+    // String? imageUrl;
+    String? imageBase64;
 
     try {
       // Upload image first
+      // if (imageBytes != null) {
+      //   imageUrl = await _uploadImage(imageBytes, invoiceId);
+      // }
       if (imageBytes != null) {
-        imageUrl = await _uploadImage(imageBytes, invoiceId);
+        imageBase64 = _imageToBase64(imageBytes);
       }
 
       // Fetch the current invoice data from the database
@@ -749,7 +762,9 @@ class InvoiceProvider with ChangeNotifier {
         'date': paymentDate.toIso8601String(),
         'paymentMethod': paymentMethod,
         'description': description,
-        'imageUrl': imageUrl,
+        // 'imageUrl': imageUrl,
+        if (imageBase64 != null) 'image': imageBase64, // Store as Base64
+
         if (paymentMethod == 'Bank' && bankId != null) 'bankId': bankId,
         if (paymentMethod == 'Bank' && bankName != null) 'bankName': bankName,
         if (paymentMethod == 'Check' && chequeNumber != null) 'chequeNumber': chequeNumber,
@@ -852,7 +867,7 @@ class InvoiceProvider with ChangeNotifier {
       );
     } catch (e) {
       // Delete image if upload succeeded but payment failed
-      if (imageUrl != null) await _deleteImage(imageUrl);
+      // if (imageUrl != null) await _deleteImage(imageUrl);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
       );
@@ -873,6 +888,10 @@ class InvoiceProvider with ChangeNotifier {
             final paymentData = Map<String, dynamic>.from(value);
             // Convert 'amount' to double explicitly
             paymentData['amount'] = (paymentData['amount'] as num).toDouble();
+            // Handle Base64 image if present
+            if (paymentData['image'] != null) {
+              paymentData['imageBytes'] = _base64ToImage(paymentData['image']);
+            }
             payments.add({
               'method': method,
               ...paymentData,
@@ -913,15 +932,6 @@ class InvoiceProvider with ChangeNotifier {
       // Step 1: Fetch payment data before deleting it
       final paymentSnapshot = await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).get();
 
-      if (paymentSnapshot.exists) {
-        final paymentData = paymentSnapshot.value as Map<dynamic, dynamic>;
-        final imageUrl = paymentData['imageUrl']?.toString();
-
-        // Delete image from storage
-        if (imageUrl != null) {
-          await _deleteImage(imageUrl);
-        }
-      }
 
       if (!paymentSnapshot.exists) {
         print("❌ Error: Payment entry not found in ${paymentMethod}Payments");

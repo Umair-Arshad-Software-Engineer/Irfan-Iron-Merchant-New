@@ -50,6 +50,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       invoiceProvider.resetPagination(); // Clear any previous data
       invoiceProvider.fetchInvoices(); // Fetch first page
     });
+    // print(_filteredInvoices);
   }
 
   // Scroll listener to detect when user reaches bottom
@@ -178,8 +179,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
                       // Loading indicator at the bottom
                       if (invoiceProvider.isLoading && _filteredInvoices.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
+                        const Padding(
+                          padding: EdgeInsets.all(8.0),
                           child: Center(
                             child: SizedBox(
                               height: 30,
@@ -197,7 +198,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                           padding: const EdgeInsets.all(8.0),
                           child: Text(
                             languageProvider.isEnglish ? 'No more records' : 'مزید ریکارڈز نہیں ہیں',
-                            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                            style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
                           ),
                         ),
                     ],
@@ -210,7 +211,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       ),
     );
   }
-
 
 // Add to _InvoiceListPageState
   Future<void> _showFullScreenImage(Uint8List imageBytes)
@@ -284,11 +284,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       }
       return matchesSearch;
     }).toList();
-      // ..sort((a, b) {
-      //   final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
-      //   final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
-      //   return dateB.compareTo(dateA); // Newest first
-      // });
   }
 
   // Show delete confirmation dialog
@@ -485,7 +480,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     }
   }  // Print invoices
 
-
   Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
     final pdf = pw.Document();
     // Load the image asset for the logo
@@ -624,7 +618,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.all(15), // Reduced margins for more content space
+        margin: const pw.EdgeInsets.all(15), // Reduced margins for more content space
         header: (pw.Context context) => pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
@@ -695,7 +689,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     );
 
     final paint = Paint()..color = Colors.black;
-    final textStyle = const TextStyle(
+    const textStyle = TextStyle(
       fontSize: 13 * scaleFactor,
       fontFamily: 'JameelNoori',
       color: Colors.black,
@@ -723,7 +717,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
     return pw.MemoryImage(buffer);
   }
-
 
   Future<Uint8List?> _pickImage(BuildContext context) async {
     Uint8List? imageBytes;
@@ -772,7 +765,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
     return imageBytes;
   }
-
 
   Future<void> _showInvoicePaymentDialog(
       Map<String, dynamic> invoice,
@@ -857,7 +849,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                       title: Text(languageProvider.isEnglish
                           ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
                           : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
-                      trailing: Icon(Icons.calendar_today),
+                      trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final pickedDate = await showDatePicker(
                           context: context,
@@ -1101,7 +1093,6 @@ async {
   );
 }
 
-
 class InvoiceList extends StatelessWidget {
   final ScrollController scrollController;
   final List<Map<String, dynamic>> filteredInvoice;
@@ -1126,6 +1117,16 @@ class InvoiceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    // Add this helper method to calculate total weight
+    String _getTotalWeight(List<dynamic> items) {
+      double totalWeight = 0.0;
+      for (var item in items) {
+        totalWeight += (item['weight'] ?? 0.0).toDouble();
+      }
+      return totalWeight.toStringAsFixed(2);
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isWideScreen = constraints.maxWidth > 600;
@@ -1135,11 +1136,7 @@ class InvoiceList extends StatelessWidget {
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
             final invoice = Map<String, dynamic>.from(filteredInvoice[index]);
-            // final grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
-            // final debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
-            // Update the grandTotal and debitAmount calculations with explicit casting
-            // final grandTotal = ((invoice['grandTotal'] as num?) ?? 0.0).toDouble();
-            // final debitAmount = ((invoice['debitAmount'] as num?) ?? 0.0).toDouble();
+
             // Instead of casting directly, use:
             double grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
             double debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
@@ -1184,16 +1181,16 @@ class InvoiceList extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                     ),
+                    // Add this new Text widget to show the weight
                     Text(
-                      '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${invoice['weight']}',
+                      '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
                       style: TextStyle(
                         fontSize: isWideScreen ? 14 : 12,
-                        color: Colors.grey[600],
                       ),
                     ),
                     Text(
                       '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize:12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1231,8 +1228,6 @@ class InvoiceList extends StatelessWidget {
     );
   }
 }
-
-
 
 class SearchAndFilterSection extends StatelessWidget {
   final TextEditingController searchController;
@@ -1316,3 +1311,4 @@ class SearchAndFilterSection extends StatelessWidget {
     );
   }
 }
+

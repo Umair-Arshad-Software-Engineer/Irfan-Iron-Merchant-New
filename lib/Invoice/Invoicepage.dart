@@ -687,7 +687,24 @@ import '../bankmanagement/banknames.dart';
     }
 
 
-    void _showFullScreenImage(String imageUrl) {
+    // void _showFullScreenImage(String imageUrl) {
+    //   showDialog(
+    //     context: context,
+    //     builder: (context) => Dialog(
+    //       child: Container(
+    //         width: MediaQuery.of(context).size.width * 0.9,
+    //         height: MediaQuery.of(context).size.height * 0.8,
+    //         child: PhotoView(
+    //           imageProvider: NetworkImage(imageUrl),
+    //           minScale: PhotoViewComputedScale.contained,
+    //           maxScale: PhotoViewComputedScale.covered * 2,
+    //         ),
+    //       ),
+    //     ),
+    //   );
+    // }
+
+    void _showFullScreenImage(Uint8List imageBytes) {
       showDialog(
         context: context,
         builder: (context) => Dialog(
@@ -695,7 +712,7 @@ import '../bankmanagement/banknames.dart';
             width: MediaQuery.of(context).size.width * 0.9,
             height: MediaQuery.of(context).size.height * 0.8,
             child: PhotoView(
-              imageProvider: NetworkImage(imageUrl),
+              imageProvider: MemoryImage(imageBytes),
               minScale: PhotoViewComputedScale.contained,
               maxScale: PhotoViewComputedScale.covered * 2,
             ),
@@ -733,6 +750,143 @@ import '../bankmanagement/banknames.dart';
       }
     }
 
+    // Future<void> _showPaymentDetails(Map<String, dynamic> invoice) async {
+    //   final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+    //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    //
+    //   try {
+    //     final payments = await invoiceProvider.getInvoicePayments(invoice['id']);
+    //
+    //     showDialog(
+    //       context: context,
+    //       builder: (context) => AlertDialog(
+    //         title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
+    //         content: Container(
+    //           width: double.maxFinite,
+    //           child: payments.isEmpty
+    //               ? Text(languageProvider.isEnglish
+    //               ? 'No payments found'
+    //               : 'کوئی ادائیگی نہیں ملی')
+    //               : ListView.builder(
+    //             shrinkWrap: true,
+    //             itemCount: payments.length,
+    //             itemBuilder: (context, index) {
+    //               final payment = payments[index];
+    //               Uint8List? imageBytes;
+    //               if (payment['image'] != null) {
+    //                 imageBytes = base64Decode(payment['image']);
+    //               }
+    //
+    //               return Card(
+    //                 child: ListTile(
+    //                   // title: Text(
+    //                   //   '${payment['method']}: Rs ${payment['amount']}',
+    //                   //   style: const TextStyle(fontWeight: FontWeight.bold),
+    //                   // ),
+    //                   // title: Text(
+    //                   //   '${payment['method'] == 'Bank'
+    //                   //       ? '${payment['bankName'] ?? 'Bank'}'
+    //                   //       : payment['method']}: Rs ${payment['amount']}',
+    //                   // ),
+    //                   title: Text(
+    //                     payment['method'] == 'Bank'
+    //                         ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
+    //                         : payment['method'] == 'Check'
+    //                         ? '${payment['bankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
+    //                         : '${payment['method']}: Rs ${payment['amount']}',
+    //                   ),
+    //                   subtitle: Column(
+    //                     crossAxisAlignment: CrossAxisAlignment.start,
+    //                     children: [
+    //                       // Text(DateFormat('yyyy-MM-dd – HH:mm')
+    //                       //     .format(payment['date'])),
+    //                       // In payment history list
+    //                       Text(DateFormat('yyyy-MM-dd – HH:mm')
+    //                           .format(payment['date'])),
+    //                       if (payment['description'] != null)
+    //                         Padding(
+    //                           padding: const EdgeInsets.only(top: 4),
+    //                           child: Text(payment['description']),
+    //                         ),
+    //                       // In payment history list
+    //                       if (payment['imageUrl'] != null)
+    //                         Column(
+    //                           children: [
+    //                             GestureDetector(
+    //                               onTap: () => _showFullScreenImage(payment['imageUrl']),
+    //                               child: Image.network(
+    //                                 payment['imageUrl'],
+    //                                 width: 100,
+    //                                 height: 100,
+    //                                 fit: BoxFit.cover,
+    //                               ),
+    //                             ),
+    //                             TextButton(
+    //                               onPressed: () => _showFullScreenImage(payment['imageUrl']),
+    //                               child: Text(
+    //                                 Provider.of<LanguageProvider>(context, listen: false)
+    //                                     .isEnglish
+    //                                     ? 'View Full Image'
+    //                                     : 'مکمل تصویر دیکھیں',
+    //                                 style: const TextStyle(fontSize: 12),
+    //                               ),
+    //                             ),
+    //                           ],
+    //                         ),
+    //                     ],
+    //                   ),
+    //                   trailing: Row(
+    //                     mainAxisSize: MainAxisSize.min,
+    //                     children: [
+    //                       // IconButton(
+    //                       //   icon: Icon(Icons.edit),
+    //                       //   onPressed: () => _showEditPaymentDialog(
+    //                       //     context,
+    //                       //     invoice['id'],
+    //                       //     payment['key'], // Ensure the payment key is passed
+    //                       //     payment['method'],
+    //                       //     payment['amount'],
+    //                       //     payment['description'],
+    //                       //     imageBytes,
+    //                       //     _pickImage, // Pass the _pickImage function
+    //                       //   ),
+    //                       // ),
+    //                       IconButton(
+    //                         icon: const Icon(Icons.delete),
+    //                         onPressed: () => _showDeletePaymentConfirmationDialog(
+    //                           context,
+    //                           invoice['id'],
+    //                           payment['key'], // Ensure the payment key is passed
+    //                           payment['method'],
+    //                           payment['amount'],
+    //                         ),
+    //                       ),
+    //                     ],
+    //                   ),
+    //                 ),
+    //               );
+    //             },
+    //           ),
+    //         ),
+    //         actions: [
+    //           ElevatedButton(
+    //             onPressed: () => _printPaymentHistoryPDF(payments, context),
+    //             child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+    //           ),
+    //           TextButton(
+    //             child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
+    //             onPressed: () => Navigator.pop(context),
+    //           ),
+    //         ],
+    //       ),
+    //     );
+    //   } catch (e) {
+    //     ScaffoldMessenger.of(context).showSnackBar(
+    //       SnackBar(content: Text('Error loading payments: ${e.toString()}')),
+    //     );
+    //   }
+    // }
+
     Future<void> _showPaymentDetails(Map<String, dynamic> invoice) async {
       final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -757,20 +911,15 @@ import '../bankmanagement/banknames.dart';
                   final payment = payments[index];
                   Uint8List? imageBytes;
                   if (payment['image'] != null) {
-                    imageBytes = base64Decode(payment['image']);
+                    try {
+                      imageBytes = base64Decode(payment['image']);
+                    } catch (e) {
+                      print('Error decoding Base64 image: $e');
+                    }
                   }
 
                   return Card(
                     child: ListTile(
-                      // title: Text(
-                      //   '${payment['method']}: Rs ${payment['amount']}',
-                      //   style: const TextStyle(fontWeight: FontWeight.bold),
-                      // ),
-                      // title: Text(
-                      //   '${payment['method'] == 'Bank'
-                      //       ? '${payment['bankName'] ?? 'Bank'}'
-                      //       : payment['method']}: Rs ${payment['amount']}',
-                      // ),
                       title: Text(
                         payment['method'] == 'Bank'
                             ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
@@ -781,9 +930,6 @@ import '../bankmanagement/banknames.dart';
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Text(DateFormat('yyyy-MM-dd – HH:mm')
-                          //     .format(payment['date'])),
-                          // In payment history list
                           Text(DateFormat('yyyy-MM-dd – HH:mm')
                               .format(payment['date'])),
                           if (payment['description'] != null)
@@ -791,24 +937,23 @@ import '../bankmanagement/banknames.dart';
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(payment['description']),
                             ),
-                          // In payment history list
-                          if (payment['imageUrl'] != null)
+                          // Display Base64 image if available
+                          if (imageBytes != null)
                             Column(
                               children: [
                                 GestureDetector(
-                                  onTap: () => _showFullScreenImage(payment['imageUrl']),
-                                  child: Image.network(
-                                    payment['imageUrl'],
+                                  onTap: () => _showFullScreenImage(imageBytes!),
+                                  child: Image.memory(
+                                    imageBytes,
                                     width: 100,
                                     height: 100,
                                     fit: BoxFit.cover,
                                   ),
                                 ),
                                 TextButton(
-                                  onPressed: () => _showFullScreenImage(payment['imageUrl']),
+                                  onPressed: () => _showFullScreenImage(imageBytes!),
                                   child: Text(
-                                    Provider.of<LanguageProvider>(context, listen: false)
-                                        .isEnglish
+                                    languageProvider.isEnglish
                                         ? 'View Full Image'
                                         : 'مکمل تصویر دیکھیں',
                                     style: const TextStyle(fontSize: 12),
@@ -821,25 +966,12 @@ import '../bankmanagement/banknames.dart';
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // IconButton(
-                          //   icon: Icon(Icons.edit),
-                          //   onPressed: () => _showEditPaymentDialog(
-                          //     context,
-                          //     invoice['id'],
-                          //     payment['key'], // Ensure the payment key is passed
-                          //     payment['method'],
-                          //     payment['amount'],
-                          //     payment['description'],
-                          //     imageBytes,
-                          //     _pickImage, // Pass the _pickImage function
-                          //   ),
-                          // ),
                           IconButton(
                             icon: const Icon(Icons.delete),
                             onPressed: () => _showDeletePaymentConfirmationDialog(
                               context,
                               invoice['id'],
-                              payment['key'], // Ensure the payment key is passed
+                              payment['key'],
                               payment['method'],
                               payment['amount'],
                             ),
@@ -854,7 +986,9 @@ import '../bankmanagement/banknames.dart';
             actions: [
               ElevatedButton(
                 onPressed: () => _printPaymentHistoryPDF(payments, context),
-                child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+                child: Text(languageProvider.isEnglish
+                    ? 'Print Payment History'
+                    : 'ادائیگی کی تاریخ پرنٹ کریں'),
               ),
               TextButton(
                 child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
@@ -868,7 +1002,7 @@ import '../bankmanagement/banknames.dart';
           SnackBar(content: Text('Error loading payments: ${e.toString()}')),
         );
       }
-    }  // Print invoices
+    }
 
     Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
       final pdf = pw.Document();
