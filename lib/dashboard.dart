@@ -58,11 +58,6 @@ class Dashboard extends StatelessWidget {
             onPressed: languageProvider.toggleLanguage,
             tooltip: languageProvider.isEnglish ? 'Switch to Urdu' : 'انگریزی میں تبدیل کریں',
           ),
-          // IconButton(
-          //   icon: const Icon(Icons.logout),
-          //   onPressed: () => _logout(context), // Call the logout function here
-          //   tooltip: languageProvider.isEnglish ? 'Logout' : 'لاگ آوٹ',
-          // ),
         ],
       ),
       drawer: _buildDrawer(context, languageProvider),
