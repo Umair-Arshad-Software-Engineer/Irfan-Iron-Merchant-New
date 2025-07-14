@@ -146,7 +146,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     return selectedBank;
   }
 
-
   Future<List<CashbookEntry>> _getFilteredEntries() async {
     DataSnapshot snapshot = await widget.databaseRef.get();
     List<CashbookEntry> entries = [];
@@ -175,7 +174,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     }
     return entries;
   }
-
 
   Map<String, double> _calculateTotals(List<CashbookEntry> entries) {
     double totalCashIn = 0;
@@ -410,7 +408,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     }
   }
 
-
   Future<void> _deleteEntry(String id) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     try {
@@ -594,7 +591,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       },
     );
   }
-
 
   Future<void> _showPaymentDialog(CashbookEntry entry) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);

@@ -153,12 +153,318 @@ import '../bankmanagement/banknames.dart';
       return subtotal - discountAmount + _mazdoori;
     }
 
+//     Future<Uint8List> _generatePDFBytes(String invoiceNumber) async {
+//       final pdf = pw.Document();
+//       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+//       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+//       // final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
+//       // Add null checks for customer selection
+//       // Get invoice data
+//       final invoice = widget.invoice ?? _currentInvoice;
+//       if (invoice == null) {
+//         throw Exception("No invoice data available");
+//       }
+//
+//       // Get payment details
+//       double paidAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
+//       double grandTotal = _calculateGrandTotal();
+//       double remainingAmount = grandTotal - paidAmount;
+//
+//       if (_selectedCustomerId == null) {
+//         throw Exception("No customer selected");
+//       }
+//       final selectedCustomer = customerProvider.customers.firstWhere(
+//               (customer) => customer.id == _selectedCustomerId,
+//           orElse: () => Customer( // Add orElse to handle missing customer
+//               id: 'unknown',
+//               name: 'Unknown Customer',
+//               phone: '',
+//               address: ''
+//           )
+//       );
+//       // // Get current date and time
+//       DateTime invoiceDate;
+//       if (widget.invoice != null) {
+//         invoiceDate = DateTime.parse(widget.invoice!['createdAt']);
+//       } else {
+//         if (_dateController.text.isNotEmpty) {
+//           DateTime selectedDate = DateTime.parse(_dateController.text);
+//           DateTime now = DateTime.now();
+//           invoiceDate = DateTime(
+//             selectedDate.year,
+//             selectedDate.month,
+//             selectedDate.day,
+//             now.hour,
+//             now.minute,
+//             now.second,
+//           );
+//         } else {
+//           invoiceDate = DateTime.now();
+//         }
+//       }
+//
+//       final String formattedDate = '${invoiceDate.day}/${invoiceDate.month}/${invoiceDate.year}';
+//       final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
+//       // Get the remaining balance from the ledger
+//       // double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+// // Get the remaining balance from the ledger (excluding current invoice)
+//       double remainingBalance = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
+//       // Load the image asset for the logo
+//       final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+//       final buffer = bytes.buffer.asUint8List();
+//       final image = pw.MemoryImage(buffer);
+//
+//       // Load the image asset for the logo
+//       final ByteData namebytes = await rootBundle.load('assets/images/name.png');
+//       final namebuffer = namebytes.buffer.asUint8List();
+//       final nameimage = pw.MemoryImage(namebuffer);
+//       // Load the image asset for the logo
+//       final ByteData addressbytes = await rootBundle.load('assets/images/address.png');
+//       final addressbuffer = addressbytes.buffer.asUint8List();
+//       final addressimage = pw.MemoryImage(addressbuffer);
+//       // Load the image asset for the logo
+//       final ByteData linebytes = await rootBundle.load('assets/images/line.png');
+//       final linebuffer = linebytes.buffer.asUint8List();
+//       final lineimage = pw.MemoryImage(linebuffer);
+//
+//       // Load the footer logo if different
+//       final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+//       final footerBuffer = footerBytes.buffer.asUint8List();
+//       final footerLogo = pw.MemoryImage(footerBuffer);
+//
+//       // Pre-generate images for all descriptions
+//       List<pw.MemoryImage> descriptionImages = [];
+//       for (var row in _invoiceRows) {
+//         final image = await _createTextImage(row['description']);
+//         descriptionImages.add(image);
+//       }
+//
+//       // Pre-generate images for all item namess
+//       List<pw.MemoryImage> itemnameImages = [];
+//       for (var row in _invoiceRows) {
+//         final image = await _createTextImage(row['itemName']);
+//         itemnameImages.add(image);
+//       }
+//
+//       // Generate customer details as an image
+//       final customerDetailsImage = await _createTextImage(
+//         'Customer Name: ${selectedCustomer.name}\n'
+//             'Customer Address: ${selectedCustomer.address}',
+//       );
+//
+//       // Add a page with A5 size
+//       pdf.addPage(
+//         pw.Page(
+//           pageFormat: PdfPageFormat.a5, // Set page size to A5
+//           margin: const pw.EdgeInsets.all(10), // Add margins for better spacing
+//           build: (context) {
+//             return pw.Column(
+//               crossAxisAlignment: pw.CrossAxisAlignment.start,
+//               children: [
+//                 // Company Logo and Invoice Header
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Image(image, width: 80, height: 80), // Adjust logo size
+//                     pw.Column(
+//                       children: [
+//                         pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
+//                         pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
+//                       ]
+//                     ),
+//                     pw.Column(
+//                      children: [
+//                        pw.Text(
+//                          'Invoice',
+//                          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+//                        ),
+//                        pw.Text(
+//                          'Zulfiqar Ahmad: ',
+//                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+//                        ),
+//                        pw.Text(
+//                          '0300-6316202',
+//                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+//                        ),
+//                        pw.Text(
+//                          'Muhammad Irfan: ',
+//                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+//                        ),
+//                        pw.Text(
+//                          '0300-8167446',
+//                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+//                        ),
+//                      ]
+//                    )
+//                   ],
+//                 ),
+//                 pw.Divider(),
+//
+//                 // Customer Information
+//                 pw.Image(customerDetailsImage, width: 250, dpi: 1000), // Adjust width
+//                 pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
+//                 pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
+//                 pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
+//                 // pw.Text('InvoiceId: $_invoiceId', style: const pw.TextStyle(fontSize: 12)),
+//                 // In _generatePDFBytes method, add this somewhere in the header section
+//                 pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
+//
+//                 pw.SizedBox(height: 10),
+//
+//                 // Invoice Table with Urdu text converted to image
+//                 pw.Table.fromTextArray(
+//                   headers: [
+//                     pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
+//                     pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
+//                     pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
+//                     pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+//                     pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
+//                     pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+//                   ],
+//                   data: _invoiceRows.asMap().map((index, row) {
+//                     return MapEntry(
+//                       index,
+//                       [
+//                         pw.Image(itemnameImages[index], dpi: 1000),
+//                         pw.Image(descriptionImages[index], dpi: 1000),
+//                         pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+//                         pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
+//                         pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+//                         pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+//                       ],
+//                     );
+//                   }).values.toList(),
+//                 ),
+//                 pw.SizedBox(height: 10),
+//
+//                 // Totals Section
+//                 // In your PDF generation code:
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+//                     pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+//                   ],
+//                 ),
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Text('Invoice Amount:', style: const pw.TextStyle(fontSize: 12)),
+//                     pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                   ],
+//                 ),
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+//                     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                   ],
+//                 ),
+//                 // In your _generatePDFBytes method, add this after the discount row
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
+//                     pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                   ],
+//                 ),
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Text('New Balance:', style:  pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+//                     pw.Text((remainingBalance + _calculateGrandTotal()).toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+//                   ],
+//                 ),
+//
+//                 // pw.Row(
+//                 //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                 //   children: [
+//                 //     pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
+//                 //     pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                 //   ],
+//                 // ),
+//                 // pw.Row(
+//                 //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                 //   children: [
+//                 //     pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+//                 //     pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+//                 //   ],
+//                 // ),
+//                 // pw.Row(
+//                 //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                 //   children: [
+//                 //     pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+//                 //     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                 //   ],
+//                 // ),
+//                 // // In your _generatePDFBytes method, add this after the discount row
+//                 // pw.Row(
+//                 //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                 //   children: [
+//                 //     pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
+//                 //     pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                 //   ],
+//                 // ),
+//                 // pw.Row(
+//                 //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                 //   children: [
+//                 //     pw.Text('Amount Paid:', style: const pw.TextStyle(fontSize: 12)),
+//                 //     pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+//                 //   ],
+//                 // ),
+//                 // pw.Row(
+//                 //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                 //   children: [
+//                 //     pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+//                 //     pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+//                 //   ],
+//                 // ),
+//                 // Payment Information
+//
+//                 pw.SizedBox(height: 60),
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.end,
+//                   children: [
+//                     pw.Text('......................', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+//                   ],
+//                 ),
+//
+//                 // Footer Sectiondasd
+//                 pw.Spacer(), // Push footer to the bottom of the page
+//                 pw.Divider(),
+//                 pw.Row(
+//                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+//                   children: [
+//                     pw.Image(footerLogo, width: 30, height: 20), // Footer logo
+//                     pw.Image(lineimage,width: 150,height: 50),
+//                     pw.Column(
+//                       crossAxisAlignment: pw.CrossAxisAlignment.center,
+//                       children: [
+//                         pw.Text(
+//                           'Dev Valley Software House',
+//                           style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+//                         ),
+//                         pw.Text(
+//                           'Contact: 0303-4889663',
+//                           style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+//                         ),
+//                       ],
+//                     ),
+//                   ],
+//                 ),
+//               ],
+//             );
+//           },
+//         ),
+//       );
+//       return pdf.save();
+//     }
+
     Future<Uint8List> _generatePDFBytes(String invoiceNumber) async {
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-      // final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
-      // Add null checks for customer selection
+
       // Get invoice data
       final invoice = widget.invoice ?? _currentInvoice;
       if (invoice == null) {
@@ -173,6 +479,7 @@ import '../bankmanagement/banknames.dart';
       if (_selectedCustomerId == null) {
         throw Exception("No customer selected");
       }
+
       final selectedCustomer = customerProvider.customers.firstWhere(
               (customer) => customer.id == _selectedCustomerId,
           orElse: () => Customer( // Add orElse to handle missing customer
@@ -182,7 +489,8 @@ import '../bankmanagement/banknames.dart';
               address: ''
           )
       );
-      // // Get current date and time
+
+      // Get current date and time
       DateTime invoiceDate;
       if (widget.invoice != null) {
         invoiceDate = DateTime.parse(widget.invoice!['createdAt']);
@@ -205,8 +513,12 @@ import '../bankmanagement/banknames.dart';
 
       final String formattedDate = '${invoiceDate.day}/${invoiceDate.month}/${invoiceDate.year}';
       final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
-      // Get the remaining balance from the ledger
-      double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+
+      // Get the remaining balance from the ledger (excluding current invoice)
+      double remainingBalance = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
+
+      // Calculate the new balance (previous balance + current invoice amount)
+      double newBalance = remainingBalance + grandTotal;
 
       // Load the image asset for the logo
       final ByteData bytes = await rootBundle.load('assets/images/logo.png');
@@ -238,7 +550,7 @@ import '../bankmanagement/banknames.dart';
         descriptionImages.add(image);
       }
 
-      // Pre-generate images for all item namess
+      // Pre-generate images for all item names
       List<pw.MemoryImage> itemnameImages = [];
       for (var row in _invoiceRows) {
         final image = await _createTextImage(row['itemName']);
@@ -266,35 +578,35 @@ import '../bankmanagement/banknames.dart';
                   children: [
                     pw.Image(image, width: 80, height: 80), // Adjust logo size
                     pw.Column(
-                      children: [
-                        pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
-                        pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
-                      ]
+                        children: [
+                          pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
+                          pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
+                        ]
                     ),
                     pw.Column(
-                     children: [
-                       pw.Text(
-                         'Invoice',
-                         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                       ),
-                       pw.Text(
-                         'Zulfiqar Ahmad: ',
-                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                       ),
-                       pw.Text(
-                         '0300-6316202',
-                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                       ),
-                       pw.Text(
-                         'Muhammad Irfan: ',
-                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                       ),
-                       pw.Text(
-                         '0300-8167446',
-                         style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                       ),
-                     ]
-                   )
+                        children: [
+                          pw.Text(
+                            'Invoice',
+                            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            'Zulfiqar Ahmad: ',
+                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            '0300-6316202',
+                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            'Muhammad Irfan: ',
+                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            '0300-8167446',
+                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          ),
+                        ]
+                    )
                   ],
                 ),
                 pw.Divider(),
@@ -304,8 +616,6 @@ import '../bankmanagement/banknames.dart';
                 pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
                 pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
                 pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
-                // pw.Text('InvoiceId: $_invoiceId', style: const pw.TextStyle(fontSize: 12)),
-                // In _generatePDFBytes method, add this somewhere in the header section
                 pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
 
                 pw.SizedBox(height: 10),
@@ -340,6 +650,13 @@ import '../bankmanagement/banknames.dart';
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
+                    pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
                     pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
                     pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                   ],
@@ -351,7 +668,6 @@ import '../bankmanagement/banknames.dart';
                     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                   ],
                 ),
-                // In your _generatePDFBytes method, add this after the discount row
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
@@ -362,28 +678,18 @@ import '../bankmanagement/banknames.dart';
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Invoice Amount:', style:  pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-                // Payment Information
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Amount Paid:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text('New Balance:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-                pw.SizedBox(height: 20),
 
-                // Footer Section (Remaining Balance)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
                 pw.SizedBox(height: 60),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.end,
@@ -392,7 +698,7 @@ import '../bankmanagement/banknames.dart';
                   ],
                 ),
 
-                // Footer Sectiondasd
+                // Footer Section
                 pw.Spacer(), // Push footer to the bottom of the page
                 pw.Divider(),
                 pw.Row(
@@ -499,22 +805,79 @@ import '../bankmanagement/banknames.dart';
       return pw.MemoryImage(buffer);
     }
 
-    Future<double> _getRemainingBalance(String customerId) async {
+    // Future<double> _getRemainingBalance(String customerId) async {
+    //   try {
+    //     double invoiceBalance = 0.0;
+    //     double filledBalance = 0.0;
+    //
+    //     // Fetch from 'ledger' (invoice balance)
+    //     final ledgerRef = _db.child('ledger').child(customerId);
+    //     final ledgerSnapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).once();
+    //     if (ledgerSnapshot.snapshot.exists) {
+    //       final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+    //       if (ledgerData != null) {
+    //         final lastEntryKey = ledgerData.keys.first;
+    //         final lastEntry = ledgerData[lastEntryKey] as Map<dynamic, dynamic>?;
+    //         if (lastEntry != null) {
+    //           final dynamic balanceValue = lastEntry['remainingBalance'];
+    //           invoiceBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+    //         }
+    //       }
+    //     }
+    //
+    //     // Fetch from 'filledledger' (filled balance)
+    //     final filledLedgerRef = _db.child('filledledger').child(customerId);
+    //     final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+    //     if (filledSnapshot.snapshot.exists) {
+    //       final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+    //       if (filledData != null) {
+    //         final lastEntryKey = filledData.keys.first;
+    //         final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
+    //         if (lastEntry != null) {
+    //           final dynamic balanceValue = lastEntry['remainingBalance'];
+    //           filledBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+    //         }
+    //       }
+    //     }
+    //
+    //     return invoiceBalance + filledBalance;
+    //   } catch (e) {
+    //     print("Error fetching remaining balance: $e");
+    //     return 0.0;
+    //   }
+    // }
+
+    Future<double> _getRemainingBalance(String customerId, {bool excludeCurrentInvoice = false}) async {
       try {
         double invoiceBalance = 0.0;
         double filledBalance = 0.0;
 
         // Fetch from 'ledger' (invoice balance)
         final ledgerRef = _db.child('ledger').child(customerId);
-        final ledgerSnapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).once();
-        if (ledgerSnapshot.snapshot.exists) {
-          final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+        final ledgerQuery = ledgerRef.orderByChild('createdAt');
+
+        final ledgerSnapshot = await ledgerQuery.get();
+
+        if (ledgerSnapshot.exists) {
+          final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
           if (ledgerData != null) {
-            final lastEntryKey = ledgerData.keys.first;
-            final lastEntry = ledgerData[lastEntryKey] as Map<dynamic, dynamic>?;
-            if (lastEntry != null) {
-              final dynamic balanceValue = lastEntry['remainingBalance'];
-              invoiceBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+            // Convert to list and sort by date
+            final entries = ledgerData.entries.toList()
+              ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
+
+            // Find the balance before the current invoice
+            for (var entry in entries) {
+              final entryData = entry.value as Map<dynamic, dynamic>;
+              if (excludeCurrentInvoice &&
+                  entryData['invoiceNumber'] == _invoiceId) {
+                continue; // Skip the current invoice entry
+              }
+
+              final dynamic balanceValue = entryData['remainingBalance'];
+              invoiceBalance = (balanceValue is int)
+                  ? balanceValue.toDouble()
+                  : (balanceValue as double? ?? 0.0);
+              break; // We only need the most recent balance before current invoice
             }
           }
         }
@@ -529,7 +892,9 @@ import '../bankmanagement/banknames.dart';
             final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
             if (lastEntry != null) {
               final dynamic balanceValue = lastEntry['remainingBalance'];
-              filledBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+              filledBalance = (balanceValue is int)
+                  ? balanceValue.toDouble()
+                  : (balanceValue as double? ?? 0.0);
             }
           }
         }
@@ -686,8 +1051,6 @@ import '../bankmanagement/banknames.dart';
       );
     }
 
-
-
     void _showFullScreenImage(Uint8List imageBytes) {
       showDialog(
         context: context,
@@ -704,7 +1067,6 @@ import '../bankmanagement/banknames.dart';
         ),
       );
     }
-
 
     double _parseToDouble(dynamic value) {
       if (value is int) {
@@ -733,7 +1095,6 @@ import '../bankmanagement/banknames.dart';
         return DateTime.now();
       }
     }
-
 
     Future<void> _showPaymentDetails(Map<String, dynamic> invoice) async {
       final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
@@ -960,7 +1321,6 @@ import '../bankmanagement/banknames.dart';
       // Print the PDF
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
-
 
     Future<Uint8List?> _pickImage(BuildContext context) async {
       final ImagePicker _picker = ImagePicker();
