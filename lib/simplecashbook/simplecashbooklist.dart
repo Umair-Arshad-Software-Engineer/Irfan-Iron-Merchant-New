@@ -595,8 +595,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     );
   }
 
-// Updated _showPaymentDialog method
-  // Updated _showPaymentDialog method with bank transaction type selection
 
   Future<void> _showPaymentDialog(CashbookEntry entry) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
