@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +14,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:ui' as ui;
+import '../Provider/customerprovider.dart';
 import '../Provider/lanprovider.dart';
 import '../bankmanagement/banknames.dart';
 import 'simplecashbookform.dart';
@@ -43,6 +47,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
   List<Map<String, dynamic>> _cachedBanks = [];
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
+  String _selectedLedgerType = 'ledger'; // Default to 'ledger'
+
 // Add this method to fetch banks
   Future<void> _fetchBanks() async {
     setState(() => _isLoadingBanks = true);
@@ -592,20 +598,27 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     );
   }
 
+
   Future<void> _showPaymentDialog(CashbookEntry entry) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    String? _selectedCustomerId;
+    String? _selectedCustomerName;
+    final CustomerProvider customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+
     String? selectedPaymentMethod;
-    String? selectedBankTransactionType; // New field for bank transaction type
     final TextEditingController _amountController =
     TextEditingController(text: entry.amount.toString());
     final TextEditingController _descriptionController =
     TextEditingController(text: entry.description);
+    final TextEditingController _referenceController = TextEditingController();
     DateTime _selectedDate = DateTime.now();
+    Uint8List? _imageBytes;
 
     // Reset cheque fields
     _chequeNumberController.clear();
     _selectedChequeDate = null;
     _selectedChequeBank = null;
+    _selectedBank = null;
 
     await showDialog(
       context: context,
@@ -620,6 +633,46 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    DropdownButton<String>(
+                      value: _selectedLedgerType,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'ledger',
+                          child: Text(languageProvider.isEnglish ? 'Ledger' : 'لیجر'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'filledledger',
+                          child: Text(languageProvider.isEnglish ? 'Filled Ledger' : 'فلڈ لیجر'),
+                        ),
+                      ],
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _selectedLedgerType = newValue;
+                          });
+                        }
+                      },
+                    ),
+                    // Add customer selection widget to your dialog
+                    ListTile(
+                      title: Text(_selectedCustomerName ?? 'Select Customer'),
+                      trailing: const Icon(Icons.arrow_drop_down),
+                      onTap: () async {
+                        await customerProvider.fetchCustomers();
+                        final customer = await showDialog<Customer>(
+                          context: context,
+                          builder: (context) => CustomerSelectionDialog(
+                            customers: customerProvider.customers,
+                          ),
+                        );
+                        if (customer != null) {
+                          setState(() {
+                            _selectedCustomerId = customer.id;
+                            _selectedCustomerName = customer.name;
+                          });
+                        }
+                      },
+                    ),
                     // Payment Date
                     ListTile(
                       title: Text(
@@ -639,6 +692,17 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                       },
                     ),
 
+                    // Reference Number
+                    TextField(
+                      controller: _referenceController,
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish
+                            ? 'Reference Number'
+                            : 'ریفرنس نمبر',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+
                     // Payment Method
                     DropdownButtonFormField<String>(
                       value: selectedPaymentMethod,
@@ -648,6 +712,10 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                           child: Text(languageProvider.isEnglish ? 'Cash' : 'نقد'),
                         ),
                         DropdownMenuItem(
+                          value: 'Online',
+                          child: Text(languageProvider.isEnglish ? 'Online Transfer' : 'آن لائن ٹرانسفر'),
+                        ),
+                        DropdownMenuItem(
                           value: 'Bank',
                           child: Text(languageProvider.isEnglish ? 'Bank Transfer' : 'بینک ٹرانسفر'),
                         ),
@@ -655,13 +723,13 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                           value: 'Cheque',
                           child: Text(languageProvider.isEnglish ? 'Cheque' : 'چیک'),
                         ),
+                        DropdownMenuItem(
+                          value: 'Slip',
+                          child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+                        ),
                       ],
                       onChanged: (value) {
-                        setState(() {
-                          selectedPaymentMethod = value;
-                          // Reset bank transaction type when payment method changes
-                          selectedBankTransactionType = null;
-                        });
+                        setState(() => selectedPaymentMethod = value);
                       },
                       decoration: InputDecoration(
                         labelText: languageProvider.isEnglish
@@ -671,61 +739,31 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                       ),
                     ),
 
-                    // Bank Transaction Type - Only show for Bank Transfer
-                    if (selectedPaymentMethod == 'Bank') ...[
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: selectedBankTransactionType,
-                        items: [
-                          DropdownMenuItem(
-                            value: 'cash_in',
-                            child: Row(
-                              children: [
-                                Icon(Icons.arrow_downward, color: Colors.green),
-                                const SizedBox(width: 8),
-                                Text(languageProvider.isEnglish
-                                    ? 'Deposit to Bank (Cash In)'
-                                    : 'بینک میں جمع کریں (کیش ان)'),
-                              ],
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: 'cash_out',
-                            child: Row(
-                              children: [
-                                Icon(Icons.arrow_upward, color: Colors.red),
-                                const SizedBox(width: 8),
-                                Text(languageProvider.isEnglish
-                                    ? 'Withdraw from Bank (Cash Out)'
-                                    : 'بینک سے نکالیں (کیش آؤٹ)'),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) => setState(() => selectedBankTransactionType = value),
-                        decoration: InputDecoration(
-                          labelText: languageProvider.isEnglish
-                              ? 'Transaction Type'
-                              : 'ٹرانزیکشن کی قسم',
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-
-                    // Bank Selection for Bank Transfer
-                    if (selectedPaymentMethod == 'Bank') ...[
+                    // Bank Selection for Bank Transfer or Cheque
+                    // if (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque') ...[
+                    if (selectedPaymentMethod != null &&
+                        (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque')) ...[
                       const SizedBox(height: 16),
                       Card(
                         child: ListTile(
-                          title: Text(_selectedBank?['name'] ??
-                              (languageProvider.isEnglish
-                                  ? 'Select Bank'
-                                  : 'بینک منتخب کریں')),
+                          title: Text(
+                                (selectedPaymentMethod == 'Bank' && _selectedBank?['name'] != null)
+                                ? _selectedBank!['name']
+                                    : (selectedPaymentMethod == 'Cheque' && _selectedChequeBank?['name'] != null)
+                                ? _selectedChequeBank!['name']
+                                    : (languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+                                ),
                           trailing: const Icon(Icons.arrow_drop_down),
                           onTap: () async {
                             final selectedBank = await _selectBank(context);
                             if (selectedBank != null) {
-                              setState(() => _selectedBank = selectedBank);
+                              setState(() {
+                                if (selectedPaymentMethod == 'Bank') {
+                                  _selectedBank = selectedBank;
+                                } else {
+                                  _selectedChequeBank = selectedBank;
+                                }
+                              });
                             }
                           },
                         ),
@@ -733,26 +771,9 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                     ],
 
                     // Cheque Details for Cheque Payment
-                    if (selectedPaymentMethod == 'Cheque') ...[
-                      const SizedBox(height: 16),
-                      // Cheque Bank Selection
-                      Card(
-                        child: ListTile(
-                          title: Text(_selectedChequeBank?['name'] ??
-                              (languageProvider.isEnglish
-                                  ? 'Select Bank for Cheque'
-                                  : 'چیک کا بینک منتخب کریں')),
-                          trailing: const Icon(Icons.arrow_drop_down),
-                          onTap: () async {
-                            final selectedBank = await _selectBank(context);
-                            if (selectedBank != null) {
-                              setState(() => _selectedChequeBank = selectedBank);
-                            }
-                          },
-                        ),
-                      ),
+                    // if (selectedPaymentMethod == 'Cheque') ...[
+                    if (selectedPaymentMethod != null && selectedPaymentMethod == 'Cheque') ...[
                       const SizedBox(height: 8),
-                      // Cheque Number
                       TextField(
                         controller: _chequeNumberController,
                         decoration: InputDecoration(
@@ -763,7 +784,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // Cheque Date
                       ListTile(
                         title: Text(
                           _selectedChequeDate == null
@@ -811,6 +831,23 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
+
+                    // Image Upload
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                        if (image != null) {
+                          final bytes = await image.readAsBytes();
+                          setState(() => _imageBytes = bytes);
+                        }
+                      },
+                      child: Text(languageProvider.isEnglish
+                          ? 'Upload Receipt'
+                          : 'رسید اپ لوڈ کریں'),
+                    ),
+                    if (_imageBytes != null)
+                      Image.memory(_imageBytes!, height: 100),
                   ],
                 ),
               ),
@@ -831,6 +868,13 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                       return;
                     }
 
+                    if (_selectedCustomerId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a customer')),
+                      );
+                      return;
+                    }
+
                     if (selectedPaymentMethod == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(languageProvider.isEnglish
@@ -840,24 +884,14 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                       return;
                     }
 
-                    // Validate bank selection and transaction type for Bank Transfer
-                    if (selectedPaymentMethod == 'Bank') {
-                      if (_selectedBank == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(languageProvider.isEnglish
-                              ? 'Please select a bank'
-                              : 'براہ کرم بینک منتخب کریں')),
-                        );
-                        return;
-                      }
-                      if (selectedBankTransactionType == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(languageProvider.isEnglish
-                              ? 'Please select transaction type'
-                              : 'براہ کرم ٹرانزیکشن کی قسم منتخب کریں')),
-                        );
-                        return;
-                      }
+                    // Validate bank selection for bank transfer
+                    if (selectedPaymentMethod == 'Bank' && _selectedBank == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(languageProvider.isEnglish
+                            ? 'Please select a bank'
+                            : 'براہ کرم بینک منتخب کریں')),
+                      );
+                      return;
                     }
 
                     // Validate cheque details
@@ -896,20 +930,21 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         'paidAmount': amount,
                         'paymentDate': _selectedDate.toIso8601String(),
                         'description': _descriptionController.text,
+                        'referenceNumber': _referenceController.text,
+                        if (_imageBytes != null) 'image': base64Encode(_imageBytes!),
                       };
 
-                      // Handle Bank Transfer with user-selected transaction type
+                      // Handle Bank Transfer
                       if (selectedPaymentMethod == 'Bank') {
                         updateData['bankId'] = _selectedBank!['id'];
                         updateData['bankName'] = _selectedBank!['name'];
-                        updateData['bankTransactionType'] = selectedBankTransactionType!;
 
-                        // Record bank transaction with user-selected type
+                        // Record bank transaction
                         await _recordBankTransaction(
                           bankId: _selectedBank!['id'],
                           amount: amount,
                           description: _descriptionController.text,
-                          type: selectedBankTransactionType!, // Use the selected type
+                          type: 'cash_out', // Since it's a payment
                           date: _selectedDate,
                         );
                       }
@@ -934,6 +969,24 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
 
                       await widget.databaseRef.child(entry.id!).update(updateData);
 
+                      // Update ledger (similar to invoice payment)
+                      await _updateLedger(
+                        customerId: _selectedCustomerId!,
+                        amount: amount,
+                        paymentMethod: selectedPaymentMethod!,
+                        referenceNumber: _referenceController.text,
+                        description: _descriptionController.text,
+                        date: _selectedDate,
+                        bankId: _selectedBank?['id'] ?? _selectedChequeBank?['id'],
+                        bankName: _selectedBank?['name'] ?? _selectedChequeBank?['name'],
+                        chequeNumber: selectedPaymentMethod == 'Cheque'
+                            ? _chequeNumberController.text
+                            : null,
+                        chequeDate: selectedPaymentMethod == 'Cheque'
+                            ? _selectedChequeDate
+                            : null,
+                      );
+
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text(languageProvider.isEnglish
@@ -954,7 +1007,9 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
 
                     Navigator.pop(context);
                   },
-                  child: Text(languageProvider.isEnglish ? 'Record Payment' : 'ادائیگی ریکارڈ کریں'),
+                  child: Text(languageProvider.isEnglish
+                      ? 'Record Payment'
+                      : 'ادائیگی ریکارڈ کریں'),
                 ),
               ],
             );
@@ -963,7 +1018,261 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       },
     );
   }
-// Updated _recordPayment method
+  Future<void> _updateLedger({
+    required String customerId,
+    required double amount,
+    required String paymentMethod,
+    required String referenceNumber,
+    required String description,
+    required DateTime date,
+    String? bankId,
+    String? bankName,
+    String? chequeNumber,
+    DateTime? chequeDate,
+  }) async {
+    try {
+      // Use the selected ledger type
+      final ledgerRef = FirebaseDatabase.instance.ref().child('$_selectedLedgerType/$customerId');
+
+      // Get last balance for this customer
+      final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
+
+      double lastRemainingBalance = 0.0;
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<dynamic, dynamic>;
+        final lastTransaction = data.values.first;
+        lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+      }
+
+      // Calculate new balance
+      final isDebit = paymentMethod == 'cash_out'; // Assuming cash_out is debit
+      final newRemainingBalance = isDebit
+          ? lastRemainingBalance + amount
+          : lastRemainingBalance - amount;
+
+      // Ledger data to be saved
+      final ledgerData = {
+        'referenceNumber': referenceNumber,
+        'description': description,
+        'debitAmount': amount,
+        'paymentMethod': paymentMethod,
+        'remainingBalance': newRemainingBalance,
+        'createdAt': date.toIso8601String(),
+        if (bankId != null) 'bankId': bankId,
+        if (bankName != null) 'bankName': bankName,
+        if (chequeNumber != null) 'chequeNumber': chequeNumber,
+        if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
+      };
+
+      await ledgerRef.push().set(ledgerData);
+
+      // Optionally, you can update both ledgers if needed
+      if (_selectedLedgerType == 'ledger') {
+        await FirebaseDatabase.instance.ref()
+            .child('filledledger/$customerId')
+            .push()
+            .set({
+          'amount': amount,
+          'remainingBalance': newRemainingBalance,
+          'createdAt': date.toIso8601String(),
+          'description': description,
+        });
+      }
+    } catch (e) {
+      print('Error updating ledger: $e');
+      rethrow;
+    }
+  }
+  // Future<void> _updateLedger({
+  //   required String customerId, // Add customerId parameter
+  //   required double amount,
+  //   required String paymentMethod,
+  //   required String referenceNumber,
+  //   required String description,
+  //   required DateTime date,
+  //   String? bankId,
+  //   String? bankName,
+  //   String? chequeNumber,
+  //   DateTime? chequeDate,
+  // })
+  // async {
+  //   try {
+  //     // Use the customerId to create a ledger path under the customer
+  //     final ledgerRef = FirebaseDatabase.instance.ref().child('ledger/$customerId');
+  //
+  //     // Get last balance for this customer
+  //     final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
+  //
+  //     double lastRemainingBalance = 0.0;
+  //     if (snapshot.exists) {
+  //       final data = snapshot.value as Map<dynamic, dynamic>;
+  //       final lastTransaction = data.values.first;
+  //       lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+  //     }
+  //
+  //     // Calculate new balance
+  //     final newRemainingBalance = lastRemainingBalance + (amount * (paymentMethod == 'cash_in' ? 1 : -1));
+  //
+  //     // Ledger data to be saved
+  //     final ledgerData = {
+  //       'referenceNumber': referenceNumber,
+  //       'description': description,
+  //       'debitAmount': amount,
+  //       'paymentMethod': paymentMethod,
+  //       'remainingBalance': newRemainingBalance,
+  //       'createdAt': date.toIso8601String(),
+  //       if (bankId != null) 'bankId': bankId,
+  //       if (bankName != null) 'bankName': bankName,
+  //       if (chequeNumber != null) 'chequeNumber': chequeNumber,
+  //       if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
+  //     };
+  //
+  //     await ledgerRef.push().set(ledgerData);
+  //
+  //     // Also update filledledger (if needed)
+  //     await FirebaseDatabase.instance.ref()
+  //         .child('filledledger/$customerId')
+  //         .push()
+  //         .set({
+  //       'amount': amount,
+  //       'remainingBalance': newRemainingBalance,
+  //       'createdAt': date.toIso8601String(),
+  //       'description': description,
+  //     });
+  //   } catch (e) {
+  //     print('Error updating ledger: $e');
+  //     rethrow;
+  //   }
+  // }
+  // Future<void> _updateLedger({
+  //   required String customerId,
+  //   required double amount,
+  //   required String paymentMethod,
+  //   required String referenceNumber,
+  //   required String description,
+  //   required DateTime date,
+  //   String? bankId,
+  //   String? bankName,
+  //   String? chequeNumber,
+  //   DateTime? chequeDate,
+  // })
+  // async {
+  //   try {
+  //     final ledgerRef = FirebaseDatabase.instance.ref().child('ledger/$customerId');
+  //
+  //     // Get last balance for this customer
+  //     final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
+  //
+  //     double lastRemainingBalance = 0.0;
+  //     if (snapshot.exists) {
+  //       final data = snapshot.value as Map<dynamic, dynamic>;
+  //       final lastTransaction = data.values.first;
+  //       lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+  //     }
+  //
+  //     // Calculate new balance - only debitAmount affects the balance
+  //     final isDebit = paymentMethod == 'cash_out'; // Only cash_out transactions are debits
+  //     final newRemainingBalance = isDebit
+  //         ? lastRemainingBalance + amount
+  //         : lastRemainingBalance;
+  //
+  //     // Ledger data to be saved
+  //     final ledgerData = {
+  //       'referenceNumber': referenceNumber,
+  //       'description': description,
+  //       if (isDebit) 'debitAmount': amount, // Only include debitAmount for cash_out
+  //       'paymentMethod': paymentMethod,
+  //       'remainingBalance': newRemainingBalance,
+  //       'createdAt': date.toIso8601String(),
+  //       if (bankId != null) 'bankId': bankId,
+  //       if (bankName != null) 'bankName': bankName,
+  //       if (chequeNumber != null) 'chequeNumber': chequeNumber,
+  //       if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
+  //     };
+  //
+  //     await ledgerRef.push().set(ledgerData);
+  //
+  //     // Also update filledledger (if needed)
+  //     await FirebaseDatabase.instance.ref()
+  //         .child('filledledger/$customerId')
+  //         .push()
+  //         .set({
+  //       if (isDebit) 'debitAmount': amount,
+  //       'remainingBalance': newRemainingBalance,
+  //       'createdAt': date.toIso8601String(),
+  //       'description': description,
+  //     });
+  //   } catch (e) {
+  //     print('Error updating ledger: $e');
+  //     rethrow;
+  //   }
+  // }
+  // Future<void> _updateLedger({
+  //   required String customerId,
+  //   required double amount,
+  //   required String paymentMethod,
+  //   required String referenceNumber,
+  //   required String description,
+  //   required DateTime date,
+  //   String? bankId,
+  //   String? bankName,
+  //   String? chequeNumber,
+  //   DateTime? chequeDate,
+  // })
+  // async {
+  //   try {
+  //     final ledgerRef = FirebaseDatabase.instance.ref().child('ledger/$customerId');
+  //
+  //     // Get last balance for this customer
+  //     final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
+  //
+  //     double lastRemainingBalance = 0.0;
+  //     if (snapshot.exists) {
+  //       final data = snapshot.value as Map<dynamic, dynamic>;
+  //       final lastTransaction = data.values.first;
+  //       lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+  //     }
+  //
+  //     // Calculate new balance
+  //     final isDebit = paymentMethod == 'cash_out'; // Assuming cash_out is debit
+  //     final newRemainingBalance = isDebit
+  //         ? lastRemainingBalance + amount
+  //         : lastRemainingBalance - amount;
+  //
+  //     // Ledger data to be saved
+  //     final ledgerData = {
+  //       'referenceNumber': referenceNumber,
+  //       'description': description,
+  //       if (isDebit) 'debitAmount': amount, // Only include debit amount for cash_out
+  //       if (!isDebit) 'creditAmount': amount, // Include credit amount for other cases
+  //       'paymentMethod': paymentMethod,
+  //       'remainingBalance': newRemainingBalance,
+  //       'createdAt': date.toIso8601String(),
+  //       if (bankId != null) 'bankId': bankId,
+  //       if (bankName != null) 'bankName': bankName,
+  //       if (chequeNumber != null) 'chequeNumber': chequeNumber,
+  //       if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
+  //     };
+  //
+  //     await ledgerRef.push().set(ledgerData);
+  //
+  //     // Also update filledledger (if needed)
+  //     await FirebaseDatabase.instance.ref()
+  //         .child('filledledger/$customerId')
+  //         .push()
+  //         .set({
+  //       if (isDebit) 'debitAmount': amount,
+  //       if (!isDebit) 'creditAmount': amount,
+  //       'remainingBalance': newRemainingBalance,
+  //       'createdAt': date.toIso8601String(),
+  //       'description': description,
+  //     });
+  //   } catch (e) {
+  //     print('Error updating ledger: $e');
+  //     rethrow;
+  //   }
+  // }
+
   Future<void> _recordBankTransaction({
     required String bankId,
     required double amount,
@@ -1099,6 +1408,122 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           editingEntry: entry,
         ),
       ),
+    );
+  }
+}
+
+class CustomerSelectionDialog extends StatefulWidget {
+  final List<Customer> customers;
+
+  const CustomerSelectionDialog({required this.customers});
+
+  @override
+  _CustomerSelectionDialogState createState() => _CustomerSelectionDialogState();
+}
+
+class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Customer> _filteredCustomers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredCustomers = widget.customers;
+    _searchController.addListener(_filterCustomers);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filterCustomers() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredCustomers = widget.customers.where((customer) {
+        return customer.name.toLowerCase().contains(query) ||
+            customer.phone.toLowerCase().contains(query);
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Customer'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400, // Fixed height for better UX
+        child: Column(
+          children: [
+            // Search TextField
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: 'Search Customer',
+                hintText: 'Enter name or phone number',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Customer List
+            Expanded(
+              child: widget.customers.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : _filteredCustomers.isEmpty
+                  ? const Center(
+                child: Text(
+                  'No customers found',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                  ),
+                ),
+              )
+                  : ListView.builder(
+                shrinkWrap: true,
+                itemCount: _filteredCustomers.length,
+                itemBuilder: (context, index) {
+                  final customer = _filteredCustomers[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 2),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue,
+                        child: Text(
+                          customer.name.isNotEmpty
+                              ? customer.name[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        customer.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(customer.phone),
+                      onTap: () => Navigator.pop(context, customer),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }
