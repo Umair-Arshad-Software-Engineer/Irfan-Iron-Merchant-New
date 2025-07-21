@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +17,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 
 class InvoiceListPage extends StatefulWidget {
@@ -34,6 +39,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   final ScrollController _scrollController = ScrollController();
   // Flag to prevent multiple requests
   bool _isLoadingMore = false;
+  final TextEditingController _dateController = TextEditingController();
 
   @override
   void initState() {
@@ -431,19 +437,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // IconButton(
-                        //   icon: Icon(Icons.edit),
-                        //   onPressed: () => _showEditPaymentDialog(
-                        //     context,
-                        //     invoice['id'],
-                        //     payment['key'], // Ensure the payment key is passed
-                        //     payment['method'],
-                        //     payment['amount'],
-                        //     payment['description'],
-                        //     imageBytes,
-                        //     _pickImage, // Pass the _pickImage function
-                        //   ),
-                        // ),
                         IconButton(
                           icon: const Icon(Icons.delete),
                           onPressed: () => _showDeletePaymentConfirmationDialog(
@@ -1015,6 +1008,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                         paymentDate: _selectedPaymentDate, // Pass selected date
                         bankId: _selectedBankId,
                         bankName: _selectedBankName,
+                        createdAt: _dateController.text,
                       );
                       Navigator.of(context).pop();
                     } else {
@@ -1040,6 +1034,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       },
     );
   }
+
+
 }
 
 Future<void> _showDeletePaymentConfirmationDialog(
@@ -1115,6 +1111,131 @@ class InvoiceList extends StatelessWidget {
 
   });
 
+
+  Future<void> _captureAndShareInvoice(GlobalKey key,BuildContext context) async {
+    try {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // Add a small delay to ensure the widget is painted
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Check if the widget is still mounted
+      if (!context.mounted) return;
+
+      // Verify the boundary exists
+      final renderObject = key.currentContext?.findRenderObject();
+      if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
+        throw Exception('Could not find render boundary');
+      }
+
+
+      final boundary = renderObject as RenderRepaintBoundary;
+
+      // Try capturing multiple times if needed
+      ui.Image? image;
+      for (int i = 0; i < 3; i++) {
+        try {
+          image = await boundary.toImage(pixelRatio: 3.0);
+          break;
+        } catch (e) {
+          if (i == 2) rethrow;
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+
+      final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
+      final pngBytes = byteData!.buffer.asUint8List();
+
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Share the file
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(pngBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: languageProvider.isEnglish
+            ? 'Invoice Details'
+            : 'انوائس کی تفصیلات',
+        subject: languageProvider.isEnglish
+            ? 'Invoice from my app'
+            : 'میری ایپ سے انوائس',
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<double> _getCustomerRemainingBalance(String customerId) async {
+    try {
+      double totalBalance = 0.0;
+
+      // Fetch from 'ledger' (invoice balance)
+      final ledgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
+      final ledgerQuery = ledgerRef.orderByChild('createdAt');
+      final ledgerSnapshot = await ledgerQuery.get();
+
+      if (ledgerSnapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
+        if (ledgerData != null) {
+          // Convert to list and sort by date (newest first)
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
+
+          // Find the most recent balance
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final dynamic balanceValue = entryData['remainingBalance'];
+            totalBalance = (balanceValue is int)
+                ? balanceValue.toDouble()
+                : (balanceValue as double? ?? 0.0);
+            break; // We only need the most recent balance
+          }
+        }
+      }
+
+      // Fetch from 'filledledger' (filled balance)
+      final filledLedgerRef = FirebaseDatabase.instance.ref('filledledger').child(customerId);
+      final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+
+      if (filledSnapshot.snapshot.exists) {
+        final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+        if (filledData != null) {
+          final lastEntryKey = filledData.keys.first;
+          final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
+          if (lastEntry != null) {
+            final dynamic balanceValue = lastEntry['remainingBalance'];
+            totalBalance += (balanceValue is int)
+                ? balanceValue.toDouble()
+                : (balanceValue as double? ?? 0.0);
+          }
+        }
+      }
+
+      return totalBalance;
+    } catch (e) {
+      print("Error fetching remaining balance: $e");
+      return 0.0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
 
@@ -1136,91 +1257,128 @@ class InvoiceList extends StatelessWidget {
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
             final invoice = Map<String, dynamic>.from(filteredInvoice[index]);
+            final screenshotKey = GlobalKey();
 
             // Instead of casting directly, use:
             double grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
             double debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
             final remainingAmount = (grandTotal - debitAmount).toDouble();
 
-            return Card(
-              margin: EdgeInsets.symmetric(
-                horizontal: isWideScreen ? 16.0 : 8.0,
-                vertical: 4.0,
-              ),
-              elevation: 2,
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.teal,
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(color: Colors.white),
+            return FutureBuilder(
+              future: _getCustomerRemainingBalance(invoice['customerId']),
+              builder: (context,snapshot){
+                double customerBalance = snapshot.hasData ? snapshot.data! : 0.0;
+
+                return RepaintBoundary(
+                  key: screenshotKey,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: constraints.maxWidth,
+                      minHeight: 100, // Adjust as needed
+                    ),
+                    child: Card(
+                      margin: EdgeInsets.symmetric(
+                        horizontal: isWideScreen ? 16.0 : 8.0,
+                        vertical: 4.0,
+                      ),
+                      elevation: 2,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.teal,
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.all(8),
+                        title: Text(
+                          '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 18 : 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(
+                              '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 16 : 14,
+                              ),
+                            ),
+                            Text(
+                              '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 14 : 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            // Add this new Text widget to show the weight
+                            Text(
+                              '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 14 : 12,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                                  style: const TextStyle(
+                                    fontSize:12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.share, size: 20),
+                                  onPressed: (){
+                                    _captureAndShareInvoice(screenshotKey,context);
+                                  },
+                                  tooltip: languageProvider.isEnglish
+                                      ? 'Share invoice'
+                                      : 'انوائس شیئر کریں',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 16 : 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            // Text(
+                            //   '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
+                            //   style: TextStyle(
+                            //     fontSize: isWideScreen ? 14 : 12,
+                            //     color: Colors.red,
+                            //   ),
+                            // ),
+                            Text(
+                              '${languageProvider.isEnglish ? 'Balance: ' : 'بیلنس: '}${customerBalance.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 14 : 12,
+                                color: customerBalance >= 0 ? Colors.green : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        onTap: () => onInvoiceTap(invoice),
+                        onLongPress: () => onInvoiceLongPress(invoice),
+                      ),
+                    ),
                   ),
-                ),
-                contentPadding: const EdgeInsets.all(8),
-                title: Text(
-                  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                  style: TextStyle(
-                    fontSize: isWideScreen ? 18 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 16 : 14,
-                      ),
-                    ),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 14 : 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    // Add this new Text widget to show the weight
-                    Text(
-                      '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 14 : 12,
-                      ),
-                    ),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                      style: const TextStyle(
-                        fontSize:12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 16 : 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 14 : 12,
-                        color: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-                onTap: () => onInvoiceTap(invoice),
-                onLongPress: () => onInvoiceLongPress(invoice),
-              ),
+                );
+              },
             );
           },
         );
@@ -1243,6 +1401,78 @@ class SearchAndFilterSection extends StatelessWidget {
     required this.onClearDateFilter,
     required this.languageProvider,
   });
+
+  Future<void> _captureAndShareInvoice(GlobalKey key,BuildContext context) async {
+    try {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // Add a small delay to ensure the widget is painted
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Check if the widget is still mounted
+      if (!context.mounted) return;
+
+      // Verify the boundary exists
+      final renderObject = key.currentContext?.findRenderObject();
+      if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
+        throw Exception('Could not find render boundary');
+      }
+
+
+      final boundary = renderObject as RenderRepaintBoundary;
+
+      // Try capturing multiple times if needed
+      ui.Image? image;
+      for (int i = 0; i < 3; i++) {
+        try {
+          image = await boundary.toImage(pixelRatio: 3.0);
+          break;
+        } catch (e) {
+          if (i == 2) rethrow;
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+
+      final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
+      final pngBytes = byteData!.buffer.asUint8List();
+
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Share the file
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(pngBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: languageProvider.isEnglish
+            ? 'Invoice Details'
+            : 'انوائس کی تفصیلات',
+        subject: languageProvider.isEnglish
+            ? 'Invoice from my app'
+            : 'میری ایپ سے انوائس',
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {

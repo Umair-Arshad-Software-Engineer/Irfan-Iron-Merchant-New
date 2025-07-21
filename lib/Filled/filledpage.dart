@@ -159,6 +159,28 @@ class _filledpageState extends State<filledpage> {
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     // final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
     // Add null checks for customer selection
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+
+    // Get filled data
+    final filled = widget.filled ?? _currentFilled;
+    if (filled == null) {
+      throw Exception("No filled data available");
+    }
+
+
+
+    // Get payment details
+    double paidAmount = 0.0;
+    try {
+      final payments = await filledProvider.getFilledPayments(filled['filledNumber']);
+      paidAmount = payments.fold(0.0, (sum, payment) => sum + (_parseToDouble(payment['amount']) ?? 0.0));
+    } catch (e) {
+      print("Error fetching payments: $e");
+    }
+
+    double grandTotal = _calculateGrandTotal();
+    double remainingAmount = grandTotal - paidAmount;
+
     if (_selectedCustomerId == null) {
       throw Exception("No customer selected");
     }
@@ -172,9 +194,7 @@ class _filledpageState extends State<filledpage> {
         )
     );
     // // Get current date and time
-    // final DateTime now = DateTime.now();
-    // final String formattedDate = '${now.day}/${now.month}/${now.year}';
-    // final String formattedTime = '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+
     DateTime filledDate;
     if (widget.filled != null) {
       filledDate = DateTime.parse(widget.filled!['createdAt']);
@@ -198,8 +218,12 @@ class _filledpageState extends State<filledpage> {
     final String formattedDate = '${filledDate.day}/${filledDate.month}/${filledDate.year}';
     final String formattedTime = '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
     // Get the remaining balance from the ledger
-    double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+    // double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
+// Get the remaining balance from the ledger (excluding current filled)
+    double remainingBalance = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentFilled: true);
 
+    // Calculate the new balance (previous balance + current filled amount)
+    double newBalance = remainingBalance + grandTotal;
     // Load the image asset for the logo
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
     final buffer = bytes.buffer.asUint8List();
@@ -326,13 +350,45 @@ class _filledpageState extends State<filledpage> {
               pw.SizedBox(height: 10),
 
               // Totals Section
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
-                  pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                ],
-              ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
+              //     pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+              //     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+              //   ],
+              // ),
+              // // In your _generatePDFBytes method, add this after the discount row
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
+              //     pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              //     pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              //   ],
+              // ),
+              // pw.SizedBox(height: 20),
+              //
+              // // Footer Section (Remaining Balance)
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+              //     pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              //   ],
+              // ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -340,7 +396,6 @@ class _filledpageState extends State<filledpage> {
                   pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
-              // In your _generatePDFBytes method, add this after the discount row
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -351,20 +406,34 @@ class _filledpageState extends State<filledpage> {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Filled Amount:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                 ],
               ),
-              pw.SizedBox(height: 20),
-
-              // Footer Section (Remaining Balance)
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                  pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
+              // ✅ New Balance (Total of Filled + Previous Balance)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Total (Filled + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              // Add paid amount row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                ],
+              ),
+
               pw.SizedBox(height: 60),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
@@ -480,22 +549,38 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
-  Future<double> _getRemainingBalance(String customerId) async {
+  Future<double> _getRemainingBalance(String customerId, {bool excludeCurrentFilled = false}) async {
     try {
       double invoiceBalance = 0.0;
       double filledBalance = 0.0;
 
-      // Fetch from 'ledger' (filled balance)
+      // Fetch from 'ledger' (invoice balance)
       final ledgerRef = _db.child('ledger').child(customerId);
-      final ledgerSnapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).once();
-      if (ledgerSnapshot.snapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+      final ledgerQuery = ledgerRef.orderByChild('createdAt');
+
+      final ledgerSnapshot = await ledgerQuery.get();
+
+      if (ledgerSnapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
         if (ledgerData != null) {
-          final lastEntryKey = ledgerData.keys.first;
-          final lastEntry = ledgerData[lastEntryKey] as Map<dynamic, dynamic>?;
-          if (lastEntry != null) {
-            final dynamic balanceValue = lastEntry['remainingBalance'];
-            invoiceBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+          // Convert to list and sort by date
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
+
+          // Find the balance before the current invoice
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            if (excludeCurrentFilled &&
+                entryData['invoiceNumber'] == _filledId) {
+              continue; // Skip the current invoice entry
+            }
+
+
+            final dynamic balanceValue = entryData['remainingBalance'];
+            invoiceBalance = (balanceValue is int)
+                ? balanceValue.toDouble()
+                : (balanceValue as double? ?? 0.0);
+            break; // We only need the most recent balance before current invoice
           }
         }
       }
@@ -510,7 +595,9 @@ class _filledpageState extends State<filledpage> {
           final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
           if (lastEntry != null) {
             final dynamic balanceValue = lastEntry['remainingBalance'];
-            filledBalance = (balanceValue is int) ? balanceValue.toDouble() : (balanceValue as double? ?? 0.0);
+            filledBalance = (balanceValue is int)
+                ? balanceValue.toDouble()
+                : (balanceValue as double? ?? 0.0);
           }
         }
       }
@@ -521,6 +608,7 @@ class _filledpageState extends State<filledpage> {
       return 0.0;
     }
   }
+
 
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
@@ -1074,6 +1162,330 @@ class _filledpageState extends State<filledpage> {
     return selectedBank;
   }
 
+  // Future<void> _showFilledPaymentDialog(
+  //     Map<String, dynamic> filled,
+  //     FilledProvider filledProvider,
+  //     LanguageProvider languageProvider,
+  //     )
+  // async {
+  //   String? selectedPaymentMethod;
+  //   _paymentController.clear();
+  //   bool _isPaymentButtonPressed = false;
+  //   String? _description;
+  //   Uint8List? _imageBytes;
+  //   DateTime _selectedPaymentDate = DateTime.now();
+  //
+  //   // Add these controllers and variables for cheque payments
+  //   TextEditingController _chequeNumberController = TextEditingController();
+  //   DateTime? _selectedChequeDate;
+  //   String? _selectedChequeBankId;
+  //   String? _selectedChequeBankName;
+  //
+  //   await showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return StatefulBuilder(
+  //         builder: (context, setState) {
+  //           return AlertDialog(
+  //             title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'انوائس کی رقم ادا کریں'),
+  //             content: SingleChildScrollView(
+  //               child: Column(
+  //                 mainAxisSize: MainAxisSize.min,
+  //                 children: [
+  //                   // Payment date selection
+  //                   ListTile(
+  //                     title: Text(languageProvider.isEnglish
+  //                         ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
+  //                         : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
+  //                     trailing: const Icon(Icons.calendar_today),
+  //                     onTap: () async {
+  //                       final pickedDate = await showDatePicker(
+  //                         context: context,
+  //                         initialDate: _selectedPaymentDate,
+  //                         firstDate: DateTime(2000),
+  //                         lastDate: DateTime.now().add(const Duration(days: 365)),
+  //                       );
+  //                       if (pickedDate != null) {
+  //                         final pickedTime = await showTimePicker(
+  //                           context: context,
+  //                           initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
+  //                         );
+  //                         if (pickedTime != null) {
+  //                           setState(() {
+  //                             _selectedPaymentDate = DateTime(
+  //                               pickedDate.year,
+  //                               pickedDate.month,
+  //                               pickedDate.day,
+  //                               pickedTime.hour,
+  //                               pickedTime.minute,
+  //                             );
+  //                           });
+  //                         }
+  //                       }
+  //                     },
+  //                   ),
+  //
+  //                   // Payment method dropdown
+  //                   DropdownButtonFormField<String>(
+  //                     value: selectedPaymentMethod,
+  //                     items: [
+  //                       DropdownMenuItem(
+  //                         value: 'Cash',
+  //                         child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Online',
+  //                         child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Check',
+  //                         child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Bank',
+  //                         child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
+  //                       ),
+  //                       DropdownMenuItem(
+  //                         value: 'Slip',
+  //                         child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+  //                       ),
+  //
+  //                     ],
+  //                     onChanged: (value) {
+  //                       setState(() {
+  //                         selectedPaymentMethod = value;
+  //                       });
+  //                     },
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //
+  //                   // Cheque payment fields (only shown when Check is selected)
+  //                   if (selectedPaymentMethod == 'Check') ...[
+  //                     const SizedBox(height: 16),
+  //                     TextField(
+  //                       controller: _chequeNumberController,
+  //                       decoration: InputDecoration(
+  //                         labelText: languageProvider.isEnglish ? 'Cheque Number' : 'چیک نمبر',
+  //                         border: const OutlineInputBorder(),
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     ListTile(
+  //                       title: Text(
+  //                         _selectedChequeDate == null
+  //                             ? (languageProvider.isEnglish
+  //                             ? 'Select Cheque Date'
+  //                             : 'چیک کی تاریخ منتخب کریں')
+  //                             : DateFormat('yyyy-MM-dd').format(_selectedChequeDate!),
+  //                       ),
+  //                       trailing: const Icon(Icons.calendar_today),
+  //                       onTap: () async {
+  //                         final pickedDate = await showDatePicker(
+  //                           context: context,
+  //                           initialDate: DateTime.now(),
+  //                           firstDate: DateTime(2000),
+  //                           lastDate: DateTime(2100),
+  //                         );
+  //                         if (pickedDate != null) {
+  //                           setState(() => _selectedChequeDate = pickedDate);
+  //                         }
+  //                       },
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     Card(
+  //                       child: ListTile(
+  //                         title: Text(_selectedChequeBankName ??
+  //                             (languageProvider.isEnglish
+  //                                 ? 'Select Bank'
+  //                                 : 'بینک منتخب کریں')),
+  //                         trailing: const Icon(Icons.arrow_drop_down),
+  //                         onTap: () async {
+  //                           final selectedBank = await _selectBank(context);
+  //                           if (selectedBank != null) {
+  //                             setState(() {
+  //                               _selectedChequeBankId = selectedBank['id'];
+  //                               _selectedChequeBankName = selectedBank['name'];
+  //                             });
+  //                           }
+  //                         },
+  //                       ),
+  //                     ),
+  //                   ],
+  //
+  //                   // Bank payment fields (only shown when Bank is selected)
+  //                   if (selectedPaymentMethod == 'Bank') ...[
+  //                     const SizedBox(height: 16),
+  //                     Card(
+  //                       child: ListTile(
+  //                         title: Text(_selectedBankName ??
+  //                             (languageProvider.isEnglish
+  //                                 ? 'Select Bank'
+  //                                 : 'بینک منتخب کریں')),
+  //                         trailing: const Icon(Icons.arrow_drop_down),
+  //                         onTap: () async {
+  //                           final selectedBank = await _selectBank(context);
+  //                           if (selectedBank != null) {
+  //                             setState(() {
+  //                               _selectedBankId = selectedBank['id'];
+  //                               _selectedBankName = selectedBank['name'];
+  //                             });
+  //                           }
+  //                         },
+  //                       ),
+  //                     ),
+  //                   ],
+  //
+  //                   // Common fields for all payment methods
+  //                   const SizedBox(height: 16),
+  //                   TextField(
+  //                     controller: _paymentController,
+  //                     keyboardType: TextInputType.number,
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   TextField(
+  //                     onChanged: (value) => _description = value,
+  //                     decoration: InputDecoration(
+  //                       labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+  //                       border: const OutlineInputBorder(),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   ElevatedButton(
+  //                     onPressed: () async {
+  //                       Uint8List? imageBytes = await _pickImage(context);
+  //                       if (imageBytes != null) {
+  //                         setState(() => _imageBytes = imageBytes);
+  //                       }
+  //                     },
+  //                     child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
+  //                   ),
+  //                   if (_imageBytes != null)
+  //                     Container(
+  //                       margin: const EdgeInsets.only(top: 16),
+  //                       height: 100,
+  //                       width: 100,
+  //                       child: Image.memory(_imageBytes!),
+  //                     ),
+  //                 ],
+  //               ),
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.of(context).pop(),
+  //                 child: Text(languageProvider.isEnglish ? 'Cancel' : 'انکار'),
+  //               ),
+  //               TextButton(
+  //                 onPressed: _isPaymentButtonPressed
+  //                     ? null
+  //                     : () async {
+  //                   setState(() => _isPaymentButtonPressed = true);
+  //
+  //                   // Validate inputs
+  //                   if (selectedPaymentMethod == null) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(content: Text(languageProvider.isEnglish
+  //                           ? 'Please select a payment method.'
+  //                           : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔')),
+  //                     );
+  //                     setState(() => _isPaymentButtonPressed = false);
+  //                     return;
+  //                   }
+  //
+  //                   final amount = double.tryParse(_paymentController.text);
+  //                   if (amount == null || amount <= 0) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(content: Text(languageProvider.isEnglish
+  //                           ? 'Please enter a valid payment amount.'
+  //                           : 'براہ کرم ایک درست رقم درج کریں۔')),
+  //                     );
+  //                     setState(() => _isPaymentButtonPressed = false);
+  //                     return;
+  //                   }
+  //
+  //                   // Validate cheque-specific fields
+  //                   if (selectedPaymentMethod == 'Check') {
+  //                     if (_selectedChequeBankId == null || _selectedChequeBankName == null) {
+  //                       ScaffoldMessenger.of(context).showSnackBar(
+  //                         SnackBar(content: Text(languageProvider.isEnglish
+  //                             ? 'Please select a bank for the cheque'
+  //                             : 'براہ کرم چیک کے لیے بینک منتخب کریں')),
+  //                       );
+  //                       setState(() => _isPaymentButtonPressed = false);
+  //                       return;
+  //                     }
+  //                     if (_chequeNumberController.text.isEmpty) {
+  //                       ScaffoldMessenger.of(context).showSnackBar(
+  //                         SnackBar(content: Text(languageProvider.isEnglish
+  //                             ? 'Please enter cheque number'
+  //                             : 'براہ کرم چیک نمبر درج کریں')),
+  //                       );
+  //                       setState(() => _isPaymentButtonPressed = false);
+  //                       return;
+  //                     }
+  //                     if (_selectedChequeDate == null) {
+  //                       ScaffoldMessenger.of(context).showSnackBar(
+  //                         SnackBar(content: Text(languageProvider.isEnglish
+  //                             ? 'Please select cheque date'
+  //                             : 'براہ کرم چیک کی تاریخ منتخب کریں')),
+  //                       );
+  //                       setState(() => _isPaymentButtonPressed = false);
+  //                       return;
+  //                     }
+  //                   }
+  //
+  //                   // Validate bank-specific fields
+  //                   if (selectedPaymentMethod == 'Bank' && (_selectedBankId == null || _selectedBankName == null)) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(content: Text(languageProvider.isEnglish
+  //                           ? 'Please select a bank'
+  //                           : 'براہ کرم بینک منتخب کریں')),
+  //                     );
+  //                     setState(() => _isPaymentButtonPressed = false);
+  //                     return;
+  //                   }
+  //
+  //                   try {
+  //                     await filledProvider.payFilledWithSeparateMethod(
+  //                       context,
+  //                       filled['filledNumber'],
+  //                       amount,
+  //                       selectedPaymentMethod!,
+  //                       description: _description,
+  //                       imageBytes: _imageBytes,
+  //                       paymentDate: _selectedPaymentDate,
+  //                       bankId: _selectedBankId,
+  //                       bankName: _selectedBankName,
+  //                       chequeNumber: _chequeNumberController.text,
+  //                       chequeDate: _selectedChequeDate,
+  //                       chequeBankId: _selectedChequeBankId,
+  //                       chequeBankName: _selectedChequeBankName,
+  //                     );
+  //                     Navigator.of(context).pop();
+  //                   } catch (e) {
+  //                     ScaffoldMessenger.of(context).showSnackBar(
+  //                       SnackBar(content: Text('Error: ${e.toString()}')),
+  //                     );
+  //                   } finally {
+  //                     setState(() => _isPaymentButtonPressed = false);
+  //                   }
+  //                 },
+  //                 child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
+  //               ),
+  //             ],
+  //           );
+  //         },
+  //       );
+  //     },
+  //   );
+  // }
+
   Future<void> _showFilledPaymentDialog(
       Map<String, dynamic> filled,
       FilledProvider filledProvider,
@@ -1099,7 +1511,7 @@ class _filledpageState extends State<filledpage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'انوائس کی رقم ادا کریں'),
+              title: Text(languageProvider.isEnglish ? 'Pay Filled' : 'فلڈ کی رقم ادا کریں'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1160,6 +1572,10 @@ class _filledpageState extends State<filledpage> {
                         DropdownMenuItem(
                           value: 'Slip',
                           child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+                        ),
+                        DropdownMenuItem(  // Add this new option
+                          value: 'SimpleCashbook',
+                          child: Text(languageProvider.isEnglish ? 'Simple Cashbook' : 'سادہ کیش بک'),
                         ),
                       ],
                       onChanged: (value) {
@@ -1361,9 +1777,9 @@ class _filledpageState extends State<filledpage> {
                       setState(() => _isPaymentButtonPressed = false);
                       return;
                     }
-
                     try {
                       await filledProvider.payFilledWithSeparateMethod(
+                        createdAt: _dateController.text,
                         context,
                         filled['filledNumber'],
                         amount,

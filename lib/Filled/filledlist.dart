@@ -3,9 +3,12 @@ import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../Provider/lanprovider.dart';
 import '../Provider/filled provider.dart';
 import 'package:intl/intl.dart';
@@ -98,71 +101,6 @@ class _filledListpageState extends State<filledListpage> {
       appBar: _buildAppBar(context, languageProvider, filledProvider),
       body: Column(
         children: [
-          // // Search and Filter Section
-          // SearchAndFilterSection(
-          //   searchController: _searchController,
-          //   selectedDateRange: _selectedDateRange,
-          //   onDateRangeSelected: (range) {
-          //     setState(() {
-          //       _selectedDateRange = range;
-          //     });
-          //   },
-          //   onClearDateFilter: () {
-          //     setState(() {
-          //       _selectedDateRange = null;
-          //     });
-          //   },
-          //   languageProvider: languageProvider,
-          // ),
-          // // Filled List
-          // Expanded(
-          //   child: FutureBuilder(
-          //     future: filledProvider.fetchFilled(),
-          //     builder: (context, snapshot) {
-          //       if (snapshot.connectionState == ConnectionState.active) {
-          //         return const Center(child: CircularProgressIndicator());
-          //       }
-          //       if (snapshot.hasError) {
-          //         return Center(child: Text('Error: ${snapshot.error}'));
-          //       }
-          //       _filteredFilled = _filterFilled(filledProvider.filled);
-          //       if (_filteredFilled.isEmpty) {
-          //         return Center(
-          //           child: Text(
-          //             languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
-          //           ),
-          //         );
-          //       }
-          //       return FilledList(
-          //         filteredFilled: _filteredFilled,
-          //         languageProvider: languageProvider,
-          //         filledProvider: filledProvider,
-          //         onFilledTap: (filled) {
-          //           Navigator.push(
-          //             context,
-          //             MaterialPageRoute(
-          //               builder: (context) => filledpage(filled: filled),
-          //             ),
-          //           );
-          //         },
-          //         onFilledLongPress: (filled) async {
-          //           await _showDeleteConfirmationDialog(
-          //             context,
-          //             filled,
-          //             filledProvider,
-          //             languageProvider,
-          //           );
-          //         },
-          //         onPaymentPressed: (filled) {
-          //           _showFilledPaymentDialog(filled, filledProvider, languageProvider);
-          //         },
-          //         onViewPayments: (filled) => _showPaymentDetails(filled),
-          //
-          //       );
-          //     },
-          //   ),
-          // ),
-          // Search and Filter Section
           SearchAndFilterSection(
             searchController: _searchController,
             selectedDateRange: _selectedDateRange,
@@ -355,11 +293,7 @@ class _filledListpageState extends State<filledListpage> {
       }
       return matchesSearch;
     }).toList();
-      // ..sort((a, b) {
-      //   final dateA = DateTime.tryParse(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(a['createdAt']));
-      //   final dateB = DateTime.tryParse(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(b['createdAt']));
-      //   return dateB.compareTo(dateA); // Newest first
-      // });
+
   }
 
   // Show delete confirmation dialog
@@ -1084,6 +1018,7 @@ class _filledListpageState extends State<filledListpage> {
                     final amount = double.tryParse(_paymentController.text);
                     if (amount != null && amount > 0) {
                       await filledProvider.payFilledWithSeparateMethod(
+                        createdAt: filled['createdAt'],
                         context,
                         filled['id'],
                         amount,
@@ -1283,6 +1218,131 @@ class FilledList extends StatelessWidget {
 
   });
 
+
+  Future<void> _captureAndShareInvoice(GlobalKey key,BuildContext context) async {
+    try {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // Add a small delay to ensure the widget is painted
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Check if the widget is still mounted
+      if (!context.mounted) return;
+
+      // Verify the boundary exists
+      final renderObject = key.currentContext?.findRenderObject();
+      if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
+        throw Exception('Could not find render boundary');
+      }
+
+
+      final boundary = renderObject as RenderRepaintBoundary;
+
+      // Try capturing multiple times if needed
+      ui.Image? image;
+      for (int i = 0; i < 3; i++) {
+        try {
+          image = await boundary.toImage(pixelRatio: 3.0);
+          break;
+        } catch (e) {
+          if (i == 2) rethrow;
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+
+      final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
+      final pngBytes = byteData!.buffer.asUint8List();
+
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Share the file
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(pngBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: languageProvider.isEnglish
+            ? 'Invoice Details'
+            : 'انوائس کی تفصیلات',
+        subject: languageProvider.isEnglish
+            ? 'Invoice from my app'
+            : 'میری ایپ سے انوائس',
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
+        );
+      }
+    }
+  }
+  Future<double> _getCustomerRemainingBalance(String customerId) async {
+    try {
+      double totalBalance = 0.0;
+
+      // Fetch from 'ledger' (invoice balance)
+      final ledgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
+      final ledgerQuery = ledgerRef.orderByChild('createdAt');
+      final ledgerSnapshot = await ledgerQuery.get();
+
+      if (ledgerSnapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
+        if (ledgerData != null) {
+          // Convert to list and sort by date (newest first)
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
+
+          // Find the most recent balance
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final dynamic balanceValue = entryData['remainingBalance'];
+            totalBalance = (balanceValue is int)
+                ? balanceValue.toDouble()
+                : (balanceValue as double? ?? 0.0);
+            break; // We only need the most recent balance
+          }
+        }
+      }
+
+      // Fetch from 'filledledger' (filled balance)
+      final filledLedgerRef = FirebaseDatabase.instance.ref('filledledger').child(customerId);
+      final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+
+      if (filledSnapshot.snapshot.exists) {
+        final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+        if (filledData != null) {
+          final lastEntryKey = filledData.keys.first;
+          final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
+          if (lastEntry != null) {
+            final dynamic balanceValue = lastEntry['remainingBalance'];
+            totalBalance += (balanceValue is int)
+                ? balanceValue.toDouble()
+                : (balanceValue as double? ?? 0.0);
+          }
+        }
+      }
+
+      return totalBalance;
+    } catch (e) {
+      print("Error fetching remaining balance: $e");
+      return 0.0;
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -1297,79 +1357,116 @@ class FilledList extends StatelessWidget {
             final grandTotal = (filled['grandTotal'] ?? 0.0).toDouble();
             final debitAmount = (filled['debitAmount'] ?? 0.0).toDouble();
             final remainingAmount = (grandTotal - debitAmount).toDouble();
+            final screenshotKey = GlobalKey();
 
-            return Card(
-              margin: EdgeInsets.symmetric(
-                horizontal: isWideScreen ? 16.0 : 8.0,
-                vertical: 4.0,
-              ),
-              elevation: 2,
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.teal,
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(color: Colors.white),
+            return FutureBuilder(
+              future: _getCustomerRemainingBalance(filled['customerId']),
+              builder: (context,snapshot){
+                double customerBalance = snapshot.hasData ? snapshot.data! : 0.0;
+
+                return RepaintBoundary(
+                  key: screenshotKey,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: constraints.maxWidth,
+                      minHeight: 100, // Adjust as needed
+                    ),
+                    child: Card(
+                      margin: EdgeInsets.symmetric(
+                        horizontal: isWideScreen ? 16.0 : 8.0,
+                        vertical: 4.0,
+                      ),
+                      elevation: 2,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.teal,
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.all(8),
+                        title: Text(
+                          '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['referenceNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 18 : 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(
+                              '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${filled['customerName']}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 16 : 14,
+                              ),
+                            ),
+                            Text(
+                              '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${filled['createdAt']}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 14 : 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['filledNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                                  style: TextStyle(
+                                    fontSize:12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.share, size: 20),
+                                  onPressed: (){
+                                    _captureAndShareInvoice(screenshotKey,context);
+                                  },
+                                  tooltip: languageProvider.isEnglish
+                                      ? 'Share invoice'
+                                      : 'انوائس شیئر کریں',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 16 : 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            // Text(
+                            //   '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
+                            //   style: TextStyle(
+                            //     fontSize: isWideScreen ? 14 : 12,
+                            //     color: Colors.red,
+                            //   ),
+                            // ),
+                            Text(
+                              '${languageProvider.isEnglish ? 'Balance: ' : 'بیلنس: '}${customerBalance.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 14 : 12,
+                                color: customerBalance >= 0 ? Colors.green : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        onTap: () => onFilledTap(filled),
+                        onLongPress: () => onFilledLongPress(filled),
+                      ),
+                    ),
                   ),
-                ),
-                contentPadding: const EdgeInsets.all(8),
-                title: Text(
-                  '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['referenceNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                  style: TextStyle(
-                    fontSize: isWideScreen ? 18 : 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${filled['customerName']}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 16 : 14,
-                      ),
-                    ),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${filled['createdAt']}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 14 : 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Filled #' : 'انوائس نمبر'} ${filled['filledNumber']} ${filled['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                      style: TextStyle(
-                        fontSize:12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 16 : 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: isWideScreen ? 14 : 12,
-                        color: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-                onTap: () => onFilledTap(filled),
-                onLongPress: () => onFilledLongPress(filled),
-              ),
+                );
+              },
             );
           },
         );

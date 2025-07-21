@@ -157,6 +157,7 @@ import '../bankmanagement/banknames.dart';
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
 
       // Get invoice data
       final invoice = widget.invoice ?? _currentInvoice;
@@ -164,8 +165,29 @@ import '../bankmanagement/banknames.dart';
         throw Exception("No invoice data available");
       }
 
+
+      // Preload total section label images
+      final subTotalLabel = await _createTextImage(languageProvider.isEnglish ? 'Sub Total:' : 'ذیلی کل:');
+      final discountLabel = await _createTextImage(languageProvider.isEnglish ? 'Discount:' : 'رعایت:');
+      final mazdooriLabel = await _createTextImage(languageProvider.isEnglish ? 'Mazdoori:' : 'مزدوری:');
+      final invoiceAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Invoice Amount:' : 'انوائس کی رقم:');
+      final previousBalanceLabel = await _createTextImage(languageProvider.isEnglish ? 'Previous Balance:' : 'پچھلا بیلنس:');
+      final totalLabel = await _createTextImage(languageProvider.isEnglish
+          ? 'Total (Invoice + Previous Balance):'
+          : 'کل (انوائس + پچھلا بیلنس):');
+      final paidAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Paid Amount:' : 'ادا شدہ رقم:');
+      final remainingAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Remaining Amount:' : 'بقیہ رقم:');
+
+
       // Get payment details
-      double paidAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
+      double paidAmount = 0.0;
+      try {
+        final payments = await invoiceProvider.getInvoicePayments(invoice['invoiceNumber']);
+        paidAmount = payments.fold(0.0, (sum, payment) => sum + (_parseToDouble(payment['amount']) ?? 0.0));
+      } catch (e) {
+        print("Error fetching payments: $e");
+      }
+
       double grandTotal = _calculateGrandTotal();
       double remainingAmount = grandTotal - paidAmount;
 
@@ -208,7 +230,8 @@ import '../bankmanagement/banknames.dart';
       final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
 
       // Get the remaining balance from the ledger (excluding current invoice)
-      double remainingBalance = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
+      double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
+      double remainingBalance = remainingBalanceold;
 
       // Calculate the new balance (previous balance + current invoice amount)
       double newBalance = remainingBalance + grandTotal;
@@ -256,6 +279,8 @@ import '../bankmanagement/banknames.dart';
             'Customer Address: ${selectedCustomer.address}',
       );
 
+
+
       // Add a page with A5 size
       pdf.addPage(
         pw.Page(
@@ -273,7 +298,7 @@ import '../bankmanagement/banknames.dart';
                     pw.Column(
                         children: [
                           pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
-                          pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
+                          pw.Image(addressimage, width: 200, height: 100, dpi: 2000),
                         ]
                     ),
                     pw.Column(
@@ -339,21 +364,14 @@ import '../bankmanagement/banknames.dart';
                 ),
                 pw.SizedBox(height: 10),
 
-                // Totals Section
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                  ],
-                ),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                  ],
-                ),
+                //Totals Section
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
+                //     pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                //   ],
+                // ),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
@@ -371,11 +389,10 @@ import '../bankmanagement/banknames.dart';
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Invoice Amount:', style:  pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Invoice Amount:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                     pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
@@ -383,13 +400,87 @@ import '../bankmanagement/banknames.dart';
                     pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                   ],
                 ),
+                // ✅ New Balance (Total of Invoice + Previous Balance)
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('New Balance:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Total (Invoice + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
+                // Add paid amount row
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+
+                // Add remaining amount row
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(subTotalLabel, dpi: 1000),
+                //     pw.Text(_calculateSubtotal().toStringAsFixed(2)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(discountLabel, dpi: 1000),
+                //     pw.Text(_discount.toStringAsFixed(2)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(mazdooriLabel, dpi: 1000),
+                //     pw.Text(_mazdoori.toStringAsFixed(2)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(invoiceAmountLabel, dpi: 1000),
+                //     pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(previousBalanceLabel, dpi: 1000),
+                //     pw.Text(remainingBalance.toStringAsFixed(2)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(totalLabel, dpi: 1000),
+                //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(paidAmountLabel, dpi: 1000),
+                //     pw.Text(paidAmount.toStringAsFixed(2)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Image(remainingAmountLabel, dpi: 1000),
+                //     pw.Text(remainingAmount.toStringAsFixed(2)),
+                //   ],
+                // ),
 
                 pw.SizedBox(height: 60),
                 pw.Row(
@@ -406,7 +497,7 @@ import '../bankmanagement/banknames.dart';
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Image(footerLogo, width: 30, height: 20), // Footer logo
-                    pw.Image(lineimage,width: 150,height: 50),
+                    pw.Image(lineimage, width: 150, height: 50),
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.center,
                       children: [
@@ -508,35 +599,35 @@ import '../bankmanagement/banknames.dart';
 
     Future<double> _getRemainingBalance(String customerId, {bool excludeCurrentInvoice = false}) async {
       try {
-        double invoiceBalance = 0.0;
-        double filledBalance = 0.0;
+        double totalBalance = 0.0;
 
         // Fetch from 'ledger' (invoice balance)
         final ledgerRef = _db.child('ledger').child(customerId);
         final ledgerQuery = ledgerRef.orderByChild('createdAt');
-
         final ledgerSnapshot = await ledgerQuery.get();
 
         if (ledgerSnapshot.exists) {
           final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
           if (ledgerData != null) {
-            // Convert to list and sort by date
+            // Convert to list and sort by date (newest first)
             final entries = ledgerData.entries.toList()
               ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
 
-            // Find the balance before the current invoice
+            // Find the most recent balance
             for (var entry in entries) {
               final entryData = entry.value as Map<dynamic, dynamic>;
+
+              // Skip current invoice if excludeCurrentInvoice is true
               if (excludeCurrentInvoice &&
                   entryData['invoiceNumber'] == _invoiceId) {
-                continue; // Skip the current invoice entry
+                continue;
               }
 
               final dynamic balanceValue = entryData['remainingBalance'];
-              invoiceBalance = (balanceValue is int)
+              totalBalance = (balanceValue is int)
                   ? balanceValue.toDouble()
                   : (balanceValue as double? ?? 0.0);
-              break; // We only need the most recent balance before current invoice
+              break; // We only need the most recent balance
             }
           }
         }
@@ -544,6 +635,7 @@ import '../bankmanagement/banknames.dart';
         // Fetch from 'filledledger' (filled balance)
         final filledLedgerRef = _db.child('filledledger').child(customerId);
         final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+
         if (filledSnapshot.snapshot.exists) {
           final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
           if (filledData != null) {
@@ -551,14 +643,14 @@ import '../bankmanagement/banknames.dart';
             final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
             if (lastEntry != null) {
               final dynamic balanceValue = lastEntry['remainingBalance'];
-              filledBalance = (balanceValue is int)
+              totalBalance += (balanceValue is int)
                   ? balanceValue.toDouble()
                   : (balanceValue as double? ?? 0.0);
             }
           }
         }
 
-        return invoiceBalance + filledBalance;
+        return totalBalance;
       } catch (e) {
         print("Error fetching remaining balance: $e");
         return 0.0;
@@ -788,11 +880,21 @@ import '../bankmanagement/banknames.dart';
 
                   return Card(
                     child: ListTile(
+                      // title: Text(
+                      //   payment['method'] == 'Bank'
+                      //       ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
+                      //       : payment['method'] == 'Check'
+                      //       ? '${payment['bankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
+                      //       : '${payment['method']}: Rs ${payment['amount']}',
+                      // ),
                       title: Text(
                         payment['method'] == 'Bank'
                             ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
                             : payment['method'] == 'Check'
-                            ? '${payment['bankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
+                            ? '${payment['chequeBankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
+                        // Add this case for SimpleCashbook
+                            : payment['method'] == 'SimpleCashbook'
+                            ? 'Simple Cashbook: Rs ${payment['amount']}'
                             : '${payment['method']}: Rs ${payment['amount']}',
                       ),
                       subtitle: Column(
@@ -1191,6 +1293,10 @@ import '../bankmanagement/banknames.dart';
                             value: 'Slip',
                             child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
                           ),
+                          DropdownMenuItem(  // Add this new option
+                            value: 'SimpleCashbook',
+                            child: Text(languageProvider.isEnglish ? 'Simple Cashbook' : 'سادہ کیش بک'),
+                          ),
                         ],
                         onChanged: (value) {
                           setState(() {
@@ -1396,6 +1502,7 @@ import '../bankmanagement/banknames.dart';
 
                       try {
                         await invoiceProvider.payInvoiceWithSeparateMethod(
+                          createdAt: _dateController.text,
                           context,
                           invoice['invoiceNumber'],
                           amount,
@@ -1431,12 +1538,6 @@ import '../bankmanagement/banknames.dart';
 
     void onPaymentPressed(Map<String, dynamic> invoice) {
       // At the start of both methods
-      // if (invoice == null || invoice['invoiceNumber'] == null || invoice['customerId'] == null) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text('Cannot process payment - invalid Invoice data')),
-      //   );
-      //   return;
-      // }
       if (invoice == null ||
           invoice['invoiceNumber'] == null ||  // Use invoiceNumber as ID
           invoice['customerId'] == null) {
@@ -1844,7 +1945,6 @@ import '../bankmanagement/banknames.dart';
                           style: TextStyle(color: Colors.teal.shade600),
                         ),
                         // Space between sections
-                        // Add a TextField for the date
                         TextField(
                           controller: _dateController,
                           decoration: InputDecoration(

@@ -8,7 +8,8 @@ class CashbookEntry {
   String? paymentMethod;
   double? paidAmount;
   DateTime? paymentDate;
-
+  String? invoiceId;  // Add this field
+  String? paymentKey; // Add this field
   CashbookEntry({
     this.id,
     required this.description,
@@ -19,6 +20,8 @@ class CashbookEntry {
     this.paymentMethod,
     this.paidAmount,
     this.paymentDate,
+    this.invoiceId,   // Add to constructor
+    this.paymentKey,  // Add to constructor
   });
 
   factory CashbookEntry.fromJson(Map<String, dynamic> json) {
@@ -34,6 +37,8 @@ class CashbookEntry {
       paymentDate: json['paymentDate'] != null
           ? DateTime.parse(json['paymentDate'])
           : null,
+      invoiceId: json['invoiceId'],   // Add to fromJson
+      paymentKey: json['paymentKey'], // Add to fromJson
     );
   }
 
@@ -49,6 +54,8 @@ class CashbookEntry {
       'paymentMethod': paymentMethod,
       'paidAmount': paidAmount,
       'paymentDate': paymentDate?.toIso8601String(),
+      'invoiceId': invoiceId,   // Add to toJson
+      'paymentKey': paymentKey, // Add to toJson
     };
   }
 }
