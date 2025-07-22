@@ -185,10 +185,17 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     double totalCashIn = 0;
     double totalCashOut = 0;
 
+    // for (final entry in entries) {
+    //   if (entry.type == 'cash_in') {
+    //     totalCashIn += entry.amount;
+    //   } else {
+    //     totalCashOut += entry.amount;
+    //   }
+    // }
     for (final entry in entries) {
       if (entry.type == 'cash_in') {
         totalCashIn += entry.amount;
-      } else {
+      } else if (entry.type == 'cash_out') {
         totalCashOut += entry.amount;
       }
     }
@@ -613,6 +620,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     final TextEditingController _referenceController = TextEditingController();
     DateTime _selectedDate = DateTime.now();
     Uint8List? _imageBytes;
+    bool _isCashIn = false; // Add this as a class variable
 
     // Reset cheque fields
     _chequeNumberController.clear();
@@ -672,6 +680,18 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                           });
                         }
                       },
+                    ),
+                    Row(
+                      children: [
+                        Text(languageProvider.isEnglish ? 'Cash In' : 'کیش ان'),
+                        Switch(
+                          value: _isCashIn,
+                          onChanged: (value) {
+                            setState(() => _isCashIn = value);
+                          },
+                        ),
+                        Text(languageProvider.isEnglish ? 'Cash Out' : 'کیش آؤٹ'),
+                      ],
                     ),
                     // Payment Date
                     ListTile(
@@ -740,7 +760,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                     ),
 
                     // Bank Selection for Bank Transfer or Cheque
-                    // if (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque') ...[
                     if (selectedPaymentMethod != null &&
                         (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque')) ...[
                       const SizedBox(height: 16),
@@ -931,6 +950,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         'paymentDate': _selectedDate.toIso8601String(),
                         'description': _descriptionController.text,
                         'referenceNumber': _referenceController.text,
+                        'type': _isCashIn ? 'cash_in' : 'cash_out', // Add this line
                         if (_imageBytes != null) 'image': base64Encode(_imageBytes!),
                       };
 
@@ -944,8 +964,9 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                           bankId: _selectedBank!['id'],
                           amount: amount,
                           description: _descriptionController.text,
-                          type: 'cash_out', // Since it's a payment
+                          type: _isCashIn ? 'cash_in' : 'cash_out', // Update this
                           date: _selectedDate,
+                          entryId: entry.id!, // Pass the entry ID
                         );
                       }
 
@@ -964,6 +985,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                           chequeDate: _selectedChequeDate!,
                           amount: amount,
                           description: _descriptionController.text,
+                          entryId: entry.id!, // Pass the entry ID
                         );
                       }
 
@@ -985,16 +1007,22 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         chequeDate: selectedPaymentMethod == 'Cheque'
                             ? _selectedChequeDate
                             : null,
+                        isCashIn: _isCashIn, // Add this
                       );
-
+                      if (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque') {
+                        await widget.databaseRef.child(entry.id!).remove();
+                      }
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text(languageProvider.isEnglish
-                              ? 'Payment recorded successfully!'
-                              : 'ادائیگی کامیابی سے ریکارڈ ہو گئی!')),
+                              // ? 'Payment recorded successfully!'
+                              // : 'ادائیگی کامیابی سے ریکارڈ ہو گئی!')),
+                              ? 'Payment recorded and entry removed successfully!'
+                              : 'ادائیگی ریکارڈ ہو گئی اور انٹری حذف ہو گئی!')),
                         );
                         setState(() {});
                       }
+
                     } catch (error) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1018,6 +1046,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       },
     );
   }
+
   Future<void> _updateLedger({
     required String customerId,
     required double amount,
@@ -1029,7 +1058,9 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     String? bankName,
     String? chequeNumber,
     DateTime? chequeDate,
-  }) async {
+    required bool isCashIn, // Add this parameter
+  })
+  async {
     try {
       // Use the selected ledger type
       final ledgerRef = FirebaseDatabase.instance.ref().child('$_selectedLedgerType/$customerId');
@@ -1044,11 +1075,15 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
       }
 
-      // Calculate new balance
-      final isDebit = paymentMethod == 'cash_out'; // Assuming cash_out is debit
-      final newRemainingBalance = isDebit
-          ? lastRemainingBalance + amount
-          : lastRemainingBalance - amount;
+      // // Calculate new balance
+      // final isDebit = paymentMethod == 'cash_out'; // Assuming cash_out is debit
+      // final newRemainingBalance = isDebit
+      //     ? lastRemainingBalance + amount
+      //     : lastRemainingBalance - amount;
+      // Calculate new balance - reverse for cash_in
+      final newRemainingBalance = isCashIn
+          ? lastRemainingBalance + amount  // Cash in increases balance
+          : lastRemainingBalance - amount; // Cash out decreases balance
 
       // Ledger data to be saved
       final ledgerData = {
@@ -1058,6 +1093,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         'paymentMethod': paymentMethod,
         'remainingBalance': newRemainingBalance,
         'createdAt': date.toIso8601String(),
+        'type': isCashIn ? 'cash_in' : 'cash_out', // Add transaction type
         if (bankId != null) 'bankId': bankId,
         if (bankName != null) 'bankName': bankName,
         if (chequeNumber != null) 'chequeNumber': chequeNumber,
@@ -1083,195 +1119,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       rethrow;
     }
   }
-  // Future<void> _updateLedger({
-  //   required String customerId, // Add customerId parameter
-  //   required double amount,
-  //   required String paymentMethod,
-  //   required String referenceNumber,
-  //   required String description,
-  //   required DateTime date,
-  //   String? bankId,
-  //   String? bankName,
-  //   String? chequeNumber,
-  //   DateTime? chequeDate,
-  // })
-  // async {
-  //   try {
-  //     // Use the customerId to create a ledger path under the customer
-  //     final ledgerRef = FirebaseDatabase.instance.ref().child('ledger/$customerId');
-  //
-  //     // Get last balance for this customer
-  //     final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
-  //
-  //     double lastRemainingBalance = 0.0;
-  //     if (snapshot.exists) {
-  //       final data = snapshot.value as Map<dynamic, dynamic>;
-  //       final lastTransaction = data.values.first;
-  //       lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
-  //     }
-  //
-  //     // Calculate new balance
-  //     final newRemainingBalance = lastRemainingBalance + (amount * (paymentMethod == 'cash_in' ? 1 : -1));
-  //
-  //     // Ledger data to be saved
-  //     final ledgerData = {
-  //       'referenceNumber': referenceNumber,
-  //       'description': description,
-  //       'debitAmount': amount,
-  //       'paymentMethod': paymentMethod,
-  //       'remainingBalance': newRemainingBalance,
-  //       'createdAt': date.toIso8601String(),
-  //       if (bankId != null) 'bankId': bankId,
-  //       if (bankName != null) 'bankName': bankName,
-  //       if (chequeNumber != null) 'chequeNumber': chequeNumber,
-  //       if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
-  //     };
-  //
-  //     await ledgerRef.push().set(ledgerData);
-  //
-  //     // Also update filledledger (if needed)
-  //     await FirebaseDatabase.instance.ref()
-  //         .child('filledledger/$customerId')
-  //         .push()
-  //         .set({
-  //       'amount': amount,
-  //       'remainingBalance': newRemainingBalance,
-  //       'createdAt': date.toIso8601String(),
-  //       'description': description,
-  //     });
-  //   } catch (e) {
-  //     print('Error updating ledger: $e');
-  //     rethrow;
-  //   }
-  // }
-  // Future<void> _updateLedger({
-  //   required String customerId,
-  //   required double amount,
-  //   required String paymentMethod,
-  //   required String referenceNumber,
-  //   required String description,
-  //   required DateTime date,
-  //   String? bankId,
-  //   String? bankName,
-  //   String? chequeNumber,
-  //   DateTime? chequeDate,
-  // })
-  // async {
-  //   try {
-  //     final ledgerRef = FirebaseDatabase.instance.ref().child('ledger/$customerId');
-  //
-  //     // Get last balance for this customer
-  //     final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
-  //
-  //     double lastRemainingBalance = 0.0;
-  //     if (snapshot.exists) {
-  //       final data = snapshot.value as Map<dynamic, dynamic>;
-  //       final lastTransaction = data.values.first;
-  //       lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
-  //     }
-  //
-  //     // Calculate new balance - only debitAmount affects the balance
-  //     final isDebit = paymentMethod == 'cash_out'; // Only cash_out transactions are debits
-  //     final newRemainingBalance = isDebit
-  //         ? lastRemainingBalance + amount
-  //         : lastRemainingBalance;
-  //
-  //     // Ledger data to be saved
-  //     final ledgerData = {
-  //       'referenceNumber': referenceNumber,
-  //       'description': description,
-  //       if (isDebit) 'debitAmount': amount, // Only include debitAmount for cash_out
-  //       'paymentMethod': paymentMethod,
-  //       'remainingBalance': newRemainingBalance,
-  //       'createdAt': date.toIso8601String(),
-  //       if (bankId != null) 'bankId': bankId,
-  //       if (bankName != null) 'bankName': bankName,
-  //       if (chequeNumber != null) 'chequeNumber': chequeNumber,
-  //       if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
-  //     };
-  //
-  //     await ledgerRef.push().set(ledgerData);
-  //
-  //     // Also update filledledger (if needed)
-  //     await FirebaseDatabase.instance.ref()
-  //         .child('filledledger/$customerId')
-  //         .push()
-  //         .set({
-  //       if (isDebit) 'debitAmount': amount,
-  //       'remainingBalance': newRemainingBalance,
-  //       'createdAt': date.toIso8601String(),
-  //       'description': description,
-  //     });
-  //   } catch (e) {
-  //     print('Error updating ledger: $e');
-  //     rethrow;
-  //   }
-  // }
-  // Future<void> _updateLedger({
-  //   required String customerId,
-  //   required double amount,
-  //   required String paymentMethod,
-  //   required String referenceNumber,
-  //   required String description,
-  //   required DateTime date,
-  //   String? bankId,
-  //   String? bankName,
-  //   String? chequeNumber,
-  //   DateTime? chequeDate,
-  // })
-  // async {
-  //   try {
-  //     final ledgerRef = FirebaseDatabase.instance.ref().child('ledger/$customerId');
-  //
-  //     // Get last balance for this customer
-  //     final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
-  //
-  //     double lastRemainingBalance = 0.0;
-  //     if (snapshot.exists) {
-  //       final data = snapshot.value as Map<dynamic, dynamic>;
-  //       final lastTransaction = data.values.first;
-  //       lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
-  //     }
-  //
-  //     // Calculate new balance
-  //     final isDebit = paymentMethod == 'cash_out'; // Assuming cash_out is debit
-  //     final newRemainingBalance = isDebit
-  //         ? lastRemainingBalance + amount
-  //         : lastRemainingBalance - amount;
-  //
-  //     // Ledger data to be saved
-  //     final ledgerData = {
-  //       'referenceNumber': referenceNumber,
-  //       'description': description,
-  //       if (isDebit) 'debitAmount': amount, // Only include debit amount for cash_out
-  //       if (!isDebit) 'creditAmount': amount, // Include credit amount for other cases
-  //       'paymentMethod': paymentMethod,
-  //       'remainingBalance': newRemainingBalance,
-  //       'createdAt': date.toIso8601String(),
-  //       if (bankId != null) 'bankId': bankId,
-  //       if (bankName != null) 'bankName': bankName,
-  //       if (chequeNumber != null) 'chequeNumber': chequeNumber,
-  //       if (chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
-  //     };
-  //
-  //     await ledgerRef.push().set(ledgerData);
-  //
-  //     // Also update filledledger (if needed)
-  //     await FirebaseDatabase.instance.ref()
-  //         .child('filledledger/$customerId')
-  //         .push()
-  //         .set({
-  //       if (isDebit) 'debitAmount': amount,
-  //       if (!isDebit) 'creditAmount': amount,
-  //       'remainingBalance': newRemainingBalance,
-  //       'createdAt': date.toIso8601String(),
-  //       'description': description,
-  //     });
-  //   } catch (e) {
-  //     print('Error updating ledger: $e');
-  //     rethrow;
-  //   }
-  // }
 
   Future<void> _recordBankTransaction({
     required String bankId,
@@ -1279,6 +1126,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     required String description,
     required String type, // 'cash_in' or 'cash_out'
     DateTime? date,
+    required String entryId, // Add entryId parameter
   })
   async {
     try {
@@ -1303,7 +1151,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           ? currentBalance + amount
           : currentBalance - amount;
       await bankBalanceRef.set(newBalance);
-
+      await widget.databaseRef.child(entryId).remove();
     } catch (e) {
       print('Error recording bank transaction: $e');
       rethrow;
@@ -1317,7 +1165,10 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     required DateTime chequeDate,
     required double amount,
     required String description,
-  }) async {
+    required String entryId, // Add entryId parameter
+
+  })
+  async {
     try {
       final chequeData = {
         'bankId': bankId,
@@ -1342,6 +1193,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           .push()
           .set(chequeData);
 
+      await widget.databaseRef.child(entryId).remove();
     } catch (e) {
       print('Error recording cheque payment: $e');
       rethrow;

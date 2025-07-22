@@ -26,40 +26,12 @@ class InvoiceProvider with ChangeNotifier {
 
 
 
-
-
-
   String _imageToBase64(Uint8List imageBytes) {
     return base64Encode(imageBytes);
   }
 
   Uint8List _base64ToImage(String base64String) {
     return base64Decode(base64String);
-  }
-
-  Future<String> _uploadImage(Uint8List imageBytes, String invoiceId) async {
-    try {
-      final ref = _storage.ref()
-          .child('payment_images')
-          .child(invoiceId)
-          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-      final uploadTask = ref.putData(imageBytes);
-      final snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
-    } catch (e) {
-      print("Error uploading image: $e");
-      throw Exception("Image upload failed");
-    }
-  }
-
-  Future<void> _deleteImage(String? imageUrl) async {
-    if (imageUrl == null) return;
-    try {
-      await _storage.refFromURL(imageUrl).delete();
-    } catch (e) {
-      print("Error deleting image: $e");
-    }
   }
 
   Future<void> fetchInvoices({int limit = 20, String? lastKey}) async   {
