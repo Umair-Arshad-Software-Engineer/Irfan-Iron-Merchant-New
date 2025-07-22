@@ -18,7 +18,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
-
+import 'dart:html' as html;
 import 'Filledpage.dart';
 
 
@@ -1219,7 +1219,152 @@ class FilledList extends StatelessWidget {
   });
 
 
-  Future<void> _captureAndShareInvoice(GlobalKey key,BuildContext context) async {
+  // Future<void> _captureAndShareInvoice(GlobalKey key,BuildContext context) async {
+  //   try {
+  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //     // Show loading indicator
+  //     showDialog(
+  //       context: context,
+  //       barrierDismissible: false,
+  //       builder: (context) => const Center(child: CircularProgressIndicator()),
+  //     );
+  //
+  //     // Add a small delay to ensure the widget is painted
+  //     await Future.delayed(const Duration(milliseconds: 100));
+  //
+  //     // Check if the widget is still mounted
+  //     if (!context.mounted) return;
+  //
+  //     // Verify the boundary exists
+  //     final renderObject = key.currentContext?.findRenderObject();
+  //     if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
+  //       throw Exception('Could not find render boundary');
+  //     }
+  //
+  //
+  //     final boundary = renderObject as RenderRepaintBoundary;
+  //
+  //     // Try capturing multiple times if needed
+  //     ui.Image? image;
+  //     for (int i = 0; i < 3; i++) {
+  //       try {
+  //         image = await boundary.toImage(pixelRatio: 3.0);
+  //         break;
+  //       } catch (e) {
+  //         if (i == 2) rethrow;
+  //         await Future.delayed(const Duration(milliseconds: 100));
+  //       }
+  //     }
+  //
+  //     final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
+  //     final pngBytes = byteData!.buffer.asUint8List();
+  //
+  //     // Close loading dialog
+  //     if (context.mounted) {
+  //       Navigator.of(context).pop();
+  //     }
+  //
+  //     // Share the file
+  //     final tempDir = await getTemporaryDirectory();
+  //     final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
+  //     await file.writeAsBytes(pngBytes);
+  //
+  //     await Share.shareXFiles(
+  //       [XFile(file.path)],
+  //       text: languageProvider.isEnglish
+  //           ? 'Invoice Details'
+  //           : 'انوائس کی تفصیلات',
+  //       subject: languageProvider.isEnglish
+  //           ? 'Invoice from my app'
+  //           : 'میری ایپ سے انوائس',
+  //     );
+  //   } catch (e) {
+  //     // Close loading dialog if still open
+  //     if (context.mounted) {
+  //       Navigator.of(context).pop();
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
+  //       );
+  //     }
+  //   }
+  // }
+
+  Future<void> _captureAndShareInvoice(GlobalKey key, BuildContext context) async {
+    if (kIsWeb) {
+      return _captureAndShareInvoiceWeb(key, context);
+    } else {
+      try {
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+
+        // Add a small delay to ensure the widget is painted
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Check if the widget is still mounted
+        if (!context.mounted) return;
+
+        // Verify the boundary exists
+        final renderObject = key.currentContext?.findRenderObject();
+        if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
+          throw Exception('Could not find render boundary');
+        }
+
+        final boundary = renderObject as RenderRepaintBoundary;
+
+        // Try capturing multiple times if needed
+        ui.Image? image;
+        for (int i = 0; i < 3; i++) {
+          try {
+            image = await boundary.toImage(pixelRatio: 3.0);
+            break;
+          } catch (e) {
+            if (i == 2) rethrow;
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+        }
+
+        final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
+        final pngBytes = byteData!.buffer.asUint8List();
+
+        // Close loading dialog
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+
+        // Share the file
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(pngBytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: languageProvider.isEnglish
+              ? 'Invoice Details'
+              : 'انوائس کی تفصیلات',
+          subject: languageProvider.isEnglish
+              ? 'Invoice from my app'
+              : 'میری ایپ سے انوائس',
+        );
+      } catch (e) {
+        // Close loading dialog if still open
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _captureAndShareInvoiceWeb(GlobalKey key, BuildContext context) async {
     try {
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
@@ -1233,15 +1378,11 @@ class FilledList extends StatelessWidget {
       // Add a small delay to ensure the widget is painted
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Check if the widget is still mounted
-      if (!context.mounted) return;
-
-      // Verify the boundary exists
+      // Find the render object
       final renderObject = key.currentContext?.findRenderObject();
       if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
         throw Exception('Could not find render boundary');
       }
-
 
       final boundary = renderObject as RenderRepaintBoundary;
 
@@ -1249,7 +1390,7 @@ class FilledList extends StatelessWidget {
       ui.Image? image;
       for (int i = 0; i < 3; i++) {
         try {
-          image = await boundary.toImage(pixelRatio: 3.0);
+          image = await boundary.toImage(pixelRatio: 2.0);
           break;
         } catch (e) {
           if (i == 2) rethrow;
@@ -1257,38 +1398,80 @@ class FilledList extends StatelessWidget {
         }
       }
 
-      final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
-      final pngBytes = byteData!.buffer.asUint8List();
-
-      // Close loading dialog
-      if (context.mounted) {
-        Navigator.of(context).pop();
+      if (image == null) {
+        throw Exception('Failed to capture image after multiple attempts');
       }
 
-      // Share the file
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
-      await file.writeAsBytes(pngBytes);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Could not generate image data');
+      }
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: languageProvider.isEnglish
-            ? 'Invoice Details'
-            : 'انوائس کی تفصیلات',
-        subject: languageProvider.isEnglish
-            ? 'Invoice from my app'
-            : 'میری ایپ سے انوائس',
-      );
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      // For web, we'll create a temporary download and then share it
+      if (kIsWeb) {
+        final fileName = 'invoice_${DateTime.now().millisecondsSinceEpoch}.png';
+
+        // Create blob URL for download
+        final blob = html.Blob([pngBytes], 'image/png');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+
+        // 🔓 Open the image in a new tab
+        html.window.open(url, '_blank');
+
+        // 💾 Trigger file download
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute('download', fileName)
+          ..click();
+
+        // 🧹 Clean up
+        html.Url.revokeObjectUrl(url);
+
+        // ✅ Show user confirmation
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(languageProvider.isEnglish
+                  ? 'Invoice downloaded and opened in new tab.'
+                  : 'انوائس ڈاؤن لوڈ ہو گئی اور نئی ٹیب میں کھل گئی۔'),
+            ),
+          );
+        }
+      }
+      else {
+        // For mobile, use the standard share functionality
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(pngBytes);
+
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          await Share.shareXFiles(
+            [XFile(file.path)],
+            text: languageProvider.isEnglish
+                ? 'Invoice Details'
+                : 'انوائس کی تفصیلات',
+            subject: languageProvider.isEnglish
+                ? 'Invoice from my app'
+                : 'میری ایپ سے انوائس',
+          );
+        }
+      }
     } catch (e) {
-      // Close loading dialog if still open
+      print('Error capturing and sharing screenshot: $e');
       if (context.mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
+          SnackBar(content: Text('Failed to share invoice: ${e.toString()}')),
         );
       }
     }
   }
+
+
+
   Future<double> _getCustomerRemainingBalance(String customerId) async {
     try {
       double totalBalance = 0.0;
