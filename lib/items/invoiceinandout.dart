@@ -11,12 +11,12 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-class ItemTransactionReportPage extends StatefulWidget {
+class TransactionTypeReportPage extends StatefulWidget {
   @override
-  _ItemTransactionReportPageState createState() => _ItemTransactionReportPageState();
+  _TransactionTypeReportPageState createState() => _TransactionTypeReportPageState();
 }
 
-class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
+class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   bool _isLoading = false;
   bool _dataLoaded = false;
@@ -24,49 +24,13 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
   List<Map<String, dynamic>> _filteredTransactions = [];
   DateTime? _selectedStartDate;
   DateTime? _selectedEndDate;
-  String? _selectedItem;
-  List<String> _itemNames = [];
 
   @override
   void initState() {
     super.initState();
-    _loadItemNames();
-  }
-
-  Future<void> _loadItemNames() async {
-    try {
-      final itemsSnapshot = await _db.child('items').once();
-      final itemsData = itemsSnapshot.snapshot.value;
-
-      if (itemsData is Map) {
-        _itemNames = itemsData.values
-            .where((item) => item != null && item['itemName'] != null)
-            .map((item) => item['itemName'].toString())
-            .toList();
-      } else if (itemsData is List) {
-        _itemNames = itemsData
-            .where((item) => item != null && item['itemName'] != null)
-            .map((item) => item['itemName'].toString())
-            .toList();
-      }
-
-      setState(() {});
-    } catch (e) {
-      print("Error loading items: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading items: $e')),
-      );
-    }
   }
 
   Future<void> _loadData() async {
-    if (_selectedItem == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please select an item first')),
-      );
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _dataLoaded = false;
@@ -260,7 +224,6 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
       _filteredTransactions = _allTransactions.where((transaction) {
         if (_selectedStartDate != null && transaction['date'].isBefore(_selectedStartDate!)) return false;
         if (_selectedEndDate != null && transaction['date'].isAfter(_selectedEndDate!)) return false;
-        if (_selectedItem != null && transaction['itemName'] != _selectedItem) return false;
         return true;
       }).toList();
     });
@@ -303,7 +266,7 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
           return [
-            pw.Text('Item Transactions Report',
+            pw.Text('Transaction Type Report',
                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 20),
             pw.Table.fromTextArray(
@@ -339,9 +302,9 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
     try {
       final pdfBytes = await _generatePdf();
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/item_report.pdf');
+      final file = File('${tempDir.path}/transaction_type_report.pdf');
       await file.writeAsBytes(pdfBytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'Item Transactions Report');
+      await Share.shareXFiles([XFile(file.path)], text: 'Transaction Type Report');
     } catch (e) {
       print('Error sharing PDF: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -361,7 +324,7 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          languageProvider.isEnglish ? 'Item Transactions Report' : 'آئٹم لین دین کی رپورٹ',
+          languageProvider.isEnglish ? 'Transaction Type Report' : 'لین دین کی قسم کی رپورٹ',
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: Colors.teal,
@@ -416,24 +379,6 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
                       ],
                     ),
                     SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedItem,
-                      decoration: InputDecoration(
-                        labelText: languageProvider.isEnglish ? 'Item' : 'آئٹم',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                            value: null,
-                            child: Text(languageProvider.isEnglish ? 'All Items' : 'تمام آئٹمز')),
-                        ..._itemNames.map((item) =>
-                            DropdownMenuItem(value: item, child: Text(item))).toList(),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _selectedItem = value);
-                      },
-                    ),
-                    SizedBox(height: 8),
                     ElevatedButton.icon(
                       onPressed: _loadData,
                       icon: Icon(Icons.bar_chart),
@@ -460,8 +405,8 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
                     SizedBox(height: 16),
                     Text(
                       languageProvider.isEnglish
-                          ? 'Select filters and generate report'
-                          : 'فلٹرز منتخب کریں اور رپورٹ تیار کریں',
+                          ? 'Select date range and generate report'
+                          : 'تاریخ کی حد منتخب کریں اور رپورٹ تیار کریں',
                       style: TextStyle(fontSize: 18, color: Colors.grey),
                     ),
                   ],
@@ -498,7 +443,7 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
                                 .where((t) => t['type'] == 'Filled Sale')
                                 .fold(0.0, (sum, t) => sum + (t['quantity'] ?? 0.0)),
                             languageProvider.isEnglish ? 'Quantity' : 'مقدار',
-                            Colors.white,
+                            Colors.orange,
                           ),
                           SizedBox(width: 8),
                           _buildSummaryCard(
@@ -521,8 +466,8 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
                         ? Center(
                       child: Text(
                         languageProvider.isEnglish
-                            ? 'No matching transactions'
-                            : 'کوئی مماثل لین دین نہیں',
+                            ? 'No transactions in selected date range'
+                            : 'منتخب کردہ تاریخ کی حد میں کوئی لین دین نہیں',
                         style: TextStyle(fontSize: 18),
                       ),
                     )
@@ -554,7 +499,9 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
                           rows: _filteredTransactions.map((transaction) {
                             return DataRow(cells: [
                               DataCell(Text(DateFormat('yyyy-MM-dd').format(transaction['date']))),
-                              DataCell(Text(transaction['type'])),
+                              DataCell(Text(languageProvider.isEnglish ? transaction['type'] :
+                              transaction['type'] == 'Invoice Sale' ? 'انوائس فروخت' :
+                              transaction['type'] == 'Filled Sale' ? 'فل شدہ فروخت' : 'خریداری')),
                               DataCell(Text(
                                   transaction['type'] == 'Invoice Sale'
                                       ? transaction['invoiceNumber'].toString()
@@ -619,5 +566,4 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
       ),
     );
   }
-
 }

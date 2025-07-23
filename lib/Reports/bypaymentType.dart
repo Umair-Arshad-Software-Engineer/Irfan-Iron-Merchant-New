@@ -189,6 +189,27 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
           }
         }
 
+        // Fetch and process simple cashbook payments if selected
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'simplecashbookPayments') {
+          final simpleCashbookPayments = invoice['simplecashbookPayments'] != null
+              ? Map<String, dynamic>.from(invoice['simplecashbookPayments'])
+              : {};
+          for (var payment in simpleCashbookPayments.values) {
+            reportData.add({
+              'invoiceId': invoiceId,
+              'referenceNumber': invoice['referenceNumber'],
+              'customerId': invoice['customerId'],
+              'customerName': invoice['customerName'],
+              'paymentType': invoice['paymentType'],
+              'paymentMethod': 'SimpleCashbook',
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': invoice['createdAt'],
+            });
+          }
+        }
+
+
         // Fetch and process online payments if the selected payment method includes 'online'
         if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'online') {
           final onlinePayments = invoice['onlinePayments'] != null
@@ -777,6 +798,48 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                             ],
                           ),
                           child:
+                          // DropdownButton<String>(
+                          //   isExpanded: true,
+                          //   value: _selectedPaymentMethod,
+                          //   onChanged: (value) {
+                          //     setState(() {
+                          //       _selectedPaymentMethod = value;
+                          //     });
+                          //     _fetchReportData();
+                          //   },
+                          //   items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip']
+                          //       .map<DropdownMenuItem<String>>((String value) {
+                          //     return DropdownMenuItem<String>(
+                          //       value: value,
+                          //       // child: Text(value == 'all'
+                          //       //     ? 'All Methods'
+                          //       //     : value == 'online'
+                          //       //     ? 'Online'
+                          //       //     : value == 'cash'
+                          //       //     ? 'Cash'
+                          //       //     : value == 'check'
+                          //       //     ? 'Check'
+                          //       //     : value == 'bank'
+                          //       //     ? 'Bank'
+                          //       //     : 'Slip'
+                          //       //     ),
+                          //       child: Text(value == 'all'
+                          //           ? 'All Methods'
+                          //           : value == 'online'
+                          //           ? 'Online'
+                          //           : value == 'cash'
+                          //           ? 'Cash'
+                          //           : value == 'check'
+                          //           ? 'Check'
+                          //           : value == 'bank'
+                          //           ? 'Bank'
+                          //           : value == 'slip'
+                          //           ? 'Slip'
+                          //           : 'Simple Cashbook' // New option
+                          //       ),
+                          //     );
+                          //   }).toList(),
+                          // ),
                           DropdownButton<String>(
                             isExpanded: true,
                             value: _selectedPaymentMethod,
@@ -786,7 +849,7 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                               });
                               _fetchReportData();
                             },
-                            items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip']
+                            items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip', 'simplecashbook']
                                 .map<DropdownMenuItem<String>>((String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
@@ -800,7 +863,9 @@ class _PaymentTypeReportPageState extends State<PaymentTypeReportPage> {
                                     ? 'Check'
                                     : value == 'bank'
                                     ? 'Bank'
-                                    : 'Slip'),
+                                    : value == 'slip'
+                                    ? 'Slip'
+                                    : 'Simple Cashbook'),
                               );
                             }).toList(),
                           ),

@@ -294,6 +294,27 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
             });
           }
         }
+        // Fetch and process simple cashbook payments if selected
+        if (_selectedPaymentMethod == 'all' || _selectedPaymentMethod == 'simplecashbookPayments') {
+          final simpleCashbookPayments = filled['simplecashbookPayments'] != null
+              ? Map<String, dynamic>.from(filled['simplecashbookPayments'])
+              : {};
+          for (var payment in simpleCashbookPayments.values) {
+            reportData.add({
+              'filledId': filledId,
+              'referenceNumber': filled['referenceNumber'],
+              'customerId': filled['customerId'],
+              'customerName': filled['customerName'],
+              'paymentType': filled['paymentType'],
+              'paymentMethod': 'SimpleCashbook',
+              'amount': payment['amount'],
+              'date': payment['date'],
+              'createdAt': filled['createdAt'],
+            });
+          }
+        }
+
+
       }
 
       // Update the report data with the fetched information
@@ -794,6 +815,33 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                             ],
                           ),
                           child:
+                          // DropdownButton<String>(
+                          //   isExpanded: true,
+                          //   value: _selectedPaymentMethod,
+                          //   onChanged: (value) {
+                          //     setState(() {
+                          //       _selectedPaymentMethod = value;
+                          //     });
+                          //     _fetchReportData();
+                          //   },
+                          //   items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip']
+                          //       .map<DropdownMenuItem<String>>((String value) {
+                          //     return DropdownMenuItem<String>(
+                          //       value: value,
+                          //       child: Text(value == 'all'
+                          //           ? 'All Methods'
+                          //           : value == 'online'
+                          //           ? 'Online'
+                          //           : value == 'cash'
+                          //           ? 'Cash'
+                          //           : value == 'check'
+                          //           ? 'Check'
+                          //           : value == 'bank'
+                          //           ? 'Bank'
+                          //           : 'Slip'),
+                          //     );
+                          //   }).toList(),
+                          // ),
                           DropdownButton<String>(
                             isExpanded: true,
                             value: _selectedPaymentMethod,
@@ -803,7 +851,7 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                               });
                               _fetchReportData();
                             },
-                            items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip']
+                            items: <String>['all', 'online', 'cash', 'check', 'bank', 'slip', 'simplecashbook']
                                 .map<DropdownMenuItem<String>>((String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
@@ -817,10 +865,13 @@ class _FilledPaymentTypeReportPageState extends State<FilledPaymentTypeReportPag
                                     ? 'Check'
                                     : value == 'bank'
                                     ? 'Bank'
-                                    : 'Slip'),
+                                    : value == 'slip'
+                                    ? 'Slip'
+                                    : 'Simple Cashbook'),
                               );
                             }).toList(),
                           ),
+
                         ),
                       ],
                     ),
