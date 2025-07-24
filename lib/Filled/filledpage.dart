@@ -179,7 +179,7 @@ class _filledpageState extends State<filledpage> {
     }
 
     double grandTotal = _calculateGrandTotal();
-    double remainingAmount = grandTotal - paidAmount;
+    // double remainingAmount = grandTotal - paidAmount;
 
     if (_selectedCustomerId == null) {
       throw Exception("No customer selected");
@@ -224,6 +224,9 @@ class _filledpageState extends State<filledpage> {
 
     // Calculate the new balance (previous balance + current filled amount)
     double newBalance = remainingBalance + grandTotal;
+
+    double remainingAmount = newBalance - paidAmount;
+
     // Load the image asset for the logo
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
     final buffer = bytes.buffer.asUint8List();

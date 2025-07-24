@@ -188,8 +188,8 @@ import '../bankmanagement/banknames.dart';
         print("Error fetching payments: $e");
       }
 
-      double grandTotal = _calculateGrandTotal();
-      double remainingAmount = grandTotal - paidAmount;
+      // double grandTotal = _calculateGrandTotal();
+      // double remainingAmount = grandTotal - paidAmount;
 
       if (_selectedCustomerId == null) {
         throw Exception("No customer selected");
@@ -233,8 +233,11 @@ import '../bankmanagement/banknames.dart';
       double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
       double remainingBalance = remainingBalanceold;
 
+      double grandTotal = _calculateGrandTotal();
+
       // Calculate the new balance (previous balance + current invoice amount)
       double newBalance = remainingBalance + grandTotal;
+      double remainingAmount = newBalance - paidAmount;
 
       // Load the image asset for the logo
       final ByteData bytes = await rootBundle.load('assets/images/logo.png');
