@@ -38,6 +38,54 @@ class _filledListpageState extends State<filledListpage> {
   final ScrollController _scrollController = ScrollController();
   // Flag to prevent multiple requests
   bool _isLoadingMore = false;
+  bool _isGeneratingReport = false; // Add this flag
+
+
+  // Add this method to fetch filtered data from database
+  Future<void> _fetchFilteredDataFromDatabase() async {
+    setState(() {
+      _isGeneratingReport = true;
+    });
+
+    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+
+    try {
+      // Reset pagination and fetch fresh data with filters
+      filledProvider.resetPagination();
+
+      // Get the search query
+      final searchQuery = _searchController.text.toLowerCase();
+
+      // Get date range if selected
+      DateTime? startDate;
+      DateTime? endDate;
+      if (_selectedDateRange != null) {
+        startDate = _selectedDateRange!.start;
+        endDate = _selectedDateRange!.end;
+      }
+
+      // Fetch filled with filters directly from database
+      await filledProvider.fetchFilledWithFilters(
+        searchQuery: searchQuery,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      // Update the filtered filled
+      setState(() {
+        _filteredFilled = filledProvider.filled;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error generating report: ${e.toString()}')),
+      );
+    } finally {
+      setState(() {
+        _isGeneratingReport = false;
+      });
+    }
+  }
+
 
 
 
@@ -124,6 +172,7 @@ class _filledListpageState extends State<filledListpage> {
               filledProvider.resetPagination();
               filledProvider.fetchFilled();
             },
+            onGenerateReport: _fetchFilteredDataFromDatabase, // Add this
             languageProvider: languageProvider,
           ),
           // Filled List
@@ -1107,93 +1156,7 @@ async {
 }
 
 
-Future<void> _showEditPaymentDialog(
-    BuildContext context,
-    String filledId,
-    String paymentKey,
-    String paymentMethod,
-    double oldPaymentAmount,
-    String oldDescription,
-    Uint8List? oldImageBytes,
-    Future<Uint8List?> Function() pickImage, // Add this parameter
-    )
-async {
-  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  final TextEditingController _amountController = TextEditingController(text: oldPaymentAmount.toString());
-  final TextEditingController _descriptionController = TextEditingController(text: oldDescription);
-  Uint8List? _imageBytes = oldImageBytes;
 
-  await showDialog(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text(languageProvider.isEnglish ? 'Edit Payment' : 'ادائیگی میں ترمیم کریں'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: languageProvider.isEnglish ? 'Amount' : 'رقم',
-                ),
-              ),
-              TextField(
-                controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Uint8List? imageBytes = await pickImage(); // Use the passed function
-                  if (imageBytes != null) {
-                    _imageBytes = imageBytes;
-                  }
-                },
-                child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final newAmount = double.tryParse(_amountController.text) ?? 0.0;
-              final newDescription = _descriptionController.text;
-
-              try {
-                await Provider.of<FilledProvider>(context, listen: false).editPaymentEntry(
-                  filledId: filledId,
-                  paymentKey: paymentKey,
-                  paymentMethod: paymentMethod,
-                  oldPaymentAmount: oldPaymentAmount,
-                  newPaymentAmount: newAmount,
-                  newDescription: newDescription,
-                  newImageBytes: _imageBytes,
-                );
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Payment updated successfully.')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to update payment: ${e.toString()}')),
-                );
-              }
-            },
-            child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
-          ),
-        ],
-      );
-    },
-  );
-}
 
 
 class FilledList extends StatelessWidget {
@@ -1218,77 +1181,6 @@ class FilledList extends StatelessWidget {
 
   });
 
-
-  // Future<void> _captureAndShareInvoice(GlobalKey key,BuildContext context) async {
-  //   try {
-  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  //
-  //     // Show loading indicator
-  //     showDialog(
-  //       context: context,
-  //       barrierDismissible: false,
-  //       builder: (context) => const Center(child: CircularProgressIndicator()),
-  //     );
-  //
-  //     // Add a small delay to ensure the widget is painted
-  //     await Future.delayed(const Duration(milliseconds: 100));
-  //
-  //     // Check if the widget is still mounted
-  //     if (!context.mounted) return;
-  //
-  //     // Verify the boundary exists
-  //     final renderObject = key.currentContext?.findRenderObject();
-  //     if (renderObject == null || !(renderObject is RenderRepaintBoundary)) {
-  //       throw Exception('Could not find render boundary');
-  //     }
-  //
-  //
-  //     final boundary = renderObject as RenderRepaintBoundary;
-  //
-  //     // Try capturing multiple times if needed
-  //     ui.Image? image;
-  //     for (int i = 0; i < 3; i++) {
-  //       try {
-  //         image = await boundary.toImage(pixelRatio: 3.0);
-  //         break;
-  //       } catch (e) {
-  //         if (i == 2) rethrow;
-  //         await Future.delayed(const Duration(milliseconds: 100));
-  //       }
-  //     }
-  //
-  //     final byteData = await image!.toByteData(format: ui.ImageByteFormat.png);
-  //     final pngBytes = byteData!.buffer.asUint8List();
-  //
-  //     // Close loading dialog
-  //     if (context.mounted) {
-  //       Navigator.of(context).pop();
-  //     }
-  //
-  //     // Share the file
-  //     final tempDir = await getTemporaryDirectory();
-  //     final file = File('${tempDir.path}/invoice_${DateTime.now().millisecondsSinceEpoch}.png');
-  //     await file.writeAsBytes(pngBytes);
-  //
-  //     await Share.shareXFiles(
-  //       [XFile(file.path)],
-  //       text: languageProvider.isEnglish
-  //           ? 'Invoice Details'
-  //           : 'انوائس کی تفصیلات',
-  //       subject: languageProvider.isEnglish
-  //           ? 'Invoice from my app'
-  //           : 'میری ایپ سے انوائس',
-  //     );
-  //   } catch (e) {
-  //     // Close loading dialog if still open
-  //     if (context.mounted) {
-  //       Navigator.of(context).pop();
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error sharing invoice: ${e.toString()}')),
-  //       );
-  //     }
-  //   }
-  // }
 
   Future<void> _captureAndShareInvoice(GlobalKey key, BuildContext context) async {
     if (kIsWeb) {
@@ -1665,6 +1557,7 @@ class SearchAndFilterSection extends StatelessWidget {
   final Function(DateTimeRange?) onDateRangeSelected;
   final VoidCallback onClearDateFilter;
   final LanguageProvider languageProvider;
+  final VoidCallback onGenerateReport; // Add this callback
 
   const SearchAndFilterSection({
     required this.searchController,
@@ -1672,6 +1565,7 @@ class SearchAndFilterSection extends StatelessWidget {
     required this.onDateRangeSelected,
     required this.onClearDateFilter,
     required this.languageProvider,
+    required this.onGenerateReport, // Add this parameter
   });
 
   @override
@@ -1712,12 +1606,15 @@ class SearchAndFilterSection extends StatelessWidget {
               }
             },
             style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.teal.shade400,
             ),
             icon: const Icon(Icons.date_range, color: Colors.white),
             label: Text(
               selectedDateRange == null
-                  ? languageProvider.isEnglish ? 'Select Date' : 'ڈیٹ منتخب کریں'
+                  ? languageProvider.isEnglish
+                  ? 'Select Date Range'
+                  : 'تاریخ کی حد منتخب کریں'
                   : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
             ),
           ),
@@ -1729,9 +1626,22 @@ class SearchAndFilterSection extends StatelessWidget {
             children: [
               ElevatedButton(
                 onPressed: onClearDateFilter,
-                child: Text(languageProvider.isEnglish ? 'Clear Date Filter' : 'انوائس لسٹ کا فلٹر ختم کریں'),
+                child: Text(languageProvider.isEnglish
+                    ? 'Clear Filters'
+                    : 'فلٹرز صاف کریں'),
                 style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.teal.shade400,
+                ),
+              ),
+              ElevatedButton(
+                onPressed: onGenerateReport,
+                child: Text(languageProvider.isEnglish
+                    ? 'Generate Report'
+                    : 'رپورٹ بنائیں'),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.teal,
                 ),
               ),
             ],

@@ -37,11 +37,11 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   List<Map<String, dynamic>> _filteredInvoices = [];
   String? _selectedBankId;
   String? _selectedBankName;
-  // Scroll controller for ListView
   final ScrollController _scrollController = ScrollController();
-  // Flag to prevent multiple requests
   bool _isLoadingMore = false;
   final TextEditingController _dateController = TextEditingController();
+  bool _isGeneratingReport = false;
+
 
   @override
   void initState() {
@@ -86,6 +86,51 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     }
   }
 
+  // Add this method to fetch filtered data from database
+  Future<void> _fetchFilteredDataFromDatabase() async {
+    setState(() {
+      _isGeneratingReport = true;
+    });
+
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+
+    try {
+      // Reset pagination and fetch fresh data with filters
+      invoiceProvider.resetPagination();
+
+      // Get the search query
+      final searchQuery = _searchController.text.toLowerCase();
+
+      // Get date range if selected
+      DateTime? startDate;
+      DateTime? endDate;
+      if (_selectedDateRange != null) {
+        startDate = _selectedDateRange!.start;
+        endDate = _selectedDateRange!.end;
+      }
+
+      // Fetch invoices with filters directly from database
+      await invoiceProvider.fetchInvoicesWithFilters(
+        searchQuery: searchQuery,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      // Update the filtered invoices
+      setState(() {
+        _filteredInvoices = invoiceProvider.invoices;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error generating report: ${e.toString()}')),
+      );
+    } finally {
+      setState(() {
+        _isGeneratingReport = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -113,7 +158,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
               final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
               invoiceProvider.resetPagination();
               invoiceProvider.fetchInvoices();
+
             },
+            onGenerateReport: _fetchFilteredDataFromDatabase, // Add this
             onClearDateFilter: () {
               setState(() {
                 _selectedDateRange = null;
@@ -1037,8 +1084,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     );
   }
 
-
-
 }
 
 Future<void> _showDeletePaymentConfirmationDialog(
@@ -1506,6 +1551,7 @@ class SearchAndFilterSection extends StatelessWidget {
   final Function(DateTimeRange?) onDateRangeSelected;
   final VoidCallback onClearDateFilter;
   final LanguageProvider languageProvider;
+  final VoidCallback onGenerateReport; // Add this callback
 
   const SearchAndFilterSection({
     required this.searchController,
@@ -1513,9 +1559,8 @@ class SearchAndFilterSection extends StatelessWidget {
     required this.onDateRangeSelected,
     required this.onClearDateFilter,
     required this.languageProvider,
+    required this.onGenerateReport, // Add this parameter
   });
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -1555,12 +1600,15 @@ class SearchAndFilterSection extends StatelessWidget {
               }
             },
             style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.teal.shade400,
             ),
             icon: const Icon(Icons.date_range, color: Colors.white),
             label: Text(
               selectedDateRange == null
-                  ? languageProvider.isEnglish ? 'Select Date' : 'ڈیٹ منتخب کریں'
+                  ? languageProvider.isEnglish
+                  ? 'Select Date Range'
+                  : 'تاریخ کی حد منتخب کریں'
                   : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
             ),
           ),
@@ -1572,9 +1620,22 @@ class SearchAndFilterSection extends StatelessWidget {
             children: [
               ElevatedButton(
                 onPressed: onClearDateFilter,
-                child: Text(languageProvider.isEnglish ? 'Clear Date Filter' : 'انوائس لسٹ کا فلٹر ختم کریں'),
+                child: Text(languageProvider.isEnglish
+                    ? 'Clear Filters'
+                    : 'فلٹرز صاف کریں'),
                 style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white, backgroundColor: Colors.teal.shade400,
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.teal.shade400,
+                ),
+              ),
+              ElevatedButton(
+                onPressed: onGenerateReport,
+                child: Text(languageProvider.isEnglish
+                    ? 'Generate Report'
+                    : 'رپورٹ بنائیں'),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.teal,
                 ),
               ),
             ],
@@ -1584,4 +1645,3 @@ class SearchAndFilterSection extends StatelessWidget {
     );
   }
 }
-

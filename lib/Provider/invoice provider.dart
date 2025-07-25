@@ -1261,4 +1261,90 @@ class InvoiceProvider with ChangeNotifier {
   }
 
 
+  bool _invoiceMatchesSearch(Map<dynamic, dynamic> invoice, String searchQuery) {
+    if (searchQuery.isEmpty) return true;
+
+    final invoiceNumber = (invoice['invoiceNumber'] ?? '').toString().toLowerCase();
+    final referenceNumber = (invoice['referenceNumber'] ?? '').toString().toLowerCase();
+    final customerName = (invoice['customerName'] ?? '').toString().toLowerCase();
+
+    return invoiceNumber.contains(searchQuery) ||
+        customerName.contains(searchQuery) ||
+        referenceNumber.contains(searchQuery);
+  }
+
+  void _processAndFilterInvoiceData(Map<dynamic, dynamic> values, String searchQuery) {
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null)
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      final invoice = entry.value;
+      final matchesSearch = _invoiceMatchesSearch(invoice, searchQuery);
+      if (matchesSearch) {
+        _processInvoiceEntry(entry.key.toString(), invoice);
+      }
+    }
+  }
+
+
+
+  // In InvoiceProvider class
+  Future<void> fetchInvoicesWithFilters({
+    String searchQuery = '',
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+  })
+  async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      Query query = _db.child('invoices').orderByChild('createdAt');
+
+      // Apply date filter if provided
+      if (startDate != null && endDate != null) {
+        query = query.startAt(startDate.toIso8601String()).endAt(endDate.toIso8601String());
+      }
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        _invoices.clear();
+
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processAndFilterInvoiceData(values, searchQuery);
+        } else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+          _processAndFilterInvoiceData(valuesMap, searchQuery);
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching filtered invoices: ${e.toString()}');
+      throw Exception('Failed to fetch filtered invoices: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
+
 }

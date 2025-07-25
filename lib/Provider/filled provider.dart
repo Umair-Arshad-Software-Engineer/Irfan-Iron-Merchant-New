@@ -24,6 +24,7 @@ class FilledProvider with ChangeNotifier {
   String? _selectedChequeBankName;
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
+  bool _isGeneratingReport = false; // Add this flag
 
   // Clear all loaded data and reset pagination
   void resetPagination() {
@@ -1316,6 +1317,92 @@ class FilledProvider with ChangeNotifier {
       rethrow;
     }
   }
+
+
+
+
+  // In FilledProvider class
+  Future<void> fetchFilledWithFilters({
+    String searchQuery = '',
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+  })
+  async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      Query query = _db.child('filled').orderByChild('createdAt');
+
+      // Apply date filter if provided
+      if (startDate != null && endDate != null) {
+        query = query.startAt(startDate.toIso8601String()).endAt(endDate.toIso8601String());
+      }
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        _filled.clear();
+
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processAndFilterFilledData(values, searchQuery);
+        } else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+          _processAndFilterFilledData(valuesMap, searchQuery);
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching filtered filled: ${e.toString()}');
+      throw Exception('Failed to fetch filtered filled: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _processAndFilterFilledData(Map<dynamic, dynamic> values, String searchQuery) {
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null)
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      final filled = entry.value;
+      final matchesSearch = _filledMatchesSearch(filled, searchQuery);
+      if (matchesSearch) {
+        _processFilledEntry(entry.key.toString(), filled);
+      }
+    }
+  }
+
+  bool _filledMatchesSearch(Map<dynamic, dynamic> filled, String searchQuery) {
+    if (searchQuery.isEmpty) return true;
+
+    final filledNumber = (filled['filledNumber'] ?? '').toString().toLowerCase();
+    final referenceNumber = (filled['referenceNumber'] ?? '').toString().toLowerCase();
+    final customerName = (filled['customerName'] ?? '').toString().toLowerCase();
+
+    return filledNumber.contains(searchQuery) ||
+        customerName.contains(searchQuery) ||
+        referenceNumber.contains(searchQuery);
+  }
+
 
 
 }
