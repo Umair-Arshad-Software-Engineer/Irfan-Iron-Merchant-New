@@ -7,6 +7,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:ui' as ui;
+
 
 class VendorLedgerPage extends StatefulWidget {
   final String vendorId;
@@ -36,6 +38,31 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
     super.initState();
     _fetchLedgerData();
   }
+
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromPoints(Offset(0, 0), Offset(500, 50)));
+    final paint = Paint()..color = Colors.black;
+
+    final textStyle = TextStyle(fontSize: 18, fontFamily: 'JameelNoori',color: Colors.black,fontWeight: FontWeight.bold);
+    final textSpan = TextSpan(text: text, style: textStyle);
+    final textPainter = TextPainter(
+        text: textSpan,
+        textAlign: TextAlign.left,
+        textDirection: ui.TextDirection.ltr
+    );
+
+    textPainter.layout();
+    textPainter.paint(canvas, Offset(0, 0));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(textPainter.width.toInt(), textPainter.height.toInt());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    return pw.MemoryImage(buffer);
+  }
+
 
   Future<void> _fetchLedgerData() async {
     try {
@@ -207,6 +234,8 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
           : "Unknown Date";
     }
 
+    final vendorDetailsImage = await _createTextImage('Vendor Name: ${widget.vendorName}');
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -229,8 +258,9 @@ class _VendorLedgerPageState extends State<VendorLedgerPage> {
                       style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                     ),
                     pw.SizedBox(height: 5),
-                    pw.Text('Vendor: ${widget.vendorName}',
-                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    // pw.Text('Vendor: ${widget.vendorName}',
+                    //     style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    pw.Image(vendorDetailsImage, width: 400, dpi: 2000),
                     if (_selectedDateRange != null)
                       pw.Text(
                         'Date Range: ${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}/${_selectedDateRange!.start.year} - '

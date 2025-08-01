@@ -477,7 +477,6 @@ import '../bankmanagement/banknames.dart';
                 //     pw.Text(remainingAmount.toStringAsFixed(2)),
                 //   ],
                 // ),
-
                 pw.SizedBox(height: 60),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.end,

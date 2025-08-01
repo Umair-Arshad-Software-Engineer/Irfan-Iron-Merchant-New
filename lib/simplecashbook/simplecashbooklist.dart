@@ -300,6 +300,15 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
               child: pw.Text('Cashbook Report',
                   style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
             ),
+            pw.Container(
+              alignment: pw.Alignment.centerRight,
+              margin: const pw.EdgeInsets.only(top: 10),
+              child: pw.Text(
+                'Printed on: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                style: const pw.TextStyle(fontSize: 16),
+              ),
+            ),
+
             pw.SizedBox(height: 20),
             pw.Table(
               border: pw.TableBorder.all(),

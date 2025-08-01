@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:ui' as ui;
 
 class ItemTransactionReportPage extends StatefulWidget {
   @override
@@ -91,6 +92,67 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
       setState(() => _isLoading = false);
     }
   }
+
+
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    // Use default text for empty input
+    final String displayText = text.isEmpty ? "N/A" : text;
+
+    // Scale factor to increase resolution
+    const double scaleFactor = 1.5;
+
+    // Create a custom painter with the Urdu text
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
+      ),
+    );
+
+    // Define text style with scaling
+    final textStyle = const TextStyle(
+      fontSize: 12 * scaleFactor,
+      fontFamily: 'JameelNoori', // Ensure this font is registered
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    // Create the text span and text painter
+    final textSpan = TextSpan(text: displayText, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left, // Adjust as needed for alignment
+      textDirection: ui.TextDirection.rtl, // Use RTL for Urdu text
+    );
+
+    // Layout the text painter
+    textPainter.layout();
+
+    // Validate dimensions
+    final double width = textPainter.width * scaleFactor;
+    final double height = textPainter.height * scaleFactor;
+
+    if (width <= 0 || height <= 0) {
+      throw Exception("Invalid text dimensions: width=$width, height=$height");
+    }
+
+    // Paint the text onto the canvas
+    textPainter.paint(canvas, const Offset(0, 0));
+
+    // Create an image from the canvas
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width.toInt(), height.toInt());
+
+    // Convert the image to PNG
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    // Return the image as a MemoryImage
+    return pw.MemoryImage(buffer);
+  }
+
 
   Future<List<Map<String, dynamic>>> _fetchInvoiceData() async {
     List<Map<String, dynamic>> results = [];
@@ -296,8 +358,67 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
     }
   }
 
+  // Future<Uint8List> _generatePdf() async {
+  //   final pdf = pw.Document();
+  //   pdf.addPage(
+  //     pw.MultiPage(
+  //       pageFormat: PdfPageFormat.a4,
+  //       build: (pw.Context context) {
+  //         return [
+  //           pw.Text('Item Transactions Report',
+  //               style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+  //           pw.SizedBox(height: 20),
+  //           pw.Table.fromTextArray(
+  //             headers: [
+  //               'Date', 'Type', 'Doc No.', 'Customer/Vendor', 'Item', 'Qty',
+  //               if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0)) 'Weight',
+  //               'Rate', 'Total',
+  //             ],
+  //             data: _filteredTransactions.map((t) {
+  //               return [
+  //                 DateFormat('yyyy-MM-dd').format(t['date']),
+  //                 t['type'],
+  //                 t['type'] == 'Invoice Sale' ? t['invoiceNumber'] :
+  //                 t['type'] == 'Filled Sale' ? t['filledNumber'] : '-',
+  //                 t['type'] == 'Purchase' ? t['vendorName'] : t['customerName'] ?? '-',
+  //                 t['itemName'],
+  //                 t['quantity'].toStringAsFixed(2),
+  //                 if (_filteredTransactions.any((tr) => tr['weight'] != null && tr['weight'] > 0))
+  //                   t['weight']?.toStringAsFixed(2) ?? '-',
+  //                 t['rate'].toStringAsFixed(2),
+  //                 t['total'].toStringAsFixed(2),
+  //               ];
+  //             }).toList(),
+  //           ),
+  //         ];
+  //       },
+  //     ),
+  //   );
+  //   return pdf.save();
+  // }
+
   Future<Uint8List> _generatePdf() async {
     final pdf = pw.Document();
+
+    // Create images for all customer names and item names first
+    final customerImages = <String, pw.MemoryImage>{};
+    final itemImages = <String, pw.MemoryImage>{};
+
+    // Pre-generate all needed images to avoid duplicate generation
+    for (final transaction in _filteredTransactions) {
+      final customerName = transaction['type'] == 'Purchase'
+          ? transaction['vendorName']
+          : transaction['customerName'] ?? '-';
+      final itemName = transaction['itemName'];
+
+      if (!customerImages.containsKey(customerName)) {
+        customerImages[customerName] = await _createTextImage(customerName);
+      }
+      if (!itemImages.containsKey(itemName)) {
+        itemImages[itemName] = await _createTextImage(itemName);
+      }
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -306,27 +427,127 @@ class _ItemTransactionReportPageState extends State<ItemTransactionReportPage> {
             pw.Text('Item Transactions Report',
                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 20),
-            pw.Table.fromTextArray(
-              headers: [
-                'Date', 'Type', 'Doc No.', 'Customer/Vendor', 'Item', 'Qty',
-                if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0)) 'Weight',
-                'Rate', 'Total',
+            pw.Table(
+              border: pw.TableBorder.all(),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.5), // Date
+                1: const pw.FlexColumnWidth(1.2), // Type
+                2: const pw.FlexColumnWidth(1.2), // Doc No.
+                3: const pw.FlexColumnWidth(2.0), // Customer/Vendor (wider for image)
+                4: const pw.FlexColumnWidth(2.0), // Item (wider for image)
+                5: const pw.FlexColumnWidth(1.0), // Qty
+                if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+                  6: const pw.FlexColumnWidth(1.0), // Weight
+                (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 7 : 6):
+                const pw.FlexColumnWidth(1.0), // Rate
+                (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 8 : 7):
+                const pw.FlexColumnWidth(1.2), // Total
+              },
+              children: [
+                // Header row
+                pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Date'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Type'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Doc No.'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Customer/Vendor'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Item'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Qty'),
+                    ),
+                    if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text('Wt.'),
+                      ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Rate'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Total'),
+                    ),
+                  ],
+                ),
+                // Data rows
+                ..._filteredTransactions.map((transaction) {
+                  final customerName = transaction['type'] == 'Purchase'
+                      ? transaction['vendorName']
+                      : transaction['customerName'] ?? '-';
+                  final itemName = transaction['itemName'];
+
+                  return pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(DateFormat('yyyy-MM-dd').format(transaction['date'])),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(transaction['type']),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(
+                          transaction['type'] == 'Invoice Sale'
+                              ? transaction['invoiceNumber'].toString()
+                              : transaction['type'] == 'Filled Sale'
+                              ? transaction['filledNumber'].toString()
+                              : '-',
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Container(
+                          height: 20, // Fixed height for image
+                          child: pw.Image(customerImages[customerName]!),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Container(
+                          height: 20, // Fixed height for image
+                          child: pw.Image(itemImages[itemName]!),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(transaction['quantity'].toStringAsFixed(2)),
+                      ),
+                      if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(transaction['weight']?.toStringAsFixed(2) ?? '-'),
+                        ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(transaction['rate'].toStringAsFixed(2)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(transaction['total'].toStringAsFixed(2)),
+                      ),
+                    ],
+                  );
+                }).toList(),
               ],
-              data: _filteredTransactions.map((t) {
-                return [
-                  DateFormat('yyyy-MM-dd').format(t['date']),
-                  t['type'],
-                  t['type'] == 'Invoice Sale' ? t['invoiceNumber'] :
-                  t['type'] == 'Filled Sale' ? t['filledNumber'] : '-',
-                  t['type'] == 'Purchase' ? t['vendorName'] : t['customerName'] ?? '-',
-                  t['itemName'],
-                  t['quantity'].toStringAsFixed(2),
-                  if (_filteredTransactions.any((tr) => tr['weight'] != null && tr['weight'] > 0))
-                    t['weight']?.toStringAsFixed(2) ?? '-',
-                  t['rate'].toStringAsFixed(2),
-                  t['total'].toStringAsFixed(2),
-                ];
-              }).toList(),
             ),
           ];
         },

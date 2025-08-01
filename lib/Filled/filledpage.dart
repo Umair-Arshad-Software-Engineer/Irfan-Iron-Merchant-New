@@ -436,6 +436,14 @@ class _filledpageState extends State<filledpage> {
                   pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
+              // Add remaining amount row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                ],
+              ),
 
               pw.SizedBox(height: 60),
               pw.Row(
