@@ -272,6 +272,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
           // Transaction Table with Payment Method and Bank Logo
           pw.Table(
+            border: pw.TableBorder.all(),
             columnWidths: {
               0: const pw.FlexColumnWidth(1.5),
               1: const pw.FlexColumnWidth(2),
@@ -285,6 +286,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             children: [
               // Header row
               pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                 children: [
                   _buildPdfHeaderCell('Date'),
                   _buildPdfHeaderCell('Filled #'),

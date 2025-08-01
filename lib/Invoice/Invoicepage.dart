@@ -367,14 +367,7 @@ import '../bankmanagement/banknames.dart';
                 ),
                 pw.SizedBox(height: 10),
 
-                //Totals Section
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
-                //     pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                //   ],
-                // ),
+
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [

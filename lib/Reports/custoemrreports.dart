@@ -39,6 +39,8 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
   DateTimeRange? selectedDateRange;
   static final Map<String, String> _bankIconMap = _createBankIconMap();
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
+
+
   static Map<String, String> _createBankIconMap() {
     return {
       for (var bank in pakistaniBanks)
@@ -280,6 +282,7 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
           // Transaction Table with Payment Method and Bank Logo
           pw.Table(
+            border: pw.TableBorder.all(),
             columnWidths: {
               0: const pw.FlexColumnWidth(1.5),
               1: const pw.FlexColumnWidth(2),
@@ -293,6 +296,7 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
             children: [
               // Header row
               pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                 children: [
                   _buildPdfHeaderCell('Date'),
                   _buildPdfHeaderCell('Transaction #'),
@@ -587,76 +591,6 @@ class _CustomerReportPageState extends State<CustomerReportPage> {
     );
   }
 
-  // Widget _buildTransactionTable(List<Map<String, dynamic>> transactions, LanguageProvider languageProvider) {
-  //   final isMobile = MediaQuery.of(context).size.width < 600;
-  //
-  //   return SingleChildScrollView(
-  //     scrollDirection: Axis.horizontal,
-  //     child: DataTable(
-  //       headingTextStyle: const TextStyle(fontWeight: FontWeight.bold),
-  //       columns: [
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Date' : 'ڈیٹ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Invoice Number' : 'انوائس نمبر')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Type' : 'قسم')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Payment Method' : 'ادائیگی کا طریقہ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Bank' : 'بینک')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
-  //         DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
-  //       ],
-  //       rows: transactions.map((transaction) {
-  //         final bankName = _getBankName(transaction);
-  //         final bankLogoPath = _getBankLogoPath(bankName);
-  //
-  //         return DataRow(cells: [
-  //         DataCell(Text(
-  //         DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //         )),
-  //         DataCell(Text(
-  //         transaction['referenceNumber'] ?? transaction['invoiceNumber'] ?? '-',
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //         )),
-  //         DataCell(Text(
-  //         transaction['credit'] < 0.0 ? 'Filled (Edited)' :
-  //         (transaction['credit'] != 0.0 ? 'Invoice' : 'Bill'),
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //         )),
-  //         DataCell(Text(
-  //         _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12),
-  //         )),
-  //           DataCell(
-  //             Row(
-  //               mainAxisSize: MainAxisSize.min,
-  //               children: [
-  //                 if (bankLogoPath != null)
-  //                   Image.asset(bankLogoPath, width: 70, height: 70),
-  //                 if (bankLogoPath != null)
-  //                   const SizedBox(width: 8), // Add some spacing between logo and name
-  //                 Text(bankName ?? '-', style: TextStyle(fontSize: isMobile ? 10 : 12)),
-  //               ],
-  //             ),
-  //           ),
-  //         DataCell(Text(
-  //         'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //         )),
-  //         DataCell(Text(
-  //         'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //         )),
-  //         DataCell(Text(
-  //         'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
-  //         style: TextStyle(fontSize: isMobile ? 10 : 12)
-  //         )),
-  //         ]);
-  //       }).toList(),
-  //     ),
-  //   );
-  // }
-
-  // Helper to translate payment methods
 
   Widget _buildTransactionTable(List<Map<String, dynamic>> transactions, LanguageProvider languageProvider) {
     final isMobile = MediaQuery.of(context).size.width < 600;

@@ -1394,6 +1394,31 @@ class InvoiceList extends StatelessWidget {
     }
   }
 
+
+  Widget _infoBlock({
+    required String title,
+    required String value,
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.normal,
+    Color? color,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: TextStyle(fontSize: fontSize - 2, color: Colors.grey[600])),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            color: color ?? Colors.black,
+          ),
+        ),
+      ],
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
 
@@ -1434,107 +1459,218 @@ class InvoiceList extends StatelessWidget {
                       minWidth: constraints.maxWidth,
                       minHeight: 100, // Adjust as needed
                     ),
-                    child: Card(
+                    // child: Card(
+                    //   margin: EdgeInsets.symmetric(
+                    //     horizontal: isWideScreen ? 16.0 : 8.0,
+                    //     vertical: 4.0,
+                    //   ),
+                    //   elevation: 2,
+                    //   child: ListTile(
+                    //     leading: CircleAvatar(
+                    //       backgroundColor: Colors.teal,
+                    //       child: Text(
+                    //         '${index + 1}',
+                    //         style: const TextStyle(color: Colors.white),
+                    //       ),
+                    //     ),
+                    //     contentPadding: const EdgeInsets.all(8),
+                    //     title: Text(
+                    //       '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                    //       style: TextStyle(
+                    //         fontSize: isWideScreen ? 18 : 16,
+                    //         fontWeight: FontWeight.bold,
+                    //       ),
+                    //     ),
+                    //     subtitle: Column(
+                    //       crossAxisAlignment: CrossAxisAlignment.start,
+                    //       children: [
+                    //         const SizedBox(height: 4),
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 16 : 14,
+                    //           ),
+                    //         ),
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 14 : 12,
+                    //             color: Colors.grey[600],
+                    //           ),
+                    //         ),
+                    //         // Add this new Text widget to show the weight
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 14 : 12,
+                    //           ),
+                    //         ),
+                    //         Row(
+                    //           children: [
+                    //             Text(
+                    //               '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                    //               style: const TextStyle(
+                    //                 fontSize:12,
+                    //                 fontWeight: FontWeight.bold,
+                    //               ),
+                    //             ),
+                    //             IconButton(
+                    //               icon: const Icon(Icons.share, size: 20),
+                    //               onPressed: (){
+                    //                 _captureAndShareInvoice(screenshotKey,context);
+                    //               },
+                    //               tooltip: languageProvider.isEnglish
+                    //                   ? 'Share invoice'
+                    //                   : 'انوائس شیئر کریں',
+                    //             ),
+                    //           ],
+                    //         ),
+                    //       ],
+                    //     ),
+                    //     trailing: Column(
+                    //       mainAxisSize: MainAxisSize.min,
+                    //       crossAxisAlignment: CrossAxisAlignment.end,
+                    //       children: [
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 16 : 14,
+                    //             fontWeight: FontWeight.bold,
+                    //           ),
+                    //         ),
+                    //         const SizedBox(height: 4),
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Paid: ' : 'ادا شدہ: '}${debitAmount.toStringAsFixed(2)}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 14 : 12,
+                    //             color: Colors.green,
+                    //           ),
+                    //         ),
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 14 : 12,
+                    //             color: remainingAmount > 0 ? Colors.red : Colors.green,
+                    //           ),
+                    //         ),
+                    //         Text(
+                    //           '${languageProvider.isEnglish ? 'Balance: ' : 'بیلنس: '}${customerBalance.toStringAsFixed(2)}',
+                    //           style: TextStyle(
+                    //             fontSize: isWideScreen ? 14 : 12,
+                    //             color: customerBalance >= 0 ? Colors.green : Colors.red,
+                    //           ),
+                    //         ),
+                    //       ],
+                    //     ),
+                    //
+                    //     onTap: () => onInvoiceTap(invoice),
+                    //     onLongPress: () => onInvoiceLongPress(invoice),
+                    //   ),
+                    // ),
+                    child: InkWell(
+                      onTap: () => onInvoiceTap(invoice),
+                      onLongPress: () => onInvoiceLongPress(invoice),
+                      child: Card(
                       margin: EdgeInsets.symmetric(
-                        horizontal: isWideScreen ? 16.0 : 8.0,
-                        vertical: 4.0,
-                      ),
-                      elevation: 2,
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.teal,
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.all(8),
-                        title: Text(
-                          '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                          style: TextStyle(
-                            fontSize: isWideScreen ? 18 : 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 16 : 14,
+                      horizontal: isWideScreen ? 16.0 : 8.0,
+                      vertical: 4.0,),
+                       elevation: 2,
+                       child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Top Row: Index + Invoice Title + Share Button
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Index
+                              CircleAvatar(
+                                backgroundColor: Colors.teal,
+                                child: Text('${index + 1}', style: const TextStyle(color: Colors.white)),
                               ),
-                            ),
-                            Text(
-                              '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 14 : 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            // Add this new Text widget to show the weight
-                            Text(
-                              '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 14 : 12,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Text(
-                                  '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                                  style: const TextStyle(
-                                    fontSize:12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              const SizedBox(width: 8),
+
+                              // Invoice Info (Expanded to take available space)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                                      style: TextStyle(
+                                        fontSize: isWideScreen ? 18 : 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'}: ${invoice['customerName']}',
+                                      style: TextStyle(fontSize: isWideScreen ? 16 : 14),
+                                    ),
+                                    Text(
+                                      '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
+                                      style: TextStyle(fontSize: isWideScreen ? 14 : 12, color: Colors.grey[600]),
+                                    ),
+                                    Text(
+                                      '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
+                                      style: TextStyle(fontSize: isWideScreen ? 14 : 12),
+                                    ),
+                                  ],
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.share, size: 20),
-                                  onPressed: (){
-                                    _captureAndShareInvoice(screenshotKey,context);
-                                  },
-                                  tooltip: languageProvider.isEnglish
-                                      ? 'Share invoice'
-                                      : 'انوائس شیئر کریں',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 16 : 14,
+                              ),
+
+                              // Share Icon
+                              IconButton(
+                                icon: const Icon(Icons.share),
+                                tooltip: languageProvider.isEnglish ? 'Share invoice' : 'انوائس شیئر کریں',
+                                onPressed: () => _captureAndShareInvoice(screenshotKey, context),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          // Bottom Row: Financial summary (evenly spaced on wide screens)
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            runSpacing: 4,
+                            spacing: 12,
+                            children: [
+                              _infoBlock(
+                                title: languageProvider.isEnglish ? 'Total' : 'کل',
+                                value: '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
                                 fontWeight: FontWeight.bold,
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            // Text(
-                            //   '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
-                            //   style: TextStyle(
-                            //     fontSize: isWideScreen ? 14 : 12,
-                            //     color: Colors.red,
-                            //   ),
-                            // ),
-                            Text(
-                              '${languageProvider.isEnglish ? 'Balance: ' : 'بیلنس: '}${customerBalance.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 14 : 12,
+                              _infoBlock(
+                                title: languageProvider.isEnglish ? 'Paid' : 'ادا شدہ',
+                                value: debitAmount.toStringAsFixed(2),
+                                color: Colors.green,
+                              ),
+                              _infoBlock(
+                                title: languageProvider.isEnglish ? 'Remaining' : 'بقیہ',
+                                value: remainingAmount.toStringAsFixed(2),
+                                color: remainingAmount > 0 ? Colors.red : Colors.green,
+                              ),
+                              _infoBlock(
+                                title: languageProvider.isEnglish ? 'Balance' : 'بیلنس',
+                                value: customerBalance.toStringAsFixed(2),
                                 color: customerBalance >= 0 ? Colors.green : Colors.red,
                               ),
-                            ),
-                          ],
-                        ),
-                        onTap: () => onInvoiceTap(invoice),
-                        onLongPress: () => onInvoiceLongPress(invoice),
+                              _infoBlock(
+                                title: languageProvider.isEnglish ? 'Invoice #2' : 'انوائس نمبر',
+                                value: invoice['invoiceNumber'].toString(),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
+                                        ),
+                                      ),
                     ),
-                  ),
+                ),
                 );
               },
             );
