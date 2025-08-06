@@ -969,114 +969,346 @@ import '../bankmanagement/banknames.dart';
       }
     }
 
+    // Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
+    //   final pdf = pw.Document();
+    //   // Load the image asset for the logo
+    //   final ByteData bytes = await rootBundle.load('assets/images/logo.png');
+    //   final buffer = bytes.buffer.asUint8List();
+    //   final image = pw.MemoryImage(buffer);
+    //
+    //   // Load the footer logo if different
+    //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
+    //   final footerBuffer = footerBytes.buffer.asUint8List();
+    //   final footerLogo = pw.MemoryImage(footerBuffer);
+    //   // Generate all description images asynchronously
+    //   final List<List<dynamic>> tableData = await Future.wait(
+    //     payments.map((payment) async {
+    //       final paymentAmount = _parseToDouble(payment['amount']);
+    //       final paymentDate = _parsePaymentDate(payment['date']);
+    //       final description = payment['description'] ?? 'N/A';
+    //       // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
+    //
+    //       // Generate image from description text
+    //       final descriptionImage = await _createTextImage(description);
+    //
+    //       return [
+    //         payment['method'],
+    //         'Rs ${paymentAmount.toStringAsFixed(2)}',
+    //         DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
+    //         pw.Image(descriptionImage), // Use the generated image
+    //       ];
+    //     }),
+    //   );
+    //
+    //   // Add a multi-page layout to handle multiple payments
+    //   pdf.addPage(
+    //     pw.MultiPage(
+    //       pageFormat: PdfPageFormat.a4,
+    //       margin: const pw.EdgeInsets.all(20),
+    //       build: (pw.Context context) => [
+    //         // Header section
+    //         pw.Row(
+    //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //           children: [
+    //             pw.Image(image, width: 80, height: 80), // Adjust logo size
+    //             pw.Text('Payment History',
+    //                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+    //           ],
+    //         ),
+    //
+    //         // Table with payment history
+    //         // pw.Table.fromTextArray(
+    //         //   headers: ['Method', 'Amount', 'Date', 'Description'],
+    //         //   // data: tableData,
+    //         //   data: payments.map((payment) {
+    //         //     return [
+    //         //       payment['method'] == 'Bank'
+    //         //           ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+    //         //           : payment['method'],
+    //         //       'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
+    //         //       DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
+    //         //       // payment['description'] ?? 'N/A',
+    //         //       payment['description'] ?? 'N/A',
+    //         //     ];
+    //         //   }).toList(),
+    //         //   border: pw.TableBorder.all(),
+    //         //   headerStyle: pw.TextStyle(
+    //         //     fontWeight: pw.FontWeight.bold,
+    //         //     fontSize: 14, // Increased header font size
+    //         //   ),
+    //         //   cellStyle: const pw.TextStyle(
+    //         //     fontSize: 12, // Increased cell font size from 10 to 12
+    //         //   ),
+    //         //   cellAlignment: pw.Alignment.centerLeft,
+    //         //   cellPadding: const pw.EdgeInsets.all(6),
+    //         // ),
+    //         // Construct the table manually
+    //         // pw.Table(
+    //         //   border: pw.TableBorder.all(),
+    //         //   defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+    //         //   children: [
+    //         //     // Table header row
+    //         //     pw.TableRow(
+    //         //       decoration: pw.BoxDecoration(color: PdfColors.grey300),
+    //         //       children: [
+    //         //         pw.Padding(
+    //         //           padding: const pw.EdgeInsets.all(6),
+    //         //           child: pw.Text('Method', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //         //         ),
+    //         //         pw.Padding(
+    //         //           padding: const pw.EdgeInsets.all(6),
+    //         //           child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //         //         ),
+    //         //         pw.Padding(
+    //         //           padding: const pw.EdgeInsets.all(6),
+    //         //           child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //         //         ),
+    //         //         pw.Padding(
+    //         //           padding: const pw.EdgeInsets.all(6),
+    //         //           child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //         //         ),
+    //         //       ],
+    //         //     ),
+    //         //
+    //         //     // Data rows with Urdu description as image
+    //         //     ...await Future.wait(payments.map((payment) async {
+    //         //       final method = payment['method'] == 'Bank'
+    //         //           ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+    //         //           : payment['method'];
+    //         //
+    //         //       final amount = 'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}';
+    //         //       final date = DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date']));
+    //         //       final description = payment['description'] ?? 'N/A';
+    //         //       final descriptionImage = await _createTextImage(description);
+    //         //
+    //         //       return pw.TableRow(
+    //         //         children: [
+    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(method, style: const pw.TextStyle(fontSize: 12))),
+    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(amount, style: const pw.TextStyle(fontSize: 12))),
+    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(date, style: const pw.TextStyle(fontSize: 12))),
+    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Image(descriptionImage, width: 100, height: 30, fit: pw.BoxFit.contain)),
+    //         //         ],
+    //         //       );
+    //         //     })),
+    //         //   ],
+    //         // ),
+    //       final List<pw.TableRow> tableRows = [];
+    //
+    //   /// Add header manually
+    //   tableRows.add(
+    //   pw.TableRow(
+    //   decoration: pw.BoxDecoration(color: PdfColors.grey300),
+    //   children: [
+    //   pw.Padding(
+    //   padding: const pw.EdgeInsets.all(6),
+    //   child: pw.Text('Method', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //   ),
+    //   pw.Padding(
+    //   padding: const pw.EdgeInsets.all(6),
+    //   child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //   ),
+    //   pw.Padding(
+    //   padding: const pw.EdgeInsets.all(6),
+    //   child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //   ),
+    //   pw.Padding(
+    //   padding: const pw.EdgeInsets.all(6),
+    //   child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+    //   ),
+    //   ],
+    //   ),
+    //   );
+    //
+    //   /// Generate each row asynchronously
+    //   for (final payment in payments) {
+    //   final method = payment['method'] == 'Bank'
+    //   ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+    //       : payment['method'];
+    //
+    //   final amount = 'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}';
+    //   final date = DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date']));
+    //   final description = payment['description'] ?? 'N/A';
+    //   final descriptionImage = await _createTextImage(description);
+    //
+    //   tableRows.add(
+    //   pw.TableRow(
+    //   children: [
+    //   pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(method, style: const pw.TextStyle(fontSize: 12))),
+    //   pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(amount, style: const pw.TextStyle(fontSize: 12))),
+    //   pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(date, style: const pw.TextStyle(fontSize: 12))),
+    //   pw.Padding(
+    //   padding: const pw.EdgeInsets.all(6),
+    //   child: pw.Image(descriptionImage, width: 100, height: 30, fit: pw.BoxFit.contain),
+    //   ),
+    //   ],
+    //   ),
+    //   );
+    //   }
+    //
+    //
+    //
+    //   pw.SizedBox(height: 20),
+    //         pw.Divider(),
+    //         pw.Spacer(),
+    //         // Footer section
+    //         pw.Row(
+    //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    //           children: [
+    //             pw.Image(footerLogo, width: 20, height: 20), // Footer logo
+    //             pw.Column(
+    //               crossAxisAlignment: pw.CrossAxisAlignment.center,
+    //               children: [
+    //                 pw.Text(
+    //                   'Dev Valley Software House',
+    //                   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+    //                 ),
+    //                 pw.Text(
+    //                   'Contact: 0303-4889663',
+    //                   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+    //                 ),
+    //               ],
+    //             ),
+    //           ],
+    //         ),
+    //         pw.Align(
+    //           alignment: pw.Alignment.centerRight,
+    //           child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+    //               style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+    //         ),
+    //       ],
+    //     ),
+    //   );
+    //
+    //   // Print the PDF
+    //   await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+    // }
+
     Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
       final pdf = pw.Document();
-      // Load the image asset for the logo
+
+      // Load header and footer logos
       final ByteData bytes = await rootBundle.load('assets/images/logo.png');
       final buffer = bytes.buffer.asUint8List();
       final image = pw.MemoryImage(buffer);
 
-      // Load the footer logo if different
       final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
       final footerBuffer = footerBytes.buffer.asUint8List();
       final footerLogo = pw.MemoryImage(footerBuffer);
-      // Generate all description images asynchronously
-      final List<List<dynamic>> tableData = await Future.wait(
-        payments.map((payment) async {
-          final paymentAmount = _parseToDouble(payment['amount']);
-          final paymentDate = _parsePaymentDate(payment['date']);
-          final description = payment['description'] ?? 'N/A';
-          // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
 
-          // Generate image from description text
-          final descriptionImage = await _createTexttoImage(description);
+      // Prepare table rows with Urdu description image
+      final List<pw.TableRow> tableRows = [];
 
-          return [
-            payment['method'],
-            'Rs ${paymentAmount.toStringAsFixed(2)}',
-            DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
-            pw.Image(descriptionImage), // Use the generated image
-          ];
-        }),
-      );
-
-      // Add a multi-page layout to handle multiple payments
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(20),
-          build: (pw.Context context) => [
-            // Header section
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Image(image, width: 80, height: 80), // Adjust logo size
-                pw.Text('Payment History',
-                    style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              ],
+      // Add header row
+      tableRows.add(
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: PdfColors.grey300),
+          children: [
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text('Method', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
             ),
-
-            // Table with payment history
-            pw.Table.fromTextArray(
-              headers: ['Method', 'Amount', 'Date', 'Description'],
-              // data: tableData,
-              data: payments.map((payment) {
-                return [
-                  payment['method'] == 'Bank'
-                      ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
-                      : payment['method'],
-                  'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
-                  DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
-                  payment['description'] ?? 'N/A',
-                ];
-              }).toList(),
-              border: pw.TableBorder.all(),
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                fontSize: 14, // Increased header font size
-              ),
-              cellStyle: const pw.TextStyle(
-                fontSize: 12, // Increased cell font size from 10 to 12
-              ),
-              cellAlignment: pw.Alignment.centerLeft,
-              cellPadding: const pw.EdgeInsets.all(6),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
             ),
-
-            pw.SizedBox(height: 20),
-            pw.Divider(),
-            pw.Spacer(),
-            // Footer section
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Text(
-                      'Dev Valley Software House',
-                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                    ),
-                    pw.Text(
-                      'Contact: 0303-4889663',
-                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ],
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
             ),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
             ),
           ],
         ),
       );
 
-      // Print the PDF
+      // Add data rows with description image
+      for (final payment in payments) {
+        final method = payment['method'] == 'Bank'
+            ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+            : payment['method'];
+
+        final amount = 'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}';
+        final date = DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date']));
+        final description = payment['description'] ?? 'N/A';
+        final descriptionImage = await _createTextImage(description);
+
+        tableRows.add(
+          pw.TableRow(
+            children: [
+              pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(method, style: const pw.TextStyle(fontSize: 12))),
+              pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(amount, style: const pw.TextStyle(fontSize: 12))),
+              pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(date, style: const pw.TextStyle(fontSize: 12))),
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(6),
+                child: pw.Image(descriptionImage, width: 100, height: 30, fit: pw.BoxFit.contain),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // Add page to PDF
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) => [
+            // Header
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Image(image, width: 80, height: 80),
+                pw.Text('Payment History', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+
+            pw.SizedBox(height: 20),
+
+            // Table with data
+            pw.Table(
+              border: pw.TableBorder.all(),
+              defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+              children: tableRows,
+            ),
+
+            pw.SizedBox(height: 20),
+            pw.Divider(),
+            pw.Spacer(),
+
+            // Footer
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Image(footerLogo, width: 20, height: 20),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text('Dev Valley Software House',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Contact: 0303-4889663',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+              ],
+            ),
+
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                'Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      // Display or print the PDF
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
+
 
     Future<Uint8List?> _pickImage(BuildContext context) async {
       final ImagePicker _picker = ImagePicker();
@@ -1497,7 +1729,8 @@ import '../bankmanagement/banknames.dart';
 
                       try {
                         await invoiceProvider.payInvoiceWithSeparateMethod(
-                          createdAt: _dateController.text,
+                          // createdAt: _dateController.text,
+                          createdAt: _selectedPaymentDate.toIso8601String(),
                           context,
                           invoice['invoiceNumber'],
                           amount,
@@ -1558,46 +1791,88 @@ import '../bankmanagement/banknames.dart';
     }
 
     // Create text image for PDF
-    Future<pw.MemoryImage> _createTexttoImage(String text) async {
-      const double scaleFactor = 1.5;
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(
-        recorder,
-        Rect.fromPoints(
-          const Offset(0, 0),
-          const Offset(500 * scaleFactor, 50 * scaleFactor),
-        ),
-      );
+    // Future<pw.MemoryImage> _createTexttoImage(String text) async {
+    //   const double scaleFactor = 1.5;
+    //   final recorder = ui.PictureRecorder();
+    //   final canvas = Canvas(
+    //     recorder,
+    //     Rect.fromPoints(
+    //       const Offset(0, 0),
+    //       const Offset(500 * scaleFactor, 50 * scaleFactor),
+    //     ),
+    //   );
+    //
+    //   final paint = Paint()..color = Colors.black;
+    //   final textStyle = const TextStyle(
+    //     fontSize: 13 * scaleFactor,
+    //     fontFamily: 'JameelNoori',
+    //     color: Colors.black,
+    //     fontWeight: FontWeight.bold,
+    //   );
+    //
+    //   final textSpan = TextSpan(text: text, style: textStyle);
+    //   final textPainter = TextPainter(
+    //     text: textSpan,
+    //     textAlign: TextAlign.left,
+    //     textDirection: ui.TextDirection.ltr,
+    //   );
+    //
+    //   textPainter.layout();
+    //   textPainter.paint(canvas, const Offset(0, 0));
+    //
+    //   final picture = recorder.endRecording();
+    //   final img = await picture.toImage(
+    //     (textPainter.width * scaleFactor).toInt(),
+    //     (textPainter.height * scaleFactor).toInt(),
+    //   );
+    //
+    //   final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    //   final buffer = byteData!.buffer.asUint8List();
+    //
+    //   return pw.MemoryImage(buffer);
+    // }
 
-      final paint = Paint()..color = Colors.black;
-      final textStyle = const TextStyle(
-        fontSize: 13 * scaleFactor,
-        fontFamily: 'JameelNoori',
-        color: Colors.black,
-        fontWeight: FontWeight.bold,
-      );
+    // Future<pw.MemoryImage> _createTextImage(String text) async {
+    //   const double scaleFactor = 1.5;
+    //   final recorder = ui.PictureRecorder();
+    //   final canvas = Canvas(
+    //     recorder,
+    //     Rect.fromPoints(
+    //       const Offset(0, 0),
+    //       const Offset(500 * scaleFactor, 50 * scaleFactor),
+    //     ),
+    //   );
+    //
+    //   final paint = Paint()..color = Colors.black;
+    //   const textStyle = TextStyle(
+    //     fontSize: 13 * scaleFactor,
+    //     fontFamily: 'JameelNoori',
+    //     color: Colors.black,
+    //     fontWeight: FontWeight.bold,
+    //   );
+    //
+    //   final textSpan = TextSpan(text: text, style: textStyle);
+    //   final textPainter = TextPainter(
+    //     text: textSpan,
+    //     textAlign: TextAlign.left,
+    //     textDirection: ui.TextDirection.ltr,
+    //   );
+    //
+    //   textPainter.layout();
+    //   textPainter.paint(canvas, const Offset(0, 0));
+    //
+    //   final picture = recorder.endRecording();
+    //   final img = await picture.toImage(
+    //     (textPainter.width * scaleFactor).toInt(),
+    //     (textPainter.height * scaleFactor).toInt(),
+    //   );
+    //
+    //   final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    //   final buffer = byteData!.buffer.asUint8List();
+    //
+    //   return pw.MemoryImage(buffer);
+    // }
 
-      final textSpan = TextSpan(text: text, style: textStyle);
-      final textPainter = TextPainter(
-        text: textSpan,
-        textAlign: TextAlign.left,
-        textDirection: ui.TextDirection.ltr,
-      );
-
-      textPainter.layout();
-      textPainter.paint(canvas, const Offset(0, 0));
-
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(
-        (textPainter.width * scaleFactor).toInt(),
-        (textPainter.height * scaleFactor).toInt(),
-      );
-
-      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-      final buffer = byteData!.buffer.asUint8List();
-
-      return pw.MemoryImage(buffer);
-    }
 
     @override
     void initState() {

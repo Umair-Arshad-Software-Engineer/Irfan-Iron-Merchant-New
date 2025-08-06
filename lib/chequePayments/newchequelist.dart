@@ -81,7 +81,9 @@ class PaymentProvider with ChangeNotifier {
                 'filledId': filled.key,
                 ...Map<String, dynamic>.from(payment.value as Map),
                 'filledNumber': filledNumber,
+                'status': payment.child('status').value?.toString() ?? 'pending', // 👈 Add this
               });
+
             }
           }
         }
@@ -100,7 +102,9 @@ class PaymentProvider with ChangeNotifier {
                 'invoiceId': invoice.key,
                 ...Map<String, dynamic>.from(payment.value as Map),
                 'invoiceNumber': invoiceNumber,
+                'status': payment.child('status').value?.toString() ?? 'pending', // 👈 Add this
               });
+
             }
           }
         }
@@ -156,7 +160,101 @@ class PaymentProvider with ChangeNotifier {
     _showPending = value;
     notifyListeners();
   }
+
+
+  Future<void> deleteInvoiceCheckPayment(String paymentKey) async {
+    try {
+      final payment = _invoiceCheckPayments.firstWhere((p) => p['key'] == paymentKey);
+      final invoiceRef = _db.child('invoices').child(payment['invoiceId']);
+      final invoiceSnapshot = await invoiceRef.get();
+
+      if (invoiceSnapshot.exists) {
+        final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
+        final currentCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
+        final currentDebit = _parseToDouble(invoice['debitAmount']);
+        final amountToDelete = _parseToDouble(payment['amount']);
+
+        await invoiceRef.update({
+          'checkPaidAmount': currentCheckPaid - amountToDelete,
+          'debitAmount': currentDebit - amountToDelete,
+        });
+      }
+
+      // Delete the ledger entry if present
+      final ledgerKey = payment['ledgerKey'];
+      if (ledgerKey != null) {
+        await _db.child('ledger').child(ledgerKey).remove();
+      }
+
+      // Delete the payment node
+      await _db
+          .child('invoices')
+          .child(payment['invoiceId'])
+          .child('checkPayments')
+          .child(paymentKey)
+          .remove();
+
+      await _loadPayments();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+
+
+  Future<void> deleteFilledCheckPayment(String paymentKey) async {
+    try {
+      final payment = _filledCheckPayments.firstWhere((p) => p['key'] == paymentKey);
+      final filledRef = _db.child('filled').child(payment['filledId']);
+      final filledSnapshot = await filledRef.get();
+
+      if (filledSnapshot.exists) {
+        final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
+        final currentCheckPaid = _parseToDouble(filled['checkPaidAmount']);
+        final currentDebit = _parseToDouble(filled['debitAmount']);
+        final amountToDelete = _parseToDouble(payment['amount']);
+
+        await filledRef.update({
+          'checkPaidAmount': currentCheckPaid - amountToDelete,
+          'debitAmount': currentDebit - amountToDelete,
+        });
+      }
+
+      // Delete the filled ledger entry if present
+      final ledgerKey = payment['ledgerKey'];
+      if (ledgerKey != null) {
+        await _db.child('filledledger').child(ledgerKey).remove();
+      }
+
+      // Delete the payment node
+      await _db
+          .child('filled')
+          .child(payment['filledId'])
+          .child('checkPayments')
+          .child(paymentKey)
+          .remove();
+
+      await _loadPayments();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0.0;
+  }
+
+
+
+
+
+
 }
+
+
 class InvoiceCheckPaymentsPage extends StatefulWidget {
   const InvoiceCheckPaymentsPage({super.key});
 
@@ -276,11 +374,52 @@ class _InvoiceCheckPaymentCard extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('PKR-${amount.toStringAsFixed(2)}'),
             Text(DateFormat('MMM dd, yyyy').format(date)),
             Text(payment['description'] ?? 'No description'),
           ],
         ),
-        trailing: Text('PKR-${amount.toStringAsFixed(2)}'),
+        // trailing: Text('PKR-${amount.toStringAsFixed(2)}'),
+        trailing: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () async {
+                final provider = Provider.of<PaymentProvider>(context, listen: false);
+                final isInvoice = payment.containsKey('invoiceId');
+
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("Delete Payment"),
+                    content: const Text("Are you sure you want to delete this check payment?"),
+                    actions: [
+                      TextButton(
+                        child: const Text("Cancel"),
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                      ),
+                      TextButton(
+                        child: const Text("Delete"),
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  if (isInvoice) {
+                    await provider.deleteInvoiceCheckPayment(payment['key']);
+                  } else {
+                    await provider.deleteFilledCheckPayment(payment['key']);
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+
       ),
     );
   }

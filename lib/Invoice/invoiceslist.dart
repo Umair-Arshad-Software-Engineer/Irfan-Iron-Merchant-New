@@ -42,6 +42,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   bool _isLoadingMore = false;
   final TextEditingController _dateController = TextEditingController();
   bool _isGeneratingReport = false;
+  List<Map<String, dynamic>> _invoiceRows = [];
 
 
   @override
@@ -535,24 +536,31 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
     // Generate all description images asynchronously
-    final List<List<dynamic>> tableData = await Future.wait(
-      payments.map((payment) async {
-        final paymentAmount = _parseToDouble(payment['amount']);
-        final paymentDate = _parsePaymentDate(payment['date']);
-        final description = payment['description'] ?? 'N/A';
-        // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
+    // final List<List<dynamic>> tableData = await Future.wait(
+    //   payments.map((payment) async {
+    //     final paymentAmount = _parseToDouble(payment['amount']);
+    //     final paymentDate = _parsePaymentDate(payment['date']);
+    //     final description = payment['description'] ?? 'N/A';
+    //     // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
+    //
+    //     // Generate image from description text
+    //     final descriptionImage = await _createTextImage(description);
+    //
+    //     return [
+    //       payment['method'],
+    //       'Rs ${paymentAmount.toStringAsFixed(2)}',
+    //       DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
+    //       pw.Image(descriptionImage), // Use the generated image
+    //     ];
+    //   }),
+    // );
 
-        // Generate image from description text
-        final descriptionImage = await _createTextImage(description);
-
-        return [
-          payment['method'],
-          'Rs ${paymentAmount.toStringAsFixed(2)}',
-          DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
-          pw.Image(descriptionImage), // Use the generated image
-        ];
-      }),
-    );
+    // Pre-generate images for all descriptions
+    List<pw.MemoryImage> descriptionImages = [];
+    for (var row in _invoiceRows) {
+      final image = await _createTextImage(row['description']);
+      descriptionImages.add(image);
+    }
 
     // Add a multi-page layout to handle multiple payments
     pdf.addPage(
@@ -1520,7 +1528,6 @@ class InvoiceList extends StatelessWidget {
                               Row(
                                 children: [
                                   Text(
-                                    // '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${invoice['createdAt']}',
                                     '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(invoice['createdAt'])}',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
@@ -1529,7 +1536,7 @@ class InvoiceList extends StatelessWidget {
                                     ),
                                   ),SizedBox(width: 20,),
                                   Text(
-                                    '${languageProvider.isEnglish ? 'Weight' : 'وزن'}: ${_getTotalWeight(invoice['items'])}',
+                                    '${languageProvider.isEnglish ? 'Sarya Weight' : 'سریا وزن'}: ${_getTotalWeight(invoice['items'])}',
                                     style: TextStyle(
                                         fontSize: isWideScreen ? 14 : 12,
                                         fontWeight: FontWeight.bold
@@ -1551,18 +1558,19 @@ class InvoiceList extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Text(
-                                '${languageProvider.isEnglish ? 'Paid: ' : 'وصول شدہ: '}${debitAmount.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: isWideScreen ? 14 : 12,
-                                  color: Colors.green,
-                                ),
-                              ),
+
                               Text(
                                 '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: isWideScreen ? 14 : 12,
                                   color: remainingAmount > 0 ? Colors.red : Colors.green,
+                                ),
+                              ),
+                              Text(
+                                '${languageProvider.isEnglish ? 'Paid: ' : 'وصول شدہ: '}${debitAmount.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: isWideScreen ? 14 : 12,
+                                  color: Colors.green,
                                 ),
                               ),
                               Text(

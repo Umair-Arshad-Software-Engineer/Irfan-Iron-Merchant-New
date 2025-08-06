@@ -36,25 +36,41 @@ class _byCustomerReportState extends State<byCustomerReport> {
 
       // Query to get the latest ledger entry
       final snapshot = await ledgerRef.orderByChild('createdAt').limitToLast(1).get();
-
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        // Since data is a map, we need to access the correct values.
-        final lastTransaction = data.values.first;
-        if (lastTransaction is Map) {
-          setState(() {
-            // Extract and safely convert the remainingBalance
-            var balance = lastTransaction['remainingBalance'];
-            if (balance is int) {
-              remainingBalance = balance.toDouble();  // Convert int to double
-            } else if (balance is double) {
-              remainingBalance = balance;  // If already a double, use it as is
-            } else {
-              remainingBalance = 0.0;  // Default to 0.0 if it's neither int nor double
-            }
-          });
-        }
-      } else {
+        final lastEntry = snapshot.children.first;
+        final lastTransaction = lastEntry.value as Map<dynamic, dynamic>;
+
+        setState(() {
+          var balance = lastTransaction['remainingBalance'];
+          if (balance is int) {
+            remainingBalance = balance.toDouble();
+          } else if (balance is double) {
+            remainingBalance = balance;
+          } else {
+            remainingBalance = 0.0;
+          }
+        });
+      }
+
+      // if (snapshot.exists) {
+      //   final data = snapshot.value as Map<dynamic, dynamic>;
+      //   // Since data is a map, we need to access the correct values.
+      //   final lastTransaction = data.values.first;
+      //   if (lastTransaction is Map) {
+      //     setState(() {
+      //       // Extract and safely convert the remainingBalance
+      //       var balance = lastTransaction['remainingBalance'];
+      //       if (balance is int) {
+      //         remainingBalance = balance.toDouble();  // Convert int to double
+      //       } else if (balance is double) {
+      //         remainingBalance = balance;  // If already a double, use it as is
+      //       } else {
+      //         remainingBalance = 0.0;  // Default to 0.0 if it's neither int nor double
+      //       }
+      //     });
+      //   }
+      // }
+      else {
         setState(() {
           remainingBalance = 0.0; // If no ledger entries exist, set balance to 0
         });

@@ -178,7 +178,6 @@ class _filledpageState extends State<filledpage> {
       print("Error fetching payments: $e");
     }
 
-    double grandTotal = _calculateGrandTotal();
     // double remainingAmount = grandTotal - paidAmount;
 
     if (_selectedCustomerId == null) {
@@ -217,15 +216,39 @@ class _filledpageState extends State<filledpage> {
 
     final String formattedDate = '${filledDate.day}/${filledDate.month}/${filledDate.year}';
     final String formattedTime = '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
-    // Get the remaining balance from the ledger
-    // double remainingBalance = await _getRemainingBalance(_selectedCustomerId!);
-// Get the remaining balance from the ledger (excluding current filled)
-    double remainingBalance = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentFilled: true);
+
+
+    // double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentFilled: true);
+    // double remainingBalance = remainingBalanceold;
+    // Get the balance excluding the current filled (if it exists)
+    double previousBalance = await _getRemainingBalance(
+      _selectedCustomerId!,
+      excludeFilledId: _filledId, // This will be null for new filleds
+    );
+
+
+    double grandTotal = _calculateGrandTotal();
 
     // Calculate the new balance (previous balance + current filled amount)
-    double newBalance = remainingBalance + grandTotal;
+    // double newBalance = remainingBalance + grandTotal;
 
-    double remainingAmount = newBalance - paidAmount;
+    // double remainingAmount = newBalance - paidAmount;
+    double remainingAmount = previousBalance + grandTotal - paidAmount;
+
+
+
+// For existing filleds, calculate the balance before this filled was created
+    if (_filledId != null) {
+      previousBalance = await _getRemainingBalance(
+        _selectedCustomerId!,
+        excludeFilledId: _filledId,
+      );
+    }
+
+// For new filleds, just get the current balance
+    else {
+      previousBalance = await _getRemainingBalance(_selectedCustomerId!);
+    }
 
     // Load the image asset for the logo
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
@@ -417,15 +440,22 @@ class _filledpageState extends State<filledpage> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                  pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(previousBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
               // ✅ New Balance (Total of Filled + Previous Balance)
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Text('Total (Filled + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              //   ],
+              // ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Total (Filled + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                  pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('New Balance:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text((previousBalance + grandTotal).toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                 ],
               ),
               // Add paid amount row
@@ -560,66 +590,56 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
-  Future<double> _getRemainingBalance(String customerId, {bool excludeCurrentFilled = false}) async {
+  Future<double> _getRemainingBalance(String customerId, {String? excludeFilledId}) async {
     try {
-      double invoiceBalance = 0.0;
-      double filledBalance = 0.0;
+      double totalBalance = 0.0;
 
       // Fetch from 'ledger' (invoice balance)
       final ledgerRef = _db.child('ledger').child(customerId);
-      final ledgerQuery = ledgerRef.orderByChild('createdAt');
+      final ledgerSnapshot = await ledgerRef.once();
 
-      final ledgerSnapshot = await ledgerQuery.get();
-
-      if (ledgerSnapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
+      if (ledgerSnapshot.snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
         if (ledgerData != null) {
-          // Convert to list and sort by date
-          final entries = ledgerData.entries.toList()
-            ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
-
-          // Find the balance before the current invoice
-          for (var entry in entries) {
-            final entryData = entry.value as Map<dynamic, dynamic>;
-            if (excludeCurrentFilled &&
-                entryData['invoiceNumber'] == _filledId) {
-              continue; // Skip the current invoice entry
+          ledgerData.forEach((key, value) {
+            // Skip the excluded filled if specified
+            if (excludeFilledId != null && value['filledNumber'] == excludeFilledId) {
+              return;
             }
-
-
-            final dynamic balanceValue = entryData['remainingBalance'];
-            invoiceBalance = (balanceValue is int)
+            final dynamic balanceValue = value['remainingBalance'];
+            totalBalance += (balanceValue is int)
                 ? balanceValue.toDouble()
                 : (balanceValue as double? ?? 0.0);
-            break; // We only need the most recent balance before current invoice
-          }
+          });
         }
       }
 
       // Fetch from 'filledledger' (filled balance)
       final filledLedgerRef = _db.child('filledledger').child(customerId);
-      final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      final filledSnapshot = await filledLedgerRef.once();
+
       if (filledSnapshot.snapshot.exists) {
         final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
         if (filledData != null) {
-          final lastEntryKey = filledData.keys.first;
-          final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
-          if (lastEntry != null) {
-            final dynamic balanceValue = lastEntry['remainingBalance'];
-            filledBalance = (balanceValue is int)
+          filledData.forEach((key, value) {
+            // Skip the excluded filled if specified
+            if (excludeFilledId != null && value['filledNumber'] == excludeFilledId) {
+              return;
+            }
+            final dynamic balanceValue = value['remainingBalance'];
+            totalBalance += (balanceValue is int)
                 ? balanceValue.toDouble()
                 : (balanceValue as double? ?? 0.0);
-          }
+          });
         }
       }
 
-      return invoiceBalance + filledBalance;
+      return totalBalance;
     } catch (e) {
       print("Error fetching remaining balance: $e");
       return 0.0;
     }
   }
-
 
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
@@ -1790,7 +1810,8 @@ class _filledpageState extends State<filledpage> {
                     }
                     try {
                       await filledProvider.payFilledWithSeparateMethod(
-                        createdAt: _dateController.text,
+                        // createdAt: _dateController.text,
+                        createdAt: _selectedPaymentDate.toIso8601String(),
                         context,
                         filled['filledNumber'],
                         amount,

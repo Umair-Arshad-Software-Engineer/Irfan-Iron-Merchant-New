@@ -1554,18 +1554,19 @@ class FilledList extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Text(
-                                '${languageProvider.isEnglish ? 'Paid: ' : 'وصول شدہ: '}${debitAmount.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: isWideScreen ? 14 : 12,
-                                  color: Colors.green,
-                                ),
-                              ),
+
                               Text(
                                 '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: isWideScreen ? 14 : 12,
                                   color: remainingAmount > 0 ? Colors.red : Colors.green,
+                                ),
+                              ),
+                              Text(
+                                '${languageProvider.isEnglish ? 'Paid: ' : 'وصول شدہ: '}${debitAmount.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: isWideScreen ? 14 : 12,
+                                  color: Colors.green,
                                 ),
                               ),
                               Text(

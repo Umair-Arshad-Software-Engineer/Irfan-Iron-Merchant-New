@@ -1,3 +1,4 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:iron_project_new/Auth/login.dart';
 import 'package:iron_project_new/cashbook/cashbook.dart';
@@ -37,6 +38,16 @@ class Dashboard extends StatelessWidget {
   Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context)=>LoginPage()  ), (Route<dynamic>route)=>false);
   }
 
+  Future<void> deleteNode() async {
+    try {
+      await FirebaseDatabase.instance.ref().child('ledger').remove();
+      print("✅ Node deleted successfully.");
+    } catch (e) {
+      print("❌ Error deleting node: $e");
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
       final languageProvider = Provider.of<LanguageProvider>(context);
@@ -54,6 +65,13 @@ class Dashboard extends StatelessWidget {
         elevation: 4,
         shadowColor: Colors.blue.withOpacity(0.2),
         actions: [
+          // IconButton(
+          //   onPressed: ()async{
+          //     deleteNode();
+          //
+          //   },
+          //   icon: Icon(Icons.delete),
+          // ),
           IconButton(
             icon: const Icon(Icons.language),
             onPressed: languageProvider.toggleLanguage,
