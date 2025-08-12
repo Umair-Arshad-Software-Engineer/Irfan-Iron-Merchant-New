@@ -614,7 +614,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     );
   }
 
-
   Future<void> _showPaymentDialog(CashbookEntry entry) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     String? _selectedCustomerId;

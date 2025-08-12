@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-
 import '../Provider/lanprovider.dart';
 import 'package:provider/provider.dart';
-
 import 'simplecashbookform.dart';
 import 'simplecashbooklist.dart';
 
@@ -24,7 +22,7 @@ class _SimpleCashbookPageState extends State<SimpleCashbookPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            languageProvider.isEnglish ? 'Simple CashBook' : 'سمپل کیش بک',
+            languageProvider.isEnglish ? 'Roznama' : 'روزنامہ',
             style: const TextStyle(color: Colors.white)),
         backgroundColor: Colors.blueAccent,
         elevation: 0,

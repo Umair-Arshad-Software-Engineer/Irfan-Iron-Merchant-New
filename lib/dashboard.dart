@@ -179,7 +179,7 @@ class Dashboard extends StatelessWidget {
                 _drawerItem(Icons.account_balance, 'Cheque Management', 'چیک مینجمنٹ', context, ChequeManagementPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cash Book', 'کیش بک', context, CashbookPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Simple Cash Book', 'سمپل کیش بک', context, SimpleCashbookPage(), languageProvider),
-                _drawerItem(Icons.account_balance, 'Rajkot Cash Book', 'سمپل کیش بک', context, RajkotCashbookPage(), languageProvider),
+                _drawerItem(Icons.account_balance, 'Rajkot Cash Book', 'راجکوٹ کیش بک', context, RajkotCashbookPage(), languageProvider),
                 _drawerItem(Icons.account_balance, 'Cheque Book', 'چیک بک', context, InvoiceCheckPaymentsPage(), languageProvider),
                 _drawerItem(Icons.assignment, 'Roznamcha', 'روزنامچہ', context, const Roznamchapage(), languageProvider),
                 _drawerItem(Icons.assignment, 'Item In & Out', 'سٹاک رپورٹ', context,  ItemTransactionReportPage(), languageProvider),

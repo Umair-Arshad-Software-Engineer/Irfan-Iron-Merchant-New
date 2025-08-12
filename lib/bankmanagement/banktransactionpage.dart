@@ -927,3 +927,4 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     );
   }
 }
+
