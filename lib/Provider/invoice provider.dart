@@ -22,7 +22,6 @@ class InvoiceProvider with ChangeNotifier {
   String? _lastKey;
   // Page size for pagination
   final int _pageSize = 20;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
 
 
 

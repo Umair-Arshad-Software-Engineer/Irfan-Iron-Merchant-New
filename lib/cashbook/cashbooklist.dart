@@ -300,10 +300,39 @@ class _CashbookListPageState extends State<CashbookListPage> {
   }
 
 
-  Future<void> _deleteEntry(String id) async {
+  Future<void> _deleteEntry(String id, String? expenseKey) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
+
     try {
+      // First get the entry data before deleting
+      final entrySnapshot = await widget.databaseRef.child(id).get();
+      if (!entrySnapshot.exists) {
+        throw Exception('Entry not found');
+      }
+
+      final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
+      final entryAmount = entry.amount;
+      final entryDate = entry.dateTime;
+      final formattedDate = DateFormat('dd:MM:yyyy').format(entryDate);
+
+      // Delete from cashbook
       await widget.databaseRef.child(id).remove();
+
+      // If this was an expense entry, delete from expenses too
+      if (expenseKey != null && entry.source == "expense_page") {
+        await dbRef.child(formattedDate).child("expenses").child(expenseKey).remove();
+
+        // Update the opening balance by adding back the deleted expense amount
+        final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
+        if (openingBalanceSnapshot.exists) {
+          double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
+          double newOpeningBalance = currentOpeningBalance + entryAmount;
+
+          await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
+        }
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -330,7 +359,8 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
-  Future<void> _showDeleteConfirmation(String entryId) async {
+
+  Future<void> _showDeleteConfirmation(String entryId,String? expenseKey) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -358,7 +388,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
     );
 
     if (confirmed ?? false) {
-      await _deleteEntry(entryId);
+      await _deleteEntry(entryId,expenseKey);
       if (mounted) setState(() {});
     }
   }
@@ -417,15 +447,21 @@ class _CashbookListPageState extends State<CashbookListPage> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: entries.length,
+                // In your _buildCashbookList() method, update the ListTile:
                 itemBuilder: (context, index) {
                   final entry = entries[index];
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     child: ListTile(
-                      title: Text(entry.description),
+                      title: Text(
+                        entry.source == "expense_page"
+                            ? "Expense: ${entry.description.replaceFirst("Expense: ", "")}"
+                            : entry.description,
+                      ),
                       subtitle: Text(
                         '${entry.type} - ${entry.amount} - '
-                            '${DateFormat('yyyy-MM-dd HH:mm').format(entry.dateTime)}',
+                            '${DateFormat('yyyy-MM-dd HH:mm').format(entry.dateTime)}'
+                            '${entry.source == "expense_page" ? " (From Expenses)" : ""}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -436,7 +472,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _showDeleteConfirmation(entry.id!),
+                            onPressed: () => _showDeleteConfirmation(entry.id!, entry.expenseKey),
                           ),
                         ],
                       ),

@@ -24,6 +24,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
   double _totalExpense = 0.0;
   double _remainingBalance = 0.0;
   DateTime _selectedDate = DateTime.now(); // Default date is today
+  double _openingBalance = 0.0; // Add this line
 
   @override
   void initState() {
@@ -38,7 +39,6 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     });
   }
 
-  // Fetch the original opening balance for the selected date
   void _fetchOpeningBalance() async {
     String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
     final snapshot = await dbRef.child("originalOpeningBalance").child(formattedDate).get();
@@ -304,6 +304,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
 
   void _confirmDeleteExpense(Map<String, dynamic> expense, BuildContext context) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final cashbookRef = FirebaseDatabase.instance.ref("cashbook");
 
     final confirmDelete = await showDialog<bool>(
       context: context,
@@ -330,15 +331,48 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     if (confirmDelete == true) {
       try {
         final expenseId = expense["id"];
+        final expenseAmount = expense["amount"];
         String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
+
+        // First delete the expense
         await dbRef.child(formattedDate).child("expenses").child(expenseId).remove();
+
+        // Then update the opening balance by adding back the deleted expense amount
+        final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
+        if (openingBalanceSnapshot.exists) {
+          double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
+          double newOpeningBalance = currentOpeningBalance + expenseAmount;
+
+          await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
+
+          // Update local state
+          setState(() {
+            _openingBalance = newOpeningBalance;
+          });
+        }
+
+        // Now try to find and delete the corresponding cashbook entry
+        final cashbookQuery = await cashbookRef
+            .orderByChild('expenseKey')
+            .equalTo(expenseId)
+            .once();
+
+        if (cashbookQuery.snapshot.exists) {
+          Map<dynamic, dynamic> cashbookEntries = cashbookQuery.snapshot.value as Map<dynamic, dynamic>;
+          cashbookEntries.forEach((key, value) async {
+            if (value['expenseKey'] == expenseId) {
+              await cashbookRef.child(key).remove();
+            }
+          });
+        }
+
         _fetchExpenses();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(languageProvider.isEnglish
-                ? 'Expense deleted successfully'
-                : 'اخراجات کامیابی سے حذف ہو گئے'),
+                ? 'Expense deleted successfully from both records'
+                : 'اخراجات کامیابی سے دونوں ریکارڈز سے حذف ہو گئے'),
           ),
         );
       } catch (error) {

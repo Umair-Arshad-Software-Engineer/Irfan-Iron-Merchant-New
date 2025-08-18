@@ -285,37 +285,162 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
     }
   }
 
+
   // Future<Uint8List> _generatePdf() async {
   //   final pdf = pw.Document();
+  //
+  //   // Create images for all customer names and item names first
+  //   final customerImages = <String, pw.MemoryImage>{};
+  //   final itemImages = <String, pw.MemoryImage>{};
+  //
+  //   // Pre-generate all needed images to avoid duplicate generation
+  //   for (final transaction in _filteredTransactions) {
+  //     final customerName = transaction['type'] == 'Purchase'
+  //         ? transaction['vendorName']
+  //         : transaction['customerName'] ?? '-';
+  //     final itemName = transaction['itemName'];
+  //
+  //     if (!customerImages.containsKey(customerName)) {
+  //       customerImages[customerName] = await _createTextImage(customerName);
+  //     }
+  //     if (!itemImages.containsKey(itemName)) {
+  //       itemImages[itemName] = await _createTextImage(itemName);
+  //     }
+  //   }
+  //
+  //
+  //
+  //
   //   pdf.addPage(
   //     pw.MultiPage(
+  //       margin: pw.EdgeInsets.all(5.0),
   //       pageFormat: PdfPageFormat.a4,
   //       build: (pw.Context context) {
   //         return [
   //           pw.Text('Transaction Type Report',
   //               style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
   //           pw.SizedBox(height: 20),
-  //           pw.Table.fromTextArray(
-  //             headers: [
-  //               'Date', 'Type', 'Doc No.', 'Customer/Vendor', 'Item', 'Qty',
-  //               if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0)) 'Weight',
-  //               'Rate', 'Total',
+  //           pw.Table(
+  //             border: pw.TableBorder.all(),
+  //             columnWidths: {
+  //               0: const pw.FlexColumnWidth(1.5), // Date
+  //               1: const pw.FlexColumnWidth(1.2), // Type
+  //               2: const pw.FlexColumnWidth(1.2), // Doc No.
+  //               3: const pw.FlexColumnWidth(2.0), // Customer/Vendor (wider for image)
+  //               4: const pw.FlexColumnWidth(2.0), // Item (wider for image)
+  //               5: const pw.FlexColumnWidth(1.0), // Qty
+  //               if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+  //                 6: const pw.FlexColumnWidth(1.0), // Weight
+  //               (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 7 : 6):
+  //               const pw.FlexColumnWidth(1.0), // Rate
+  //               (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 8 : 7):
+  //               const pw.FlexColumnWidth(1.2), // Total
+  //             },
+  //             children: [
+  //               // Header row
+  //               pw.TableRow(
+  //                 children: [
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Date'),
+  //                   ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Type'),
+  //                   ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Doc No.'),
+  //                   ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Customer/Vendor'),
+  //                   ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Item'),
+  //                   ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Qty'),
+  //                   ),
+  //                   if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text('Wt.'),
+  //                     ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Rate'),
+  //                   ),
+  //                   pw.Padding(
+  //                     padding: const pw.EdgeInsets.all(4),
+  //                     child: pw.Text('Total'),
+  //                   ),
+  //                 ],
+  //               ),
+  //               // Data rows
+  //               ..._filteredTransactions.map((transaction) {
+  //                 final customerName = transaction['type'] == 'Purchase'
+  //                     ? transaction['vendorName']
+  //                     : transaction['customerName'] ?? '-';
+  //                 final itemName = transaction['itemName'];
+  //
+  //                 return pw.TableRow(
+  //                   children: [
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text(DateFormat('yyyy-MM-dd').format(transaction['date'])),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text(transaction['type']),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text(
+  //                         transaction['type'] == 'Invoice Sale'
+  //                             ? transaction['invoiceNumber'].toString()
+  //                             : transaction['type'] == 'Filled Sale'
+  //                             ? transaction['filledNumber'].toString()
+  //                             : '-',
+  //                       ),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Container(
+  //                         height: 20, // Fixed height for image
+  //                         child: pw.Image(customerImages[customerName]!),
+  //                       ),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Container(
+  //                         height: 20, // Fixed height for image
+  //                         child: pw.Image(itemImages[itemName]!),
+  //                       ),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text(transaction['quantity'].toStringAsFixed(2)),
+  //                     ),
+  //                     if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+  //                       pw.Padding(
+  //                         padding: const pw.EdgeInsets.all(4),
+  //                         child: pw.Text(transaction['weight']?.toStringAsFixed(2) ?? '-'),
+  //                       ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text(transaction['rate'].toStringAsFixed(2)),
+  //                     ),
+  //                     pw.Padding(
+  //                       padding: const pw.EdgeInsets.all(4),
+  //                       child: pw.Text(transaction['total'].toStringAsFixed(2)),
+  //                     ),
+  //                   ],
+  //                 );
+  //               }).toList(),
   //             ],
-  //             data: _filteredTransactions.map((t) {
-  //               return [
-  //                 DateFormat('yyyy-MM-dd').format(t['date']),
-  //                 t['type'],
-  //                 t['type'] == 'Invoice Sale' ? t['invoiceNumber'] :
-  //                 t['type'] == 'Filled Sale' ? t['filledNumber'] : '-',
-  //                 t['type'] == 'Purchase' ? t['vendorName'] : t['customerName'] ?? '-',
-  //                 t['itemName'],
-  //                 t['quantity'].toStringAsFixed(2),
-  //                 if (_filteredTransactions.any((tr) => tr['weight'] != null && tr['weight'] > 0))
-  //                   t['weight']?.toStringAsFixed(2) ?? '-',
-  //                 t['rate'].toStringAsFixed(2),
-  //                 t['total'].toStringAsFixed(2),
-  //               ];
-  //             }).toList(),
   //           ),
   //         ];
   //       },
@@ -346,6 +471,14 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
       }
     }
 
+    // Calculate totals
+    double totalQuantity = _filteredTransactions.fold(0.0, (sum, t) => sum + (t['quantity'] ?? 0.0));
+    double totalWeight = _filteredTransactions.fold(0.0, (sum, t) => sum + (t['weight'] ?? 0.0));
+    double totalAmount = _filteredTransactions.fold(0.0, (sum, t) => sum + (t['total'] ?? 0.0));
+
+    // Check if weight column should be shown
+    bool showWeightColumn = _filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0);
+
     pdf.addPage(
       pw.MultiPage(
         margin: pw.EdgeInsets.all(5.0),
@@ -364,12 +497,10 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
                 3: const pw.FlexColumnWidth(2.0), // Customer/Vendor (wider for image)
                 4: const pw.FlexColumnWidth(2.0), // Item (wider for image)
                 5: const pw.FlexColumnWidth(1.0), // Qty
-                if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+                if (showWeightColumn)
                   6: const pw.FlexColumnWidth(1.0), // Weight
-                (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 7 : 6):
-                const pw.FlexColumnWidth(1.0), // Rate
-                (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 8 : 7):
-                const pw.FlexColumnWidth(1.2), // Total
+                (showWeightColumn ? 7 : 6): const pw.FlexColumnWidth(1.0), // Rate
+                (showWeightColumn ? 8 : 7): const pw.FlexColumnWidth(1.2), // Total
               },
               children: [
                 // Header row
@@ -399,7 +530,7 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
                       padding: const pw.EdgeInsets.all(4),
                       child: pw.Text('Qty'),
                     ),
-                    if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+                    if (showWeightColumn)
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(4),
                         child: pw.Text('Wt.'),
@@ -459,7 +590,7 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
                         padding: const pw.EdgeInsets.all(4),
                         child: pw.Text(transaction['quantity'].toStringAsFixed(2)),
                       ),
-                      if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
+                      if (showWeightColumn)
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
                           child: pw.Text(transaction['weight']?.toStringAsFixed(2) ?? '-'),
@@ -475,6 +606,56 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
                     ],
                   );
                 }).toList(),
+
+                // Totals row
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey300,
+                  ),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(''),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(''),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(''),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(''),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('TOTAL',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(totalQuantity.toStringAsFixed(2),
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    if (showWeightColumn)
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(totalWeight.toStringAsFixed(2),
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(''),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(totalAmount.toStringAsFixed(2),
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
               ],
             ),
           ];

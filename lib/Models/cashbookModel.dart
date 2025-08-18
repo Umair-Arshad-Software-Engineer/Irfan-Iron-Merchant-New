@@ -10,6 +10,9 @@ class CashbookEntry {
   DateTime? paymentDate;
   String? invoiceId;  // Add this field
   String? paymentKey; // Add this field
+  final String? source; // Add this field
+  final String? expenseKey; // Add this field to store expense reference
+
   CashbookEntry({
     this.id,
     required this.description,
@@ -22,6 +25,9 @@ class CashbookEntry {
     this.paymentDate,
     this.invoiceId,   // Add to constructor
     this.paymentKey,  // Add to constructor
+    this.source, // Add this to constructor
+    this.expenseKey, // Add to constructor
+
   });
 
   factory CashbookEntry.fromJson(Map<String, dynamic> json) {
@@ -39,6 +45,10 @@ class CashbookEntry {
           : null,
       invoiceId: json['invoiceId'],   // Add to fromJson
       paymentKey: json['paymentKey'], // Add to fromJson
+      source: json['source'], // Add this
+      expenseKey: json['expenseKey'], // Add this
+
+
     );
   }
 
@@ -56,6 +66,9 @@ class CashbookEntry {
       'paymentDate': paymentDate?.toIso8601String(),
       'invoiceId': invoiceId,   // Add to toJson
       'paymentKey': paymentKey, // Add to toJson
+      'source': source, // Add this
+      'expenseKey': expenseKey, // Add this
+
     };
   }
 }

@@ -138,7 +138,6 @@ class _AddExpensePageState extends State<AddExpensePage> {
     });
   }
 
-
   void _saveExpense() async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
@@ -179,15 +178,26 @@ class _AddExpensePageState extends State<AddExpensePage> {
     };
 
     try {
-      await dbRef.child(formattedDate).child("expenses").push().set(data);
+      // await dbRef.child(formattedDate).child("expenses").push().set(data);
+
+
+      String entryId = DateTime.now().millisecondsSinceEpoch.toString();
+      final newExpenseRef = dbRef.child(formattedDate).child("expenses").push();
+      final expenseKey = newExpenseRef.key; // Get the generated key
       // Also create a cash_out entry in cashbook
       final cashbookEntry = {
-        "description": _descriptionController.text,
+        "id": entryId, // Add the ID field
+        "description": "Expense: ${_descriptionController.text}", // Add prefix
         "amount": expenseAmount,
         "dateTime": _selectedDate.toIso8601String(),
         "type": "cash_out",
+        "source": "expense_page", // Add source field
+        "expenseKey": expenseKey, // Store the expense reference
       };
-      await cashbookRef.push().set(cashbookEntry);
+      // await cashbookRef.child(entryId).set(cashbookEntry);
+      // Save both entries
+      await newExpenseRef.set(data);
+      await cashbookRef.child(entryId).set(cashbookEntry);
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(
             languageProvider.isEnglish ? 'Expense added successfully' : 'اخراجات کامیابی کے ساتھ شامل ہو گئے۔',
@@ -212,9 +222,6 @@ class _AddExpensePageState extends State<AddExpensePage> {
       });
     }
   }
-
-
-
 
   void _saveUpdatedOpeningBalance() {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
