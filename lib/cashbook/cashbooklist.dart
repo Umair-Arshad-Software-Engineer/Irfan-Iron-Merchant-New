@@ -66,7 +66,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
     return entries;
   }
 
-
   Map<String, double> _calculateTotals(List<CashbookEntry> entries) {
     double totalCashIn = 0;
     double totalCashOut = 0;

@@ -685,7 +685,8 @@ class FilledProvider with ChangeNotifier {
         DateTime? chequeDate,
         String? chequeBankId,
         String? chequeBankName,
-      }) async {
+      })
+  async {
     String? imageBase64;
 
     try {

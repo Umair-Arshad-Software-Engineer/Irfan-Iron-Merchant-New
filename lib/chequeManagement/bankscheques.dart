@@ -69,32 +69,6 @@ class _BankChequesPageState extends State<BankChequesPage> {
     }
   }
 
-  // Future<void> _fetchCheques() async {
-  //   try {
-  //     final snapshot =
-  //     await _dbRef.child('banks/${widget.bankId}/cheques').get();
-  //
-  //     if (snapshot.exists) {
-  //       final data = Map<String, dynamic>.from(snapshot.value as Map);
-  //       _cheques = data.entries.map((entry) {
-  //         return {
-  //           'id': entry.key,
-  //           ...Map<String, dynamic>.from(entry.value),
-  //         };
-  //       }).toList();
-  //
-  //       _cheques.sort((a, b) {
-  //         final dateA = DateTime.tryParse(a['createdAt'] ?? '') ?? DateTime(2000);
-  //         final dateB = DateTime.tryParse(b['createdAt'] ?? '') ?? DateTime(2000);
-  //         return dateB.compareTo(dateA);
-  //       });
-  //     }
-  //   } catch (e) {
-  //     print("Error fetching cheques: $e");
-  //   } finally {
-  //     setState(() => _isLoading = false);
-  //   }
-  // }
 
   Future<void> _fetchCheques() async {
     try {
@@ -205,6 +179,94 @@ class _BankChequesPageState extends State<BankChequesPage> {
     }
   }
 
+  // Future<pw.Document> _buildChequePdf() async {
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //   final pdf = pw.Document();
+  //
+  //   final headers = [
+  //     languageProvider.isEnglish ? 'Cheque No' : 'چیک نمبر',
+  //     languageProvider.isEnglish ? 'Amount' : 'رقم',
+  //     languageProvider.isEnglish ? 'Customer' : 'کسٹمر',
+  //     languageProvider.isEnglish ? 'Date' : 'تاریخ',
+  //     languageProvider.isEnglish ? 'Cheque Date' : 'چیک کی تاریخ',
+  //     languageProvider.isEnglish ? 'Status' : 'حالت',
+  //   ];
+  //
+  //   List<pw.TableRow> rows = [];
+  //
+  //   // Header row
+  //   rows.add(
+  //     pw.TableRow(
+  //       children: headers.map((header) => pw.Padding(
+  //         padding: const pw.EdgeInsets.all(4),
+  //         child: pw.Text(
+  //           header,
+  //           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+  //         ),
+  //       )).toList(),
+  //     ),
+  //   );
+  //
+  //   for (var cheque in _cheques) {
+  //     final date = DateTime.tryParse(cheque['createdAt'] ?? '') ?? DateTime(2000);
+  //     final chequedate = DateTime.tryParse(cheque['chequeDate'] ?? '') ?? DateTime(2000);
+  //     final formattedDate = DateFormat('yyyy-MM-dd').format(date);
+  //     final formattedChequeDate = DateFormat('yyyy-MM-dd').format(chequedate);
+  //
+  //     final customerName = cheque['customerName'] ?? 'N/A';
+  //     final customerImage = await _createTexttoImage(customerName);
+  //
+  //     rows.add(
+  //       pw.TableRow(
+  //         children: [
+  //           pw.Padding(
+  //             padding: const pw.EdgeInsets.all(4),
+  //             child: pw.Text(cheque['chequeNumber'] ?? 'N/A'),
+  //           ),
+  //           pw.Padding(
+  //             padding: const pw.EdgeInsets.all(4),
+  //             child: pw.Text((cheque['amount'] ?? 0.0).toStringAsFixed(2)),
+  //           ),
+  //           pw.Padding(
+  //             padding: const pw.EdgeInsets.all(4),
+  //             child: pw.Image(customerImage, height: 25),
+  //           ),
+  //           pw.Padding(
+  //             padding: const pw.EdgeInsets.all(4),
+  //             child: pw.Text(formattedDate),
+  //           ),
+  //           pw.Padding(
+  //             padding: const pw.EdgeInsets.all(4),
+  //             child: pw.Text(formattedChequeDate),
+  //           ),
+  //           pw.Padding(
+  //             padding: const pw.EdgeInsets.all(4),
+  //             child: pw.Text(cheque['status'] ?? 'pending'),
+  //           ),
+  //         ],
+  //       ),
+  //     );
+  //   }
+  //
+  //   pdf.addPage(
+  //     pw.MultiPage(
+  //       margin: const pw.EdgeInsets.all(8), // 👈 Minimal margins (can go lower if needed)
+  //       build: (context) => [
+  //         pw.Header(
+  //           level: 0,
+  //           child: pw.Text(
+  //             '${widget.bankName} ${languageProvider.isEnglish ? "Cheques Report" : "چیکس رپورٹ"}',
+  //             style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+  //           ),
+  //         ),
+  //         pw.Table(border: pw.TableBorder.all(), children: rows),
+  //       ],
+  //     ),
+  //   );
+  //
+  //   return pdf;
+  // }
+
   Future<pw.Document> _buildChequePdf() async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final pdf = pw.Document();
@@ -220,22 +282,27 @@ class _BankChequesPageState extends State<BankChequesPage> {
 
     List<pw.TableRow> rows = [];
 
-    // Header row
+    // ✅ Header row using _createTexttoImage
+    final headerImages = await Future.wait(
+      headers.map((h) => _createTexttoImage(h)).toList(),
+    );
+
     rows.add(
       pw.TableRow(
-        children: headers.map((header) => pw.Padding(
+        children: headerImages
+            .map((img) => pw.Padding(
           padding: const pw.EdgeInsets.all(4),
-          child: pw.Text(
-            header,
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-          ),
-        )).toList(),
+          child: pw.Image(img, height: 25),
+        ))
+            .toList(),
       ),
     );
 
+    // ✅ Rows for cheques
     for (var cheque in _cheques) {
       final date = DateTime.tryParse(cheque['createdAt'] ?? '') ?? DateTime(2000);
-      final chequedate = DateTime.tryParse(cheque['chequeDate'] ?? '') ?? DateTime(2000);
+      final chequedate =
+          DateTime.tryParse(cheque['chequeDate'] ?? '') ?? DateTime(2000);
       final formattedDate = DateFormat('yyyy-MM-dd').format(date);
       final formattedChequeDate = DateFormat('yyyy-MM-dd').format(chequedate);
 
@@ -274,17 +341,18 @@ class _BankChequesPageState extends State<BankChequesPage> {
       );
     }
 
+    // ✅ Title image (AppBar in PDF)
+    final titleText =
+        '${widget.bankName} ${languageProvider.isEnglish ? "Cheques Report" : "چیکس رپورٹ"}';
+    final titleImage = await _createTexttoImage(titleText);
+
     pdf.addPage(
       pw.MultiPage(
-        margin: const pw.EdgeInsets.all(8), // 👈 Minimal margins (can go lower if needed)
+        margin: const pw.EdgeInsets.all(8),
         build: (context) => [
-          pw.Header(
-            level: 0,
-            child: pw.Text(
-              '${widget.bankName} ${languageProvider.isEnglish ? "Cheques Report" : "چیکس رپورٹ"}',
-              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-            ),
-          ),
+          pw.SizedBox(height: 20),
+          pw.Center(child: pw.Image(titleImage, height: 40)), // 👈 Title with image
+          pw.SizedBox(height: 10),
           pw.Table(border: pw.TableBorder.all(), children: rows),
         ],
       ),
@@ -292,6 +360,7 @@ class _BankChequesPageState extends State<BankChequesPage> {
 
     return pdf;
   }
+
 
   Future<pw.MemoryImage> _createTexttoImage(String text) async {
     const double scaleFactor = 1.5;
@@ -354,8 +423,6 @@ class _BankChequesPageState extends State<BankChequesPage> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -384,21 +451,6 @@ class _BankChequesPageState extends State<BankChequesPage> {
           ),
         ],
       ),
-      // body: _isLoading
-      //     ? Center(child: CircularProgressIndicator())
-      //     : _cheques.isEmpty
-      //     ? Center(
-      //   child: Text(languageProvider.isEnglish
-      //       ? 'No cheques found'
-      //       : 'کوئی چیکس نہیں ملے'),
-      // )
-      //     : ListView.builder(
-      //   itemCount: _cheques.length,
-      //   itemBuilder: (context, index) {
-      //     final cheque = _cheques[index];
-      //     return _buildChequeCard(cheque, languageProvider);
-      //   },
-      // ),
       body: Column(
         children: [
           Padding(
@@ -456,7 +508,8 @@ class _BankChequesPageState extends State<BankChequesPage> {
   }
 
   Widget _buildChequeCard(
-      Map<String, dynamic> cheque, LanguageProvider languageProvider) {
+      Map<String, dynamic> cheque, LanguageProvider languageProvider)
+  {
     final date = DateTime.tryParse(cheque['createdAt'] ?? '') ?? DateTime(2000);
     final chequedate = DateTime.tryParse(cheque['chequeDate'] ?? '') ?? DateTime(2000);
     final formattedDate = DateFormat('yyyy-MM-dd – HH:mm').format(date);

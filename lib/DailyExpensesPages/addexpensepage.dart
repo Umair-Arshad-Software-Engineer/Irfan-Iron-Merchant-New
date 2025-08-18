@@ -13,6 +13,7 @@ class AddExpensePage extends StatefulWidget {
 
 class _AddExpensePageState extends State<AddExpensePage> {
   final DatabaseReference dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
+  final DatabaseReference cashbookRef = FirebaseDatabase.instance.ref("cashbook");
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
@@ -179,6 +180,14 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
     try {
       await dbRef.child(formattedDate).child("expenses").push().set(data);
+      // Also create a cash_out entry in cashbook
+      final cashbookEntry = {
+        "description": _descriptionController.text,
+        "amount": expenseAmount,
+        "dateTime": _selectedDate.toIso8601String(),
+        "type": "cash_out",
+      };
+      await cashbookRef.push().set(cashbookEntry);
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(
             languageProvider.isEnglish ? 'Expense added successfully' : 'اخراجات کامیابی کے ساتھ شامل ہو گئے۔',
@@ -204,7 +213,9 @@ class _AddExpensePageState extends State<AddExpensePage> {
     }
   }
 
-  // Save the updated opening balance (after deducting the expense)s
+
+
+
   void _saveUpdatedOpeningBalance() {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
