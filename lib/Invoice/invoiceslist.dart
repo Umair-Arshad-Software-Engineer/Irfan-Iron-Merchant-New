@@ -230,7 +230,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                           onPaymentPressed: (invoice) {
                             _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
                           },
-                          onViewPayments: (invoice) => _showPaymentDetails(invoice),
                         ),
                       ),
 
@@ -269,26 +268,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     );
   }
 
-// Add to _InvoiceListPageState
-  Future<void> _showFullScreenImage(Uint8List imageBytes)
-  async {
-    await showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.8,
-          child: InteractiveViewer(
-            panEnabled: true,
-            minScale: 0.5,
-            maxScale: 4.0,
-            child: Image.memory(imageBytes, fit: BoxFit.contain),
-          ),
-        ),
-      ),
-    );
-  }
-  // Build AppBar
   AppBar _buildAppBar(BuildContext context, LanguageProvider languageProvider, InvoiceProvider invoiceProvider) {
     return AppBar(
       title: Text(
@@ -315,7 +294,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     );
   }
 
-  // Filter invoices based on search and date range
   List<Map<String, dynamic>> _filterInvoices(List<Map<String, dynamic>> invoices) {
     return invoices.where((invoice) {
       final searchQuery = _searchController.text.toLowerCase();
@@ -343,7 +321,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     }).toList();
   }
 
-  // Show delete confirmation dialog
   Future<void> _showDeleteConfirmationDialog(
       BuildContext context,
       Map<String, dynamic> invoice,
@@ -375,269 +352,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
         );
       },
     );
-  }
-
-  double _parseToDouble(dynamic value) {
-    if (value is int) {
-      return value.toDouble();
-    } else if (value is double) {
-      return value;
-    } else if (value is String) {
-      return double.tryParse(value) ?? 0.0;
-    } else {
-      return 0.0;
-    }
-  }
-
-  DateTime _parsePaymentDate(dynamic date) {
-    if (date is String) {
-      // If the date is a string, try parsing it directly
-      return DateTime.tryParse(date) ?? DateTime.now();
-    } else if (date is int) {
-      // If the date is a timestamp (in milliseconds), convert it to DateTime
-      return DateTime.fromMillisecondsSinceEpoch(date);
-    } else if (date is DateTime) {
-      // If the date is already a DateTime object, return it directly
-      return date;
-    } else {
-      // Fallback to the current date if the format is unknown
-      return DateTime.now();
-    }
-  }
-
-  // Add to _InvoiceListPageState
-  Future<void> _showPaymentDetails(Map<String, dynamic> invoice) async {
-    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-    try {
-      final payments = await invoiceProvider.getInvoicePayments(invoice['id']);
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Payment History' : 'ادائیگی کی تاریخ'),
-          content: Container(
-            width: double.maxFinite,
-            child: payments.isEmpty
-                ? Text(languageProvider.isEnglish
-                ? 'No payments found'
-                : 'کوئی ادائیگی نہیں ملی')
-                : ListView.builder(
-              shrinkWrap: true,
-              itemCount: payments.length,
-              itemBuilder: (context, index) {
-                final payment = payments[index];
-                Uint8List? imageBytes;
-                if (payment['image'] != null) {
-                  imageBytes = base64Decode(payment['image']);
-                }
-
-                return Card(
-                  child: ListTile(
-                    title: Text(
-                      '${payment['method'] == 'Bank'
-                          ? '${payment['bankName'] ?? 'Bank'}'
-                          : payment['method']}: Rs ${payment['amount']}',
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Text(DateFormat('yyyy-MM-dd – HH:mm')
-                        //     .format(payment['date'])),
-                        // In payment history list
-                        Text(DateFormat('yyyy-MM-dd – HH:mm')
-                            .format(payment['date'])),
-                        if (payment['description'] != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(payment['description']),
-                          ),
-                        if (imageBytes != null)
-                          Column(
-                            children: [
-                              GestureDetector(
-                                onTap: () => _showFullScreenImage(imageBytes!),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Hero(
-                                    tag: 'paymentImage$index',
-                                    child: Image.memory(
-                                      imageBytes,
-                                      width: 100,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () => _showFullScreenImage(imageBytes!),
-                                child: Text(
-                                  Provider.of<LanguageProvider>(context, listen: false)
-                                      .isEnglish
-                                      ? 'View Full Image'
-                                      : 'مکمل تصویر دیکھیں',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.delete),
-                          onPressed: () => _showDeletePaymentConfirmationDialog(
-                            context,
-                            invoice['id'],
-                            payment['key'], // Ensure the payment key is passed
-                            payment['method'],
-                            payment['amount'],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => _printPaymentHistoryPDF(payments, context),
-              child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
-            ),
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading payments: ${e.toString()}')),
-      );
-    }
-  }  // Print invoices
-
-  Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
-    final pdf = pw.Document();
-    // Load the image asset for the logo
-    final ByteData bytes = await rootBundle.load('assets/images/logo.png');
-    final buffer = bytes.buffer.asUint8List();
-    final image = pw.MemoryImage(buffer);
-
-    // Load the footer logo if different
-    final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-    final footerBuffer = footerBytes.buffer.asUint8List();
-    final footerLogo = pw.MemoryImage(footerBuffer);
-    // Generate all description images asynchronously
-    // final List<List<dynamic>> tableData = await Future.wait(
-    //   payments.map((payment) async {
-    //     final paymentAmount = _parseToDouble(payment['amount']);
-    //     final paymentDate = _parsePaymentDate(payment['date']);
-    //     final description = payment['description'] ?? 'N/A';
-    //     // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
-    //
-    //     // Generate image from description text
-    //     final descriptionImage = await _createTextImage(description);
-    //
-    //     return [
-    //       payment['method'],
-    //       'Rs ${paymentAmount.toStringAsFixed(2)}',
-    //       DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
-    //       pw.Image(descriptionImage), // Use the generated image
-    //     ];
-    //   }),
-    // );
-
-    // Pre-generate images for all descriptions
-    List<pw.MemoryImage> descriptionImages = [];
-    for (var row in _invoiceRows) {
-      final image = await _createTextImage(row['description']);
-      descriptionImages.add(image);
-    }
-
-    // Add a multi-page layout to handle multiple payments
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) => [
-          // Header section
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Image(image, width: 80, height: 80), // Adjust logo size
-              pw.Text('Payment History',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-            ],
-          ),
-
-          // Table with payment history
-          pw.Table.fromTextArray(
-            headers: ['Method', 'Amount', 'Date', 'Description'],
-            // data: tableData,
-            data: payments.map((payment) {
-              return [
-                payment['method'] == 'Bank'
-                    ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
-                    : payment['method'],
-                'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
-                DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
-                payment['description'] ?? 'N/A',
-              ];
-            }).toList(),
-            border: pw.TableBorder.all(),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              fontSize: 14, // Increased header font size
-            ),
-            cellStyle: const pw.TextStyle(
-              fontSize: 12, // Increased cell font size from 10 to 12
-            ),
-            cellAlignment: pw.Alignment.centerLeft,
-            cellPadding: const pw.EdgeInsets.all(6),
-          ),
-
-          pw.SizedBox(height: 20),
-          pw.Divider(),
-          pw.Spacer(),
-          // Footer section
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Text(
-                    'Dev Valley Software House',
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'Contact: 0303-4889663',
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
-          ),
-        ],
-      ),
-    );
-
-    // Print the PDF
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 
   Future<void> _printInvoices() async {
@@ -727,7 +441,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       onLayout: (PdfPageFormat format) async => pdf.save(),
     );
   }
-  // Create text image for PDF
+
   Future<pw.MemoryImage> _createTextImage(String text) async {
     const double scaleFactor = 1.5;
     final recorder = ui.PictureRecorder();
@@ -1095,56 +809,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
 }
 
-Future<void> _showDeletePaymentConfirmationDialog(
-    BuildContext context,
-    String invoiceId,
-    String paymentKey,
-    String paymentMethod,
-    double paymentAmount,
-    )
-async {
-  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-  await showDialog(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text(languageProvider.isEnglish ? 'Delete Payment' : 'ادائیگی ڈیلیٹ کریں'),
-        content: Text(languageProvider.isEnglish
-            ? 'Are you sure you want to delete this payment?'
-            : 'کیا آپ واقعی اس ادائیگی کو ڈیلیٹ کرنا چاہتے ہیں؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(languageProvider.isEnglish ? 'Cancel' : 'رد کریں'),
-          ),
-          TextButton(
-            onPressed: () async {
-              try {
-                await Provider.of<InvoiceProvider>(context, listen: false).deletePaymentEntry(
-                  context: context, // Pass the context here
-                  invoiceId: invoiceId,
-                  paymentKey: paymentKey,
-                  paymentMethod: paymentMethod,
-                  paymentAmount: paymentAmount,
-                );
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Payment deleted successfully.')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
-                );
-              }
-            },
-            child: Text(languageProvider.isEnglish ? 'Delete' : 'ڈیلیٹ کریں'),
-          ),
-        ],
-      );
-    },
-  );
-}
 
 class InvoiceList extends StatelessWidget {
   final ScrollController scrollController;
@@ -1154,7 +818,6 @@ class InvoiceList extends StatelessWidget {
   final Function(Map<String, dynamic>) onInvoiceTap;
   final Function(Map<String, dynamic>) onInvoiceLongPress;
   final Function(Map<String, dynamic>) onPaymentPressed;
-  final Function(Map<String, dynamic>) onViewPayments;
 
   const InvoiceList({
     required this.scrollController,
@@ -1164,7 +827,6 @@ class InvoiceList extends StatelessWidget {
     required this.onInvoiceTap,
     required this.onInvoiceLongPress,
     required this.onPaymentPressed,
-    required this.onViewPayments,
 
   });
 
