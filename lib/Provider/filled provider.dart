@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-
 import '../Models/cashbookModel.dart';
 import '../Models/itemModel.dart';
+
+
+
 
 class FilledProvider with ChangeNotifier {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
@@ -18,13 +20,211 @@ class FilledProvider with ChangeNotifier {
   bool get hasMoreData => _hasMoreData;
   int _lastLoadedIndex = 0;
   String? _lastKey;
-  // Page size for pagination
   final int _pageSize = 20;
-  String? _selectedChequeBankId;
-  String? _selectedChequeBankName;
-  TextEditingController _chequeNumberController = TextEditingController();
-  DateTime? _selectedChequeDate;
-  bool _isGeneratingReport = false; // Add this flag
+
+
+
+  String _imageToBase64(Uint8List imageBytes) {
+    return base64Encode(imageBytes);
+  }
+
+  Uint8List _base64ToImage(String base64String) {
+    return base64Decode(base64String);
+  }
+
+  Future<void> fetchFilled({int limit = 20, String? lastKey}) async   {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      Query query = _db.child('filled')
+          .orderByChild('createdAt')
+          .limitToLast(limit);
+
+      if (lastKey != null) {
+        // Get the last filled to use its createdAt value for pagination
+        final lastFilledSnapshot = await _db.child('filled').child(lastKey).get();
+        if (lastFilledSnapshot.exists) {
+          final lastFilled = lastFilledSnapshot.value as Map<dynamic, dynamic>;
+          final lastCreatedAt = lastFilled['createdAt'];
+          query = query.endBefore(lastCreatedAt);
+        }
+      }
+
+      final snapshot = await query.get();
+      print(snapshot);
+
+      if (snapshot.exists) {
+        // Clear existing data only on first load
+        if (lastKey == null) {
+          print(_filled);
+          _filled.clear();
+        }
+
+        // Handle the response which could be a Map or a List
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processFilledData(values);
+
+          if (values.isNotEmpty) {
+            _lastKey = values.keys.last.toString();
+            _hasMoreData = values.length >= limit;
+          }
+        }
+        else if (snapshot.value is List) {
+          // Handle list response (possibly an array in Firebase)
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+          print(values);
+
+          // Convert list to map with indices as keys
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+
+          if (valuesMap.isNotEmpty) {
+            _processFilledData(valuesMap);
+            _lastKey = valuesMap.keys.last.toString();
+            _hasMoreData = valuesMap.length >= limit;
+          }
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching Filled: ${e.toString()}');
+      throw Exception('Failed to fetch Filled: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _processFilledData(Map<dynamic, dynamic> values) {
+    // Skip null or empty values
+    if (values.isEmpty) return;
+
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null) // Filter out null entries
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+
+        // Handle null dates
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      _processFilledEntry(entry.key.toString(), entry.value);
+    }
+  }
+
+// Also update the loadMoreFilled method with similar changes
+  Future<void> loadMoreFilled() async {
+    if (_isLoading || !_hasMoreData) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Get the createdAt value of the last item in the list
+      String? lastCreatedAt;
+      if (_filled.isNotEmpty) {
+        lastCreatedAt = _filled.last['createdAt'];
+      } else {
+        _hasMoreData = false;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      Query query = _db.child('filled')
+          .orderByChild('createdAt')
+          .endBefore(lastCreatedAt)
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        // Handle different return types from Firebase
+        if (snapshot.value is Map) {
+          Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processPaginatedData(values);
+        }
+        else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+
+          // Convert list to map with indices as keys
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+
+          _processPaginatedData(valuesMap);
+        }
+      } else {
+        _hasMoreData = false;
+      }
+    } catch (e) {
+      print('Error loading more filled: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+// Helper method to process paginated data
+  void _processPaginatedData(Map<dynamic, dynamic> values) {
+    if (values.isEmpty) {
+      _hasMoreData = false;
+      return;
+    }
+
+    // Process data without adding duplicates
+    List<String> existingIds = _filled.map((item) => item['id'].toString()).toList();
+
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null) // Filter out null entries
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+
+        // Handle null dates
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    bool addedNewItems = false;
+
+    for (var entry in sortedEntries) {
+      String key = entry.key.toString();
+      // Only add items that aren't already in the list
+      if (!existingIds.contains(key)) {
+        _processFilledEntry(key, entry.value);
+        addedNewItems = true;
+      }
+    }
+
+    // Only update pagination variables if we actually added new items
+    if (addedNewItems) {
+      _hasMoreData = values.length >= _pageSize;
+    } else {
+      _hasMoreData = false;
+    }
+  }
 
   // Clear all loaded data and reset pagination
   void resetPagination() {
@@ -35,110 +235,11 @@ class FilledProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchFilled() async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      _filled.clear();
-
-      final snapshot = await _db.child('filled')
-          .orderByChild('createdAt')
-          .limitToLast(_pageSize)
-          .get();
-
-      // Add explicit null check
-      if (!snapshot.exists || snapshot.value == null) {
-        _hasMoreData = false;
-        return;
-      }
-
-      _processFilledData(snapshot.value!);
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Failed to fetch filled: ${e.toString()}');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-
-  void _processFilledData(dynamic data) {
-    if (data == null) return;
-
-    List<MapEntry<dynamic, dynamic>> entries = [];
-
-    if (data is Map<dynamic, dynamic>) {
-      entries = data.entries.toList();
-    } else if (data is List<dynamic>) {
-      entries = data.asMap().entries.map((entry) {
-        return MapEntry(entry.key.toString(), entry.value);
-      }).toList();
-    }
-
-    // Add null check for entry values
-    entries = entries.where((entry) => entry.value != null).toList();
-
-    entries.sort((a, b) {
-      final dateA = _parseDateTime(a.value['createdAt']);
-      final dateB = _parseDateTime(b.value['createdAt']);
-      return dateB.compareTo(dateA);
-    });
-
-    for (var entry in entries) {
-      if (entry.value != null) {
-        _processFilledEntry(entry.key.toString(), entry.value);
-      }
-    }
-  }
-
   DateTime _parseDateTime(dynamic dateValue) {
     if (dateValue is String) return DateTime.parse(dateValue);
     if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
     return DateTime.now();
   }
-
-
-  // Load next page
-  Future<void> loadMoreFilled() async {
-    if (_isLoading || !_hasMoreData) return;
-
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final lastCreatedAt = _filled.isNotEmpty
-          ? _filled.last['createdAt']
-          : null;
-
-      if (lastCreatedAt == null) {
-        _hasMoreData = false;
-        return;
-      }
-
-      final snapshot = await _db.child('filled')
-          .orderByChild('createdAt')
-          .endBefore(lastCreatedAt)
-          .limitToLast(_pageSize)
-          .get();
-
-      // Add null check
-      if (!snapshot.exists || snapshot.value == null) {
-        _hasMoreData = false;
-        return;
-      }
-
-      _processFilledData(snapshot.value!);
-      notifyListeners();
-    } catch (e) {
-      print('Error loading more filled: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
 
   Future<int> getNextFilledNumber() async {
     final counterRef = _db.child('filledCounter');
@@ -155,28 +256,24 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   bool _isTimestampNumber(String number) {
     // Only consider numbers longer than 10 digits as timestamps
     return number.length > 10 && int.tryParse(number) != null;
   }
 
-
-
   Future<void> saveFilled({
-    required String filledId, // Accepts the filled ID (instead of using push)
-    required String filledNumber, // Can be timestamp or sequential
+    required String filledId,
+    required String filledNumber,
     required String customerId,
-    required String customerName, // Accept the customer name as a parameter
+    required String customerName,
     required double subtotal,
     required double discount,
-    required double mazdoori, // Add this parameter
+    required double mazdoori,
     required double grandTotal,
     required String paymentType,
-    required String referenceNumber, // Add this
-    String? paymentMethod, // For instant payments
-    required String createdAt, // Add this parameter
-
+    required String referenceNumber,
+    String? paymentMethod,
+    required String createdAt,
     required List<Map<String, dynamic>> items,
   })
   async {
@@ -192,33 +289,33 @@ class FilledProvider with ChangeNotifier {
       }).toList();
 
       final filledData = {
-        'referenceNumber': referenceNumber, // Add this
+        'referenceNumber': referenceNumber,
         'filledNumber': filledNumber,
         'customerId': customerId,
-        'customerName': customerName, // Save customer name here
+        'customerName': customerName,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
-        'createdAt': createdAt, // Use the provided date
-        'mazdoori': mazdoori, // Add this line
+        'mazdoori': mazdoori,
+        'createdAt': createdAt,
         'numberType': _isTimestampNumber(filledNumber) ? 'timestamp' : 'sequential',
-
       };
-      // Save the filled at the specified filledId path
+
       await _db.child('filled').child(filledId).set(filledData);
-      print('filled saved');
       // Now update the ledger for this customer
       await _updateCustomerLedger(
-        createdAt: createdAt,
-        referenceNumber: referenceNumber,
         customerId,
-        creditAmount: grandTotal, // The filled total as a credit
-        debitAmount: 0.0, // No payment yet
-        remainingBalance: grandTotal, // Full amount due initially
+        creditAmount: grandTotal,
+        debitAmount: 0.0,
+        remainingBalance: grandTotal,
         filledNumber: filledNumber,
+        referenceNumber: referenceNumber,
+        // createdAt: createdAt,
+        transactionDate: createdAt, // Use the filled date as transaction date
+
       );
     } catch (e) {
       throw Exception('Failed to save filled: $e');
@@ -234,7 +331,6 @@ class FilledProvider with ChangeNotifier {
       return null;
     } catch (e) {
       throw Exception('Failed to fetch filled: $e');
-
     }
   }
 
@@ -245,25 +341,25 @@ class FilledProvider with ChangeNotifier {
     required String customerName,
     required double subtotal,
     required double discount,
-    required double mazdoori, // Add this parameter
     required double grandTotal,
+    required double mazdoori,
     required String paymentType,
     String? paymentMethod,
-    required String referenceNumber, // Add this
+    required String referenceNumber,
     required List<Map<String, dynamic>> items,
     required String createdAt,
   })
   async {
     try {
       // Fetch the old filled data
-      final oldfilled = await getFilledById(filledId);
-      if (oldfilled == null) {
+      final oldFilled = await getFilledById(filledId);
+      if (oldFilled == null) {
         throw Exception('Filled not found.');
       }
-      final isTimestamp = oldfilled['numberType'] == 'timestamp';
+      final isTimestamp = oldFilled['numberType'] == 'timestamp';
 
       // Get the old grand total
-      final double oldGrandTotal = (oldfilled['grandTotal'] as num).toDouble();
+      final double oldGrandTotal = (oldFilled['grandTotal'] as num).toDouble();
 
       // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
@@ -275,17 +371,16 @@ class FilledProvider with ChangeNotifier {
           'qty': item['qty'] ?? 0.0,
           'description': item['description'] ?? '',
           'total': item['total'],
-
         };
       }).toList();
 
       // Prepare the updated filled data
       final filledData = {
-        'referenceNumber': referenceNumber, // Add this
+        'referenceNumber': referenceNumber,
         'filledNumber': filledNumber,
         'customerId': customerId,
         'customerName': customerName,
-        'mazdoori': mazdoori, // Add this line
+        'mazdoori': mazdoori,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -295,7 +390,6 @@ class FilledProvider with ChangeNotifier {
         'updatedAt': DateTime.now().toIso8601String(),
         'createdAt': createdAt,
         'numberType': isTimestamp ? 'timestamp' : 'sequential',
-
       };
 
       // Update the filled in the database
@@ -323,6 +417,8 @@ class FilledProvider with ChangeNotifier {
             'creditAmount': newCredit,
             'remainingBalance': newRemaining,
           });
+
+
         }
       }
 
@@ -340,8 +436,8 @@ class FilledProvider with ChangeNotifier {
         if (dbItem.id.isNotEmpty) {
           final String itemId = dbItem.id;
           final double currentQty = dbItem.qtyOnHand;
-          final double newQty = item['qty'] ?? 0.0; // Use 'qty' instead of 'qty'
-          final double initialQty = item['initialQty'] ?? 0.0; // Ensure this is 'initialQty'
+          final double newQty = item['qty'] ?? 0.0;
+          final double initialQty = item['initialQty'] ?? 0.0;
 
           // Calculate the difference between the initial quantity and the new quantity
           double delta = initialQty - newQty;
@@ -362,11 +458,7 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   void _processFilledEntry(String key, dynamic value) {
-    // Add null check for value
-    if (value == null) return;
-
     if (value is! Map<dynamic, dynamic>) return;
 
     final filledData = Map<String, dynamic>.from(value);
@@ -383,11 +475,14 @@ class FilledProvider with ChangeNotifier {
       return DateTime.now();
     }
 
-    // Helper function to safely parse numeric values
+
     double parseDouble(dynamic value) {
       if (value == null) return 0.0;
       if (value is num) return value.toDouble();
-      if (value is String) return double.tryParse(value) ?? 0.0;
+      if (value is String) {
+        // Handle currency formats or commas if necessary
+        return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
+      }
       return 0.0;
     }
 
@@ -417,11 +512,11 @@ class FilledProvider with ChangeNotifier {
       'customerName': filledData['customerName']?.toString() ?? 'N/A',
       'subtotal': parseDouble(filledData['subtotal']),
       'discount': parseDouble(filledData['discount']),
-      'mazdoori': parseDouble(filledData['mazdoori'] ?? 0.0), // Add this line
       'grandTotal': parseDouble(filledData['grandTotal']),
       'paymentType': filledData['paymentType']?.toString() ?? '',
       'paymentMethod': filledData['paymentMethod']?.toString() ?? '',
       'cashPaidAmount': parseDouble(filledData['cashPaidAmount']),
+      'mazdoori': parseDouble(filledData['mazdoori'] ?? 0.0), // Add this line
       'onlinePaidAmount': parseDouble(filledData['onlinePaidAmount']),
       'checkPaidAmount': parseDouble(filledData['checkPaidAmount'] ?? 0.0),
       'slipPaidAmount': parseDouble(filledData['slipPaidAmount'] ?? 0.0),
@@ -434,19 +529,18 @@ class FilledProvider with ChangeNotifier {
     });
   }
 
-
-
   Future<void> deleteFilled(String filledId) async {
     try {
-      // Fetch the filled to identify related customer and filled number
+      // Fetch the filled to identify related customer and invoice number
       final filled = _filled.firstWhere((inv) => inv['id'] == filledId);
 
       if (filled == null) {
-        throw Exception("Filled not found.");
+        throw Exception("filled not found.");
       }
 
       final customerId = filled['customerId'] as String;
       final filledNumber = filled['filledNumber'] as String;
+      final grandTotal = _parseToDouble(filled['grandTotal']);
 
       // Get the items from the filled
       final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(filled['items']);
@@ -454,9 +548,8 @@ class FilledProvider with ChangeNotifier {
       // Reverse the qtyOnHand deduction for each item
       for (var item in items) {
         final itemName = item['itemName'] as String;
-        final qty = (item['qty'] as num).toDouble(); // Get the qty from the filled
+        final qty = _parseToDouble(item['qty']);
 
-        // Fetch the item from the database
         final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
 
         if (itemSnapshot.exists) {
@@ -464,13 +557,9 @@ class FilledProvider with ChangeNotifier {
           final itemKey = itemData.keys.first;
           final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
 
-          // Get the current qtyOnHand
-          double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
-
-          // Add back the qty to qtyOnHand
+          double currentQtyOnHand = _parseToDouble(currentItem['qtyOnHand']);
           double updatedQtyOnHand = currentQtyOnHand + qty;
 
-          // Update the item in the database
           await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
         }
       }
@@ -491,6 +580,8 @@ class FilledProvider with ChangeNotifier {
         }
       }
 
+
+
       // Refresh the filled list after deletion
       await fetchFilled();
 
@@ -507,51 +598,135 @@ class FilledProvider with ChangeNotifier {
         required double remainingBalance,
         required String filledNumber,
         required String referenceNumber,
-        required String createdAt,
-        String? bankId,
-        String? bankName,
+        required String transactionDate, // Use this for date-based calculations
         String? paymentMethod,
-
-      })
-  async {
+        String? bankName,
+      }) async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
 
-      // Fetch the last ledger entry to calculate the new remaining balance
-      final snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
+      // Fetch all ledger entries to calculate the correct balance
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
 
-      double lastRemainingBalance = 0.0;
+      double newRemainingBalance = 0.0;
+
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        final lastTransaction = data.values.first;
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
 
-        // Ensure lastRemainingBalance is safely converted to double
-        lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          // Calculate balance up to the transaction date
+          double runningBalance = 0.0;
+          final currentTransactionDate = DateTime.parse(transactionDate);
+
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Only include entries before or equal to our transaction date
+            if (entryDate.isBefore(currentTransactionDate) ||
+                entryDate.isAtSameMomentAs(currentTransactionDate)) {
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+            }
+          }
+
+          // Add the current transaction to the running balance
+          newRemainingBalance = runningBalance + creditAmount - debitAmount;
+        }
+      } else {
+        // No existing entries, start fresh
+        newRemainingBalance = creditAmount - debitAmount;
       }
-
-      // Calculate the new remaining balance
-      final newRemainingBalance = lastRemainingBalance + creditAmount - debitAmount;
 
       // Ledger data to be saved
       final ledgerData = {
-        'referenceNumber':referenceNumber,
+        'referenceNumber': referenceNumber,
         'filledNumber': filledNumber,
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
-        'remainingBalance': newRemainingBalance, // Updated balance
-        // 'createdAt': DateTime.now().toIso8601String(),
-        'createdAt':createdAt,
-        'paymentMethod': paymentMethod, // Add payment method
-        if (bankId != null) 'bankId': bankId,
+        'remainingBalance': newRemainingBalance,
+        'createdAt': DateTime.now().toIso8601String(), // When the record was created
+        'transactionDate': transactionDate, // The actual date of the transaction
+        if (paymentMethod != null) 'paymentMethod': paymentMethod,
         if (bankName != null) 'bankName': bankName,
       };
 
       await customerLedgerRef.push().set(ledgerData);
+
+      // Update all subsequent entries to maintain correct balances
+      await _recalculateSubsequentBalances(customerId, transactionDate);
+
     } catch (e) {
       throw Exception('Failed to update customer ledger: $e');
     }
   }
 
+  Future<void> _recalculateSubsequentBalances(String customerId, String insertedDate) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double runningBalance = 0.0;
+          final insertedDateTime = DateTime.parse(insertedDate);
+          bool foundInserted = false;
+
+          // Recalculate all balances in chronological order
+          for (var entry in entries) {
+            final entryKey = entry.key as String;
+            final entryData = Map<String, dynamic>.from(entry.value as Map<dynamic, dynamic>);
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Check if we've reached the inserted transaction
+            if (entryDate.isAtSameMomentAs(insertedDateTime)) {
+              foundInserted = true;
+            }
+
+            if (foundInserted) {
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+
+              // Update the entry with the new running balance
+              await customerLedgerRef.child(entryKey).update({
+                'remainingBalance': runningBalance,
+              });
+            } else {
+              // For entries before the inserted one, just accumulate the balance
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error recalculating subsequent balances: $e');
+    }
+  }
 
   List<Map<String, dynamic>> getFilledByPaymentMethod(String paymentMethod) {
     return _filled.where((filled) {
@@ -559,7 +734,6 @@ class FilledProvider with ChangeNotifier {
       return method.toLowerCase() == paymentMethod.toLowerCase();
     }).toList();
   }
-
 
   double _parseToDouble(dynamic value) {
     if (value == null) return 0.0;
@@ -573,101 +747,6 @@ class FilledProvider with ChangeNotifier {
       }
     }
     return 0.0;
-  }
-
-  Future<List<Map<String, dynamic>>> getChequesByBank(String bankId) async {
-    final snapshot = await _db.child('cheques')
-        .orderByChild('bankId')
-        .equalTo(bankId)
-        .get();
-    try {
-      // final snapshot = await _db.child('cheques')
-      //     .orderByChild('bankId')
-      //     .equalTo(bankId)
-      //     .get();
-
-      if (!snapshot.exists) return [];
-
-      final cheques = <Map<String, dynamic>>[];
-      final data = snapshot.value as Map<dynamic, dynamic>;
-
-      data.forEach((key, value) {
-        cheques.add({
-          'id': key,
-          ...Map<String, dynamic>.from(value),
-        });
-      });
-
-      // Sort by date (newest first)
-      cheques.sort((a, b) {
-        final dateA = DateTime.parse(a['createdAt']);
-        final dateB = DateTime.parse(b['createdAt']);
-        return dateB.compareTo(dateA);
-      });
-
-      return cheques;
-    } catch (e) {
-      throw Exception('Failed to fetch cheques: $e');
-    }
-  }
-
-  Future<void> updateChequeStatus({
-    required String chequeId,
-    required String status,
-    String? bankId,
-  })
-  async {
-    await _db.child('cheques').child(chequeId).update({
-      'status': status,
-      'updatedAt': DateTime.now().toIso8601String(),
-    });
-
-    if (status == 'cleared' && bankId != null) {
-      // Update bank balance
-      final chequeSnapshot = await _db.child('cheques').child(chequeId).get();
-      if (chequeSnapshot.exists) {
-        final cheque = Map<String, dynamic>.from(chequeSnapshot.value as Map);
-        final amount = (cheque['amount'] as num).toDouble();
-
-        final bankBalanceRef = _db.child('banks/$bankId/balance');
-        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
-        await bankBalanceRef.set(currentBalance + amount);
-      }
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getAllCheques() async {
-    try {
-      final snapshot = await _db.child('cheques').get();
-
-
-      if (!snapshot.exists) return [];
-
-      final cheques = <Map<String, dynamic>>[];
-      final data = snapshot.value as Map<dynamic, dynamic>;
-
-      data.forEach((key, value) {
-        cheques.add({
-          'id': key,
-          ...Map<String, dynamic>.from(value),
-        });
-      });
-
-      // Sort by date (newest first)
-      cheques.sort((a, b) {
-        final dateA = DateTime.parse(a['createdAt']);
-        final dateB = DateTime.parse(b['createdAt']);
-        return dateB.compareTo(dateA);
-      });
-
-      return cheques;
-    } catch (e) {
-      throw Exception('Failed to fetch cheques: $e');
-    }
-  }
-
-  String _imageToBase64(Uint8List imageBytes) {
-    return base64Encode(imageBytes);
   }
 
   Future<void> payFilledWithSeparateMethod(
@@ -694,7 +773,7 @@ class FilledProvider with ChangeNotifier {
         imageBase64 = _imageToBase64(imageBytes);
       }
 
-      // Fetch the current filled record
+      // Fetch the current filled
       final filledSnapshot = await _db.child('filled').child(filledId).get();
       if (!filledSnapshot.exists) {
         throw Exception("Filled not found.");
@@ -723,7 +802,7 @@ class FilledProvider with ChangeNotifier {
         if (paymentMethod == 'Check' && chequeBankName != null) 'chequeBankName': chequeBankName,
       };
 
-      // Determine payment node
+      // Determine the payment node based on payment method
       String paymentNode;
       switch (paymentMethod.toLowerCase()) {
         case 'cash':
@@ -748,11 +827,15 @@ class FilledProvider with ChangeNotifier {
           paymentNode = 'otherPayments';
       }
 
-      // Save under filled > paymentNode
-      final paymentRef = _db.child('filled').child(filledId).child(paymentNode).child(timestampId);
+      // Save payment under respective method-based node
+      final paymentRef = _db
+          .child('filled')
+          .child(filledId)
+          .child(paymentNode)
+          .child(timestampId);
       await paymentRef.set(paymentData);
 
-      // Save to central ledger
+      // Create corresponding entry in the respective payment ledger
       switch (paymentMethod.toLowerCase()) {
         case 'cash':
           await _db.child('cashbook').child(timestampId).set({
@@ -856,7 +939,7 @@ class FilledProvider with ChangeNotifier {
           break;
       }
 
-      // Update filled amounts
+      // Update filled with new paid amount
       final currentDebit = _parseToDouble(filled['debitAmount']);
       final updatedDebit = currentDebit + paymentAmount;
 
@@ -876,16 +959,16 @@ class FilledProvider with ChangeNotifier {
           'simpleCashbookPaidAmount':
           (_parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0) + paymentAmount),
       });
-
       // Update customer ledger
       await _updateCustomerLedger(
-        createdAt: createdAt,
         customerId,
         creditAmount: 0.0,
         debitAmount: paymentAmount,
         remainingBalance: _parseToDouble(filled['grandTotal']) - updatedDebit,
         filledNumber: filledNumber,
         referenceNumber: referenceNumber,
+        // createdAt: createdAt,
+        transactionDate: paymentDate.toIso8601String(), // Use payment date
         paymentMethod: paymentMethod,
         bankName: paymentMethod == 'Bank'
             ? bankName
@@ -897,9 +980,9 @@ class FilledProvider with ChangeNotifier {
       // For cheque payments, log cheque in bank
       if (paymentMethod == 'Check' && chequeBankId != null) {
         final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
-        await bankChequesRef.push().set({
+        final chequeData = {
           'filledId': filledId,
-          'filledNumber': filledNumber,
+          'filledNumber':filledNumber,
           'customerId': customerId,
           'customerName': filled['customerName'],
           'amount': paymentAmount,
@@ -907,7 +990,8 @@ class FilledProvider with ChangeNotifier {
           'chequeDate': chequeDate?.toIso8601String(),
           'status': 'pending',
           'createdAt': createdAt,
-        });
+        };
+        await bankChequesRef.push().set(chequeData);
       }
 
       // For bank payments, log transaction and update balance
@@ -915,7 +999,8 @@ class FilledProvider with ChangeNotifier {
         final bankTransactionsRef = _db.child('banks/$bankId/transactions');
         await bankTransactionsRef.push().set({
           'amount': paymentAmount,
-          'description': description ?? 'Filled Payment: $filledNumber',
+          'description':
+          description ?? 'Filled Payment: ${filled['filledNumber']}',
           'type': 'cash_in',
           'timestamp': paymentDate.millisecondsSinceEpoch,
           'filledId': filledId,
@@ -923,7 +1008,8 @@ class FilledProvider with ChangeNotifier {
         });
 
         final bankBalanceRef = _db.child('banks/$bankId/balance');
-        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+        final currentBalance =
+            (await bankBalanceRef.get()).value as num? ?? 0.0;
         await bankBalanceRef.set(currentBalance + paymentAmount);
       }
 
@@ -944,7 +1030,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
     try {
       List<Map<String, dynamic>> payments = [];
@@ -958,23 +1043,32 @@ class FilledProvider with ChangeNotifier {
             final paymentData = Map<String, dynamic>.from(value);
             // Convert 'amount' to double explicitly
             paymentData['amount'] = (paymentData['amount'] as num).toDouble();
+            // Handle Base64 image if present
+            if (paymentData['image'] != null) {
+              paymentData['imageBytes'] = _base64ToImage(paymentData['image']);
+            }
             payments.add({
+              'key': key, // Add the payment key to identify it later
               'method': method,
               ...paymentData,
               'date': DateTime.parse(value['date']),
+              // Include bank name for bank and cheque payments
+              'bankName': method == 'Bank' ? value['bankName'] :
+              method == 'Check' ? value['chequeBankName'] : null,
             });
           });
         }
       }
 
+      // Fetch all payment types
       await fetchPayments('cash');
       await fetchPayments('online');
       await fetchPayments('check');
-      await fetchPayments('bank'); // Add this line
-      await fetchPayments('slip'); // Add this line for slip payments
-      await fetchPayments('simpleCashbook'); // Add this line
+      await fetchPayments('bank');
+      await fetchPayments('slip');
+      await fetchPayments('simplecashbook');
 
-
+      // Sort payments by date (newest first)
       payments.sort((a, b) => b['date'].compareTo(a['date']));
       return payments;
     } catch (e) {
@@ -994,8 +1088,10 @@ class FilledProvider with ChangeNotifier {
       final filledRef = _db.child('filled').child(filledId);
       print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
 
+
       // Step 1: Fetch payment data before deleting it
       final paymentSnapshot = await filledRef.child('${paymentMethod}Payments').child(paymentKey).get();
+
 
       if (!paymentSnapshot.exists) {
         print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
@@ -1004,6 +1100,7 @@ class FilledProvider with ChangeNotifier {
 
       final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
       print("✅ Payment data found: $paymentData");
+
 
       // For SimpleCashbook payments, delete from simplecashbook node first
       if (paymentMethod.toLowerCase() == 'simplecashbook') {
@@ -1029,15 +1126,6 @@ class FilledProvider with ChangeNotifier {
           await _db.child('cashbook').child(cashbookEntryId).remove();
         } else {
           print('Warning: cashbookEntryId is missing for cash payment.');
-        }
-      }
-      // Inside deletePaymentEntry
-      if (paymentMethod.toLowerCase() == 'check') {
-        final chequeTransactionId = paymentData['chequeTransactionId'];
-        final bankId = paymentData['bankId'];
-
-        if (bankId != null && chequeTransactionId != null) {
-          await _db.child('banks/$bankId/cheques/$chequeTransactionId').remove();
         }
       }
 
@@ -1121,6 +1209,7 @@ class FilledProvider with ChangeNotifier {
       double currentCheckPaid = _parseToDouble(filled['checkPaidAmount']);
       double currentSlipPaid = _parseToDouble(filled['slipPaidAmount'] ?? 0.0);
       double currentBankPaid = _parseToDouble(filled['bankPaidAmount'] ?? 0.0);
+      double currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
       double currentDebit = _parseToDouble(filled['debitAmount']);
 
       print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
@@ -1142,6 +1231,9 @@ class FilledProvider with ChangeNotifier {
         case 'slip':
           currentSlipPaid = (currentSlipPaid - paymentAmount).clamp(0.0, double.infinity);
           break;
+        case 'simplecashbook':
+          currentSimpleCashbookPaid = (currentSimpleCashbookPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
         default:
           throw Exception("Invalid payment method.");
       }
@@ -1155,6 +1247,7 @@ class FilledProvider with ChangeNotifier {
         'checkPaidAmount': currentCheckPaid,
         'bankPaidAmount': currentBankPaid,
         'slipPaidAmount': currentSlipPaid,
+        'simpleCashbookPaidAmount': currentSimpleCashbookPaid,
         'debitAmount': updatedDebit,
       });
 
@@ -1162,7 +1255,7 @@ class FilledProvider with ChangeNotifier {
 
       // Step 6: Fetch latest ledger entry for the customer
       final customerLedgerRef = _db.child('filledledger').child(customerId);
-      final ledgerSnapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
+      final ledgerSnapshot = await customerLedgerRef.orderByChild('transactionDate').limitToLast(1).get();
 
       if (ledgerSnapshot.exists) {
         final ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>;
@@ -1209,7 +1302,6 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> editPaymentEntry({
     required String filledId,
     required String paymentKey,
@@ -1218,12 +1310,7 @@ class FilledProvider with ChangeNotifier {
     required double newPaymentAmount,
     required String newDescription,
     required Uint8List? newImageBytes,
-    String? newBankId,
-    String? newBankName,
-    String? newChequeNumber,
-    DateTime? newChequeDate,
-    String? newChequeBankId,
-    String? newChequeBankName,
+    required String createdAt,
   })
   async {
     try {
@@ -1232,36 +1319,14 @@ class FilledProvider with ChangeNotifier {
       // Step 1: Update the payment entry in the filled
       final updatedPaymentData = {
         'amount': newPaymentAmount,
-        'date': DateTime.now().toIso8601String(),
-        'method': paymentMethod,
+        'date': createdAt,
+        'paymentMethod': paymentMethod,
         'description': newDescription,
       };
 
-      // Add bank info if this is a bank payment
-      if (paymentMethod == 'Bank' && newBankId != null && newBankName != null) {
-        updatedPaymentData['bankId'] = newBankId;
-        updatedPaymentData['bankName'] = newBankName;
-      }
-
-      // Add cheque info if this is a cheque payment
-      if (paymentMethod == 'Check') {
-        if (newChequeNumber != null) {
-          updatedPaymentData['chequeNumber'] = newChequeNumber;
-        }
-        if (newChequeDate != null) {
-          updatedPaymentData['chequeDate'] = newChequeDate.toIso8601String();
-        }
-        if (newChequeBankId != null) {
-          updatedPaymentData['bankId'] = newChequeBankId;
-        }
-        if (newChequeBankName != null) {
-          updatedPaymentData['bankName'] = newChequeBankName;
-        }
-      }
-
-      if (newImageBytes != null) {
-        updatedPaymentData['image'] = base64Encode(newImageBytes);
-      }
+      // if (newImageBytes != null) {
+      //   updatedPaymentData['image'] = base64Encode(newImageBytes);
+      // }
 
       await filledRef.child('${paymentMethod}Payments').child(paymentKey).update(updatedPaymentData);
 
@@ -1276,50 +1341,21 @@ class FilledProvider with ChangeNotifier {
           'debitAmount': updatedDebit,
         });
 
-        // Step 3: Find and update the corresponding ledger entry
+        // Step 3: Update the customer ledger
         final customerId = filled['customerId'];
         final filledNumber = filled['filledNumber'];
         final referenceNumber = filled['referenceNumber'];
         final grandTotal = _parseToDouble(filled['grandTotal']);
 
-        final customerLedgerRef = _db.child('filledledger').child(customerId);
-        final ledgerQuery = await customerLedgerRef
-            .orderByChild('filledNumber')
-            .equalTo(filledNumber)
-            .get();
-
-        if (ledgerQuery.exists) {
-          final ledgerData = ledgerQuery.value as Map<dynamic, dynamic>;
-          for (var entryKey in ledgerData.keys) {
-            final entry = Map<String, dynamic>.from(ledgerData[entryKey]);
-            // Find the entry that matches this payment amount (or other identifying info)
-            if ((entry['debitAmount'] as num).toDouble() == oldPaymentAmount) {
-              // Update the ledger entry
-              await customerLedgerRef.child(entryKey).update({
-                'debitAmount': newPaymentAmount,
-                'remainingBalance': grandTotal - updatedDebit,
-                'paymentMethod': paymentMethod,
-                if (paymentMethod == 'Bank') ...{
-                  'bankId': newBankId,
-                  'bankName': newBankName,
-                },
-                if (paymentMethod == 'Check') ...{
-                  'chequeNumber': newChequeNumber,
-                  'chequeDate': newChequeDate?.toIso8601String(),
-                  'bankId': newChequeBankId,
-                  'bankName': newChequeBankName,
-                },
-              });
-              break;
-            }
-          }
-        }
-
-        // Step 4: Update subsequent ledger entries if needed
-        await _updateSubsequentLedgerEntries(
-          customerId: customerId,
+        await _updateCustomerLedger(
+          // createdAt:createdAt,
+          transactionDate: createdAt, // Use the filled date as transaction date
+          customerId,
+          creditAmount: 0.0,
+          debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
+          remainingBalance: grandTotal - updatedDebit,
           filledNumber: filledNumber,
-          amountDifference: newPaymentAmount - oldPaymentAmount,
+          referenceNumber:referenceNumber,
         );
       }
 
@@ -1327,44 +1363,6 @@ class FilledProvider with ChangeNotifier {
       await fetchFilled();
     } catch (e) {
       throw Exception('Failed to edit payment entry: $e');
-    }
-  }
-
-  Future<void> _updateSubsequentLedgerEntries({
-    required String customerId,
-    required String filledNumber,
-    required double amountDifference,
-  })
-  async {
-    try {
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
-      final snapshot = await customerLedgerRef.orderByChild('createdAt').get();
-
-      if (snapshot.exists) {
-        final entries = Map<dynamic, dynamic>.from(snapshot.value as Map);
-        bool foundTarget = false;
-        final sortedKeys = entries.keys.toList()
-          ..sort((a, b) => (entries[a]['createdAt'] as String)
-              .compareTo(entries[b]['createdAt'] as String));
-
-        for (var key in sortedKeys) {
-          final entry = Map<String, dynamic>.from(entries[key]);
-
-          if (entry['filledNumber'] == filledNumber) {
-            foundTarget = true;
-            continue;
-          }
-
-          if (foundTarget) {
-            final currentBalance = (entry['remainingBalance'] as num).toDouble();
-            await customerLedgerRef.child(key).update({
-              'remainingBalance': currentBalance + amountDifference,
-            });
-          }
-        }
-      }
-    } catch (e) {
-      throw Exception('Failed to update subsequent ledger entries: $e');
     }
   }
 
@@ -1381,11 +1379,11 @@ class FilledProvider with ChangeNotifier {
     }).toList();
   }
 
-  double getTotalAmountfilled(List<Map<String, dynamic>> filled) {
+  double getTotalAmount(List<Map<String, dynamic>> filled) {
     return filled.fold(0.0, (sum, filled) => sum + (filled['grandTotal'] ?? 0.0));
   }
 
-  double getTotalPaidAmountfilled(List<Map<String, dynamic>> filled) {
+  double getTotalPaidAmount(List<Map<String, dynamic>> filled) {
     return filled.fold(0.0, (sum, filled) => sum + (filled['debitAmount'] ?? 0.0));
   }
 
@@ -1416,56 +1414,16 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+  bool _filledMatchesSearch(Map<dynamic, dynamic> filled, String searchQuery) {
+    if (searchQuery.isEmpty) return true;
 
+    final filledNumber = (filled['filledNumber'] ?? '').toString().toLowerCase();
+    final referenceNumber = (filled['referenceNumber'] ?? '').toString().toLowerCase();
+    final customerName = (filled['customerName'] ?? '').toString().toLowerCase();
 
-
-  // In FilledProvider class
-  Future<void> fetchFilledWithFilters({
-    String searchQuery = '',
-    DateTime? startDate,
-    DateTime? endDate,
-    int limit = 50,
-  })
-  async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      Query query = _db.child('filled').orderByChild('createdAt');
-
-      // Apply date filter if provided
-      if (startDate != null && endDate != null) {
-        query = query.startAt(startDate.toIso8601String()).endAt(endDate.toIso8601String());
-      }
-
-      final snapshot = await query.get();
-
-      if (snapshot.exists) {
-        _filled.clear();
-
-        if (snapshot.value is Map) {
-          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
-          _processAndFilterFilledData(values, searchQuery);
-        } else if (snapshot.value is List) {
-          final List<dynamic> values = snapshot.value as List<dynamic>;
-          final Map<dynamic, dynamic> valuesMap = {};
-          for (int i = 0; i < values.length; i++) {
-            if (values[i] != null) {
-              valuesMap[i.toString()] = values[i];
-            }
-          }
-          _processAndFilterFilledData(valuesMap, searchQuery);
-        }
-      }
-
-      notifyListeners();
-    } catch (e) {
-      print('Error fetching filtered filled: ${e.toString()}');
-      throw Exception('Failed to fetch filtered filled: ${e.toString()}');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    return filledNumber.contains(searchQuery) ||
+        customerName.contains(searchQuery) ||
+        referenceNumber.contains(searchQuery);
   }
 
   void _processAndFilterFilledData(Map<dynamic, dynamic> values, String searchQuery) {
@@ -1489,18 +1447,56 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
-  bool _filledMatchesSearch(Map<dynamic, dynamic> filled, String searchQuery) {
-    if (searchQuery.isEmpty) return true;
+  Future<void> fetchFilledWithFilters({
+    String searchQuery = '',
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+  })
+  async {
+    try {
+      _isLoading = true;
+      notifyListeners();
 
-    final filledNumber = (filled['filledNumber'] ?? '').toString().toLowerCase();
-    final referenceNumber = (filled['referenceNumber'] ?? '').toString().toLowerCase();
-    final customerName = (filled['customerName'] ?? '').toString().toLowerCase();
+      Query query = _db.child('filled').orderByChild('createdAt');
 
-    return filledNumber.contains(searchQuery) ||
-        customerName.contains(searchQuery) ||
-        referenceNumber.contains(searchQuery);
+      // Apply date filter if provided
+      if (startDate != null && endDate != null) {
+        query = query.startAt(startDate.toIso8601String()).endAt(
+            endDate.toIso8601String());
+      }
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        _filled.clear();
+
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<
+              dynamic,
+              dynamic>;
+          _processAndFilterFilledData(values, searchQuery);
+        } else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+          _processAndFilterFilledData(valuesMap, searchQuery);
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching filtered filled: ${e.toString()}');
+      throw Exception('Failed to fetch filtered filled: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
-
 
 
 }

@@ -72,8 +72,8 @@ class _RoznamchapageState extends State<Roznamchapage> {
 
     final filledProvider = Provider.of<FilledProvider>(context);
     final todaysFilled = filledProvider.getTodaysFilled();
-    final totalAmountfilled = filledProvider.getTotalAmountfilled(todaysFilled);
-    final totalPaidAmountfilled = filledProvider.getTotalPaidAmountfilled(todaysFilled);
+    final totalAmountfilled = filledProvider.getTotalAmount(todaysFilled);
+    final totalPaidAmountfilled = filledProvider.getTotalPaidAmount(todaysFilled);
 
     final expenseProvider = Provider.of<ExpenseProvider>(context);
     final todaysExpenses = expenseProvider.getTodaysExpenses();

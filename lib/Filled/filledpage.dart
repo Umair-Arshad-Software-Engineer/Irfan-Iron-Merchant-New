@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:iron_project_new/Filled/filledlist.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:photo_view/photo_view.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
@@ -23,18 +22,16 @@ import 'package:share_plus/share_plus.dart';
 
 import '../bankmanagement/banknames.dart';
 
+class FilledPage extends StatefulWidget {
+  final Map<String, dynamic>? filled;
 
-
-class filledpage extends StatefulWidget {
-  final Map<String, dynamic>? filled; // Optional filled data for editingss
-
-  filledpage({this.filled});
+  FilledPage({this.filled});
 
   @override
-  _filledpageState createState() => _filledpageState();
+  _FilledPageState createState() => _FilledPageState();
 }
 
-class _filledpageState extends State<filledpage> {
+class _FilledPageState extends State<FilledPage> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   List<Item> _items = [];
   String? _selectedItemName;
@@ -59,7 +56,6 @@ class _filledpageState extends State<filledpage> {
   bool _isSaved = false;
   Map<String, dynamic>? _currentFilled;
   List<Map<String, dynamic>> _cachedBanks = [];
-// In your _filledpageState class
   double _mazdoori = 0.0;
   TextEditingController _mazdooriController = TextEditingController();
   String? _selectedBankId;
@@ -68,23 +64,6 @@ class _filledpageState extends State<filledpage> {
   DateTime? _selectedChequeDate;
 
 
-  Future<void> _fetchRemainingBalance() async {
-    if (_selectedCustomerId != null) {
-      try {
-        final balance = await _getRemainingBalance(_selectedCustomerId!);
-        setState(() {
-          _remainingBalance = balance;
-        });
-      } catch (e) {
-        setState(() {
-          _remainingBalance = 0.0; // Set a default value in case of error
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch remaining balance: $e')),
-        );
-      }
-    }
-  }
 
   // Method to show the date picker
   Future<void> _selectDate(BuildContext context) async {
@@ -157,8 +136,6 @@ class _filledpageState extends State<filledpage> {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    // final selectedCustomer = customerProvider.customers.firstWhere((customer) => customer.id == _selectedCustomerId);
-    // Add null checks for customer selection
     final filledProvider = Provider.of<FilledProvider>(context, listen: false);
 
     // Get filled data
@@ -167,6 +144,18 @@ class _filledpageState extends State<filledpage> {
       throw Exception("No filled data available");
     }
 
+
+    // Preload total section label images
+    final subTotalLabel = await _createTextImage(languageProvider.isEnglish ? 'Sub Total:' : 'ذیلی کل:');
+    final discountLabel = await _createTextImage(languageProvider.isEnglish ? 'Discount:' : 'رعایت:');
+    final mazdooriLabel = await _createTextImage(languageProvider.isEnglish ? 'Mazdoori:' : 'مزدوری:');
+    final filledAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Filled Amount:' : 'فلڈ کی رقم:');
+    final previousBalanceLabel = await _createTextImage(languageProvider.isEnglish ? 'Previous Balance:' : 'پچھلا بیلنس:');
+    final totalLabel = await _createTextImage(languageProvider.isEnglish
+        ? 'Total (Filled + Previous Balance):'
+        : 'کل (انوائس + پچھلا بیلنس):');
+    final paidAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Paid Amount:' : 'ادا شدہ رقم:');
+    final remainingAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Remaining Amount:' : 'بقیہ رقم:');
 
 
     // Get payment details
@@ -178,11 +167,10 @@ class _filledpageState extends State<filledpage> {
       print("Error fetching payments: $e");
     }
 
-    // double remainingAmount = grandTotal - paidAmount;
-
     if (_selectedCustomerId == null) {
       throw Exception("No customer selected");
     }
+
     final selectedCustomer = customerProvider.customers.firstWhere(
             (customer) => customer.id == _selectedCustomerId,
         orElse: () => Customer( // Add orElse to handle missing customer
@@ -192,8 +180,8 @@ class _filledpageState extends State<filledpage> {
             address: ''
         )
     );
-    // // Get current date and time
 
+    // Get current date and time
     DateTime filledDate;
     if (widget.filled != null) {
       filledDate = DateTime.parse(widget.filled!['createdAt']);
@@ -217,38 +205,15 @@ class _filledpageState extends State<filledpage> {
     final String formattedDate = '${filledDate.day}/${filledDate.month}/${filledDate.year}';
     final String formattedTime = '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
 
-
-    // double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentFilled: true);
-    // double remainingBalance = remainingBalanceold;
-    // Get the balance excluding the current filled (if it exists)
-    double previousBalance = await _getRemainingBalance(
-      _selectedCustomerId!,
-      excludeFilledId: _filledId, // This will be null for new filleds
-    );
-
+    // Get the remaining balance from the ledger (excluding current filled)
+    double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!);
+    double remainingBalance = remainingBalanceold;
 
     double grandTotal = _calculateGrandTotal();
 
     // Calculate the new balance (previous balance + current filled amount)
-    // double newBalance = remainingBalance + grandTotal;
-
-    // double remainingAmount = newBalance - paidAmount;
-    double remainingAmount = previousBalance + grandTotal - paidAmount;
-
-
-
-// For existing filleds, calculate the balance before this filled was created
-    if (_filledId != null) {
-      previousBalance = await _getRemainingBalance(
-        _selectedCustomerId!,
-        excludeFilledId: _filledId,
-      );
-    }
-
-// For new filleds, just get the current balance
-    else {
-      previousBalance = await _getRemainingBalance(_selectedCustomerId!);
-    }
+    double newBalance = remainingBalance + grandTotal;
+    double remainingAmount = newBalance - paidAmount;
 
     // Load the image asset for the logo
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
@@ -280,7 +245,7 @@ class _filledpageState extends State<filledpage> {
       descriptionImages.add(image);
     }
 
-    // Pre-generate images for all item namess
+    // Pre-generate images for all item names
     List<pw.MemoryImage> itemnameImages = [];
     for (var row in _filledRows) {
       final image = await _createTextImage(row['itemName']);
@@ -292,6 +257,8 @@ class _filledpageState extends State<filledpage> {
       'Customer Name: ${selectedCustomer.name}\n'
           'Customer Address: ${selectedCustomer.address}',
     );
+
+
 
     // Add a page with A5 size
     pdf.addPage(
@@ -310,7 +277,7 @@ class _filledpageState extends State<filledpage> {
                   pw.Column(
                       children: [
                         pw.Image(nameimage, width: 170, height: 170), // Adjust logo size
-                        pw.Image(addressimage,width: 200,height: 100,dpi: 2000),
+                        pw.Image(addressimage, width: 200, height: 100, dpi: 2000),
                       ]
                   ),
                   pw.Column(
@@ -346,12 +313,11 @@ class _filledpageState extends State<filledpage> {
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
               pw.Text('Date: $formattedDate', style: const pw.TextStyle(fontSize: 10)),
               pw.Text('Time: $formattedTime', style: const pw.TextStyle(fontSize: 10)),
-
               pw.Text('Reference: ${_referenceController.text}', style: const pw.TextStyle(fontSize: 12)),
 
               pw.SizedBox(height: 10),
 
-              // Filled Table with Urdu text converted to image
+              // filled Table with Urdu text converted to image
               pw.Table.fromTextArray(
                 headers: [
                   pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
@@ -375,46 +341,7 @@ class _filledpageState extends State<filledpage> {
               ),
               pw.SizedBox(height: 10),
 
-              // Totals Section
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Sub Total:', style: const pw.TextStyle(fontSize: 12)),
-              //     pw.Text(_calculateSubtotal().toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-              //   ],
-              // ),
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
-              //     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-              //   ],
-              // ),
-              // // In your _generatePDFBytes method, add this after the discount row
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
-              //     pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-              //   ],
-              // ),
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              //     pw.Text(_calculateGrandTotal().toStringAsFixed(2), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              //   ],
-              // ),
-              // pw.SizedBox(height: 20),
-              //
-              // // Footer Section (Remaining Balance)
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-              //     pw.Text(remainingBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-              //   ],
-              // ),
+
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -440,22 +367,15 @@ class _filledpageState extends State<filledpage> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                  pw.Text(previousBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                  pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
-              // ✅ New Balance (Total of Filled + Previous Balance)
-              // pw.Row(
-              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              //   children: [
-              //     pw.Text('Total (Filled + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-              //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-              //   ],
-              // ),
+              // ✅ New Balance (Total of filled + Previous Balance)
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('New Balance:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                  pw.Text((previousBalance + grandTotal).toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Total (Filled + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                 ],
               ),
               // Add paid amount row
@@ -466,6 +386,7 @@ class _filledpageState extends State<filledpage> {
                   pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
+
               // Add remaining amount row
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -474,7 +395,62 @@ class _filledpageState extends State<filledpage> {
                   pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
-
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(subTotalLabel, dpi: 1000),
+              //     pw.Text(_calculateSubtotal().toStringAsFixed(2)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(discountLabel, dpi: 1000),
+              //     pw.Text(_discount.toStringAsFixed(2)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(mazdooriLabel, dpi: 1000),
+              //     pw.Text(_mazdoori.toStringAsFixed(2)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(invoiceAmountLabel, dpi: 1000),
+              //     pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(previousBalanceLabel, dpi: 1000),
+              //     pw.Text(remainingBalance.toStringAsFixed(2)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(totalLabel, dpi: 1000),
+              //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(paidAmountLabel, dpi: 1000),
+              //     pw.Text(paidAmount.toStringAsFixed(2)),
+              //   ],
+              // ),
+              // pw.Row(
+              //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              //   children: [
+              //     pw.Image(remainingAmountLabel, dpi: 1000),
+              //     pw.Text(remainingAmount.toStringAsFixed(2)),
+              //   ],
+              // ),
               pw.SizedBox(height: 60),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
@@ -483,14 +459,14 @@ class _filledpageState extends State<filledpage> {
                 ],
               ),
 
-              // Footer Sectiondasd
+              // Footer Section
               pw.Spacer(), // Push footer to the bottom of the page
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Image(footerLogo, width: 30, height: 20), // Footer logo
-                  pw.Image(lineimage,width: 150,height: 50),
+                  pw.Image(lineimage, width: 150, height: 50),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
@@ -590,57 +566,49 @@ class _filledpageState extends State<filledpage> {
     return pw.MemoryImage(buffer);
   }
 
-  Future<double> _getRemainingBalance(String customerId, {String? excludeFilledId}) async {
+  Future<double> _getRemainingBalance(String customerId, {DateTime? asOfDate}) async {
     try {
-      double totalBalance = 0.0;
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('transactionDate');
 
-      // Fetch from 'ledger' (invoice balance)
-      final ledgerRef = _db.child('ledger').child(customerId);
-      final ledgerSnapshot = await ledgerRef.once();
+      final snapshot = await query.get();
 
-      if (ledgerSnapshot.snapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
         if (ledgerData != null) {
-          ledgerData.forEach((key, value) {
-            // Skip the excluded filled if specified
-            if (excludeFilledId != null && value['filledNumber'] == excludeFilledId) {
-              return;
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double lastBalance = 0.0;
+          final targetDate = asOfDate ?? DateTime.now();
+
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            if (entryDate.isBefore(targetDate) || entryDate.isAtSameMomentAs(targetDate)) {
+              lastBalance = (entryData['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+            } else {
+              break; // We've passed the target date
             }
-            final dynamic balanceValue = value['remainingBalance'];
-            totalBalance += (balanceValue is int)
-                ? balanceValue.toDouble()
-                : (balanceValue as double? ?? 0.0);
-          });
+          }
+
+          return lastBalance;
         }
       }
 
-      // Fetch from 'filledledger' (filled balance)
-      final filledLedgerRef = _db.child('filledledger').child(customerId);
-      final filledSnapshot = await filledLedgerRef.once();
-
-      if (filledSnapshot.snapshot.exists) {
-        final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-        if (filledData != null) {
-          filledData.forEach((key, value) {
-            // Skip the excluded filled if specified
-            if (excludeFilledId != null && value['filledNumber'] == excludeFilledId) {
-              return;
-            }
-            final dynamic balanceValue = value['remainingBalance'];
-            totalBalance += (balanceValue is int)
-                ? balanceValue.toDouble()
-                : (balanceValue as double? ?? 0.0);
-          });
-        }
-      }
-
-      return totalBalance;
+      return 0.0;
     } catch (e) {
       print("Error fetching remaining balance: $e");
       return 0.0;
     }
   }
-
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
     final DatabaseEvent snapshot = await itemsRef.once();
@@ -648,6 +616,7 @@ class _filledpageState extends State<filledpage> {
     if (snapshot.snapshot.exists) {
       final Map<dynamic, dynamic> itemsMap = snapshot.snapshot.value as Map<dynamic, dynamic>;
       return itemsMap.entries.map((entry) {
+        // print(entry);
         return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
       }).toList();
     } else {
@@ -785,18 +754,17 @@ class _filledpageState extends State<filledpage> {
     );
   }
 
-  Future<void> _showFullScreenImage(Uint8List imageBytes) async {
-    await showDialog(
+  void _showFullScreenImage(Uint8List imageBytes) {
+    showDialog(
       context: context,
       builder: (context) => Dialog(
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
           height: MediaQuery.of(context).size.height * 0.8,
-          child: InteractiveViewer(
-            panEnabled: true,
-            minScale: 0.5,
-            maxScale: 4.0,
-            child: Image.memory(imageBytes, fit: BoxFit.contain),
+          child: PhotoView(
+            imageProvider: MemoryImage(imageBytes),
+            minScale: PhotoViewComputedScale.contained,
+            maxScale: PhotoViewComputedScale.covered * 2,
           ),
         ),
       ),
@@ -855,26 +823,35 @@ class _filledpageState extends State<filledpage> {
                 final payment = payments[index];
                 Uint8List? imageBytes;
                 if (payment['image'] != null) {
-                  imageBytes = base64Decode(payment['image']);
+                  try {
+                    imageBytes = base64Decode(payment['image']);
+                  } catch (e) {
+                    print('Error decoding Base64 image: $e');
+                  }
                 }
 
                 return Card(
                   child: ListTile(
                     // title: Text(
-                    //   '${payment['method']}: Rs ${payment['amount']}',
-                    //   style: const TextStyle(fontWeight: FontWeight.bold),
+                    //   payment['method'] == 'Bank'
+                    //       ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
+                    //       : payment['method'] == 'Check'
+                    //       ? '${payment['bankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
+                    //       : '${payment['method']}: Rs ${payment['amount']}',
                     // ),
                     title: Text(
-                      '${payment['method'] == 'Bank'
-                          ? '${payment['bankName'] ?? 'Bank'}'
-                          : payment['method']}: Rs ${payment['amount']}',
+                      payment['method'] == 'Bank'
+                          ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
+                          : payment['method'] == 'Check'
+                          ? '${payment['chequeBankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
+                      // Add this case for SimpleCashbook
+                          : payment['method'] == 'SimpleCashbook'
+                          ? 'Simple Cashbook: Rs ${payment['amount']}'
+                          : '${payment['method']}: Rs ${payment['amount']}',
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Text(DateFormat('yyyy-MM-dd – HH:mm')
-                        //     .format(payment['date'])),
-                        // In payment history list
                         Text(DateFormat('yyyy-MM-dd – HH:mm')
                             .format(payment['date'])),
                         if (payment['description'] != null)
@@ -882,29 +859,23 @@ class _filledpageState extends State<filledpage> {
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(payment['description']),
                           ),
+                        // Display Base64 image if available
                         if (imageBytes != null)
                           Column(
                             children: [
                               GestureDetector(
                                 onTap: () => _showFullScreenImage(imageBytes!),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Hero(
-                                    tag: 'paymentImage$index',
-                                    child: Image.memory(
-                                      imageBytes,
-                                      width: 100,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
+                                child: Image.memory(
+                                  imageBytes,
+                                  width: 100,
+                                  height: 100,
+                                  fit: BoxFit.cover,
                                 ),
                               ),
                               TextButton(
                                 onPressed: () => _showFullScreenImage(imageBytes!),
                                 child: Text(
-                                  Provider.of<LanguageProvider>(context, listen: false)
-                                      .isEnglish
+                                  languageProvider.isEnglish
                                       ? 'View Full Image'
                                       : 'مکمل تصویر دیکھیں',
                                   style: const TextStyle(fontSize: 12),
@@ -917,13 +888,12 @@ class _filledpageState extends State<filledpage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-
                         IconButton(
                           icon: const Icon(Icons.delete),
                           onPressed: () => _showDeletePaymentConfirmationDialog(
                             context,
                             filled['id'],
-                            payment['key'], // Ensure the payment key is passed
+                            payment['key'],
                             payment['method'],
                             payment['amount'],
                           ),
@@ -938,7 +908,9 @@ class _filledpageState extends State<filledpage> {
           actions: [
             ElevatedButton(
               onPressed: () => _printPaymentHistoryPDF(payments, context),
-              child: Text(languageProvider.isEnglish ? 'Print Payment History' : 'ادائیگی کی تاریخ پرنٹ کریں'),
+              child: Text(languageProvider.isEnglish
+                  ? 'Print Payment History'
+                  : 'ادائیگی کی تاریخ پرنٹ کریں'),
             ),
             TextButton(
               child: Text(languageProvider.isEnglish ? 'Close' : 'بند کریں'),
@@ -952,162 +924,174 @@ class _filledpageState extends State<filledpage> {
         SnackBar(content: Text('Error loading payments: ${e.toString()}')),
       );
     }
-  }  // Print filled
+  }
+
 
   Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
     final pdf = pw.Document();
-    // Load the image asset for the logo
+
+    // Load header and footer logos
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
     final buffer = bytes.buffer.asUint8List();
     final image = pw.MemoryImage(buffer);
 
-    // Load the footer logo if different
     final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
-    // Generate all description images asynchronously
-    final List<List<dynamic>> tableData = await Future.wait(
-      payments.map((payment) async {
-        final paymentAmount = _parseToDouble(payment['amount']);
-        final paymentDate = _parsePaymentDate(payment['date']);
-        final description = payment['description'] ?? 'N/A';
-        // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
 
-        // Generate image from description text
-        final descriptionImage = await _createTexttoImage(description);
+    // Prepare table rows with Urdu description image
+    final List<pw.TableRow> tableRows = [];
 
-        return [
-          payment['method'],
-          'Rs ${paymentAmount.toStringAsFixed(2)}',
-          DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
-          pw.Image(descriptionImage), // Use the generated image
-        ];
-      }),
-    );
-
-    // Add a multi-page layout to handle multiple payments
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) => [
-          // Header section
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Image(image, width: 80, height: 80), // Adjust logo size
-              pw.Text('Payment History',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-            ],
+    // Add header row
+    tableRows.add(
+      pw.TableRow(
+        decoration: pw.BoxDecoration(color: PdfColors.grey300),
+        children: [
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text('Method', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
           ),
-
-          // Table with payment history
-          pw.Table.fromTextArray(
-            headers: ['Method', 'Amount', 'Date', 'Description'],
-            // data: tableData,
-            data: payments.map((payment) {
-              return [
-                payment['method'] == 'Bank'
-                    ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
-                    : payment['method'],
-                'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
-                DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
-                payment['description'] ?? 'N/A',
-              ];
-            }).toList(),
-            border: pw.TableBorder.all(),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              fontSize: 14, // Increased header font size
-            ),
-            cellStyle: const pw.TextStyle(
-              fontSize: 12, // Increased cell font size from 10 to 12
-            ),
-            cellAlignment: pw.Alignment.centerLeft,
-            cellPadding: const pw.EdgeInsets.all(6),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
           ),
-
-          pw.SizedBox(height: 20),
-          pw.Divider(),
-          pw.Spacer(),
-          // Footer section
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Text(
-                    'Dev Valley Software House',
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'Contact: 0303-4889663',
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-            ],
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
           ),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
           ),
         ],
       ),
     );
 
-    // Print the PDF
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-  }
+    // Add data rows with description image
+    for (final payment in payments) {
+      final method = payment['method'] == 'Bank'
+          ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
+          : payment['method'];
 
-  Future<Uint8List?> _pickImage(BuildContext context) async {
-    Uint8List? imageBytes;
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      final amount = 'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}';
+      final date = DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date']));
+      final description = payment['description'] ?? 'N/A';
+      final descriptionImage = await _createTextImage(description);
 
-    if (kIsWeb) {
-      // For web, use file_picker
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        imageBytes = result.files.first.bytes;
-      }
-    } else {
-      // For mobile, show source selection dialog
-      final ImagePicker _picker = ImagePicker();
-
-      // Show dialog to choose camera or gallery
-      final ImageSource? source = await showDialog<ImageSource>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
-          actions: [
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
-              onPressed: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
-              onPressed: () => Navigator.pop(context, ImageSource.gallery),
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(method, style: const pw.TextStyle(fontSize: 12))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(amount, style: const pw.TextStyle(fontSize: 12))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(date, style: const pw.TextStyle(fontSize: 12))),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Image(descriptionImage, width: 100, height: 30, fit: pw.BoxFit.contain),
             ),
           ],
         ),
       );
-
-      if (source == null) return null; // User canceled
-
-      XFile? pickedFile = await _picker.pickImage(source: source);
-      if (pickedFile != null) {
-        final file = File(pickedFile.path);
-        imageBytes = await file.readAsBytes();
-      }
     }
 
+    // Add page to PDF
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(image, width: 80, height: 80),
+              pw.Text('Payment History', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+
+          pw.SizedBox(height: 20),
+
+          // Table with data
+          pw.Table(
+            border: pw.TableBorder.all(),
+            defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: tableRows,
+          ),
+
+          pw.SizedBox(height: 20),
+          pw.Divider(),
+          pw.Spacer(),
+
+          // Footer
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Image(footerLogo, width: 20, height: 20),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text('Dev Valley Software House',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Contact: 0303-4889663',
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text(
+              'Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Display or print the PDF
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+  }
+
+
+  Future<Uint8List?> _pickImage(BuildContext context) async {
+    final ImagePicker _picker = ImagePicker();
+    Uint8List? imageBytes;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // Show source selection dialog
+    final ImageSource? source = await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
+        actions: [
+          TextButton(
+            child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
+            onPressed: () => Navigator.pop(context, ImageSource.camera),
+          ),
+          TextButton(
+            child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
+            onPressed: () => Navigator.pop(context, ImageSource.gallery),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null) return null;
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        if (kIsWeb) {
+          imageBytes = await pickedFile.readAsBytes();
+        } else {
+          final file = File(pickedFile.path);
+          imageBytes = await file.readAsBytes();
+        }
+      }
+    } catch (e) {
+      print("Error picking image: $e");
+    }
     return imageBytes;
   }
 
@@ -1151,19 +1135,19 @@ class _filledpageState extends State<filledpage> {
               );
 
               return Card(
-                margin: EdgeInsets.symmetric(vertical: 4),
+                margin: const EdgeInsets.symmetric(vertical: 4),
                 child: ListTile(
                   leading: Image.asset(
                     matchedBank.iconPath,
                     width: 40,
                     height: 40,
                     errorBuilder: (context, error, stackTrace) {
-                      return Icon(Icons.account_balance, size: 40);
+                      return const Icon(Icons.account_balance, size: 40);
                     },
                   ),
                   title: Text(
                     bankName,
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   // subtitle: Text(
                   //   '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
@@ -1192,7 +1176,6 @@ class _filledpageState extends State<filledpage> {
 
     return selectedBank;
   }
-
 
   Future<void> _showFilledPaymentDialog(
       Map<String, dynamic> filled,
@@ -1485,6 +1468,9 @@ class _filledpageState extends State<filledpage> {
                       setState(() => _isPaymentButtonPressed = false);
                       return;
                     }
+
+
+
                     try {
                       await filledProvider.payFilledWithSeparateMethod(
                         // createdAt: _dateController.text,
@@ -1524,10 +1510,11 @@ class _filledpageState extends State<filledpage> {
 
   void onPaymentPressed(Map<String, dynamic> filled) {
     // At the start of both methods
-    // if (filled == null) return;
-    if (filled['filledNumber'] == null || filled['customerId'] == null) {
+    if (filled == null ||
+        filled['filledNumber'] == null ||  // Use filledNumber as ID
+        filled['customerId'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot process payment - invalid filled data')),
+        const SnackBar(content: Text('Cannot process payment - invalid Filled data')),
       );
       return;
     }
@@ -1538,74 +1525,29 @@ class _filledpageState extends State<filledpage> {
 
   void onViewPayments(Map<String, dynamic> filled) {
     // At the start of both methods
-    // if (filled == null) return;
-    // Similar null check
     if (filled == null || filled['filledNumber'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot view payments - invalid filled data')),
+        const SnackBar(content: Text('Cannot view payments - invalid Filled data')),
       );
       return;
     }
     _showPaymentDetails(filled);
   }
 
-  // Create text image for PDF
-  Future<pw.MemoryImage> _createTexttoImage(String text) async {
-    const double scaleFactor = 1.5;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      Rect.fromPoints(
-        const Offset(0, 0),
-        const Offset(500 * scaleFactor, 50 * scaleFactor),
-      ),
-    );
-
-    final paint = Paint()..color = Colors.black;
-    final textStyle = const TextStyle(
-      fontSize: 13 * scaleFactor,
-      fontFamily: 'JameelNoori',
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-    );
-
-    final textSpan = TextSpan(text: text, style: textStyle);
-    final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left,
-      textDirection: ui.TextDirection.ltr,
-    );
-
-    textPainter.layout();
-    textPainter.paint(canvas, const Offset(0, 0));
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(
-      (textPainter.width * scaleFactor).toInt(),
-      (textPainter.height * scaleFactor).toInt(),
-    );
-
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    final buffer = byteData!.buffer.asUint8List();
-
-    return pw.MemoryImage(buffer);
-  }
 
   @override
   void initState() {
     super.initState();
     _fetchItems();
-    _currentFilled = widget.filled; // Initialize with existing filled if editing
-    _fetchRemainingBalance(); // Fetch the remaining balance when the page initializes
+    _currentFilled = widget.filled;
+
     if (widget.filled != null) {
       _mazdoori = (widget.filled!['mazdoori'] as num).toDouble();
       _mazdooriController.text = _mazdoori.toStringAsFixed(2);
-    }
-    if (widget.filled != null) {
       _filledId = widget.filled!['filledNumber'];
       _referenceController.text = widget.filled!['referenceNumber'] ?? '';
     }
-    // Initialize customer provider and fetch customers
+
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     customerProvider.fetchCustomers().then((_) {
       if (widget.filled != null) {
@@ -1628,7 +1570,7 @@ class _filledpageState extends State<filledpage> {
 
     if (widget.filled != null) {
       final filled = widget.filled!;
-      _discount = (filled['discount'] as num).toDouble();
+      _discount = (filled['discount'] as num?)?.toDouble() ?? 0.0;
       _discountController.text = _discount.toStringAsFixed(2);
       _filledId = filled['filledNumber'];
       _paymentType = filled['paymentType'];
@@ -1636,20 +1578,27 @@ class _filledpageState extends State<filledpage> {
 
       // Initialize rows with calculated totals
       _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
-        double rate = (row['rate'] as num).toDouble();
-        double qty = (row['qty'] as num).toDouble();
-        double total = rate * qty; // Calculate total here
+        double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
+        double qty = (row['qty'] as num?)?.toDouble() ?? 0.0;
+        double total = rate * qty;
+
+        // Print debug information
+        print('Initializing row with:');
+        print('  - Item Name: ${row['itemName']}');
+        print('  - Rate: $rate');
+        print('  - Qty: $qty');
+        print('  - Total: $total');
 
         return {
           'itemName': row['itemName'],
           'rate': rate,
-          'initialQty': qty, // Store initial qty for delta calculation
-          'qty': (row['qty'] as num).toDouble(),
+          'initialQty': qty,
+          'qty': qty,
           'description': row['description'],
-          'total': total, // Use calculated total
+          'total': total,
           'itemNameController': TextEditingController(text: row['itemName']),
-          'rateController': TextEditingController(text: rate.toString()),
-          'qtyController': TextEditingController(text: row['qty'].toString()),
+          'rateController': TextEditingController(text: rate.toStringAsFixed(2)),
+          'qtyController': TextEditingController(text: qty.toStringAsFixed(0)),
           'descriptionController': TextEditingController(text: row['description']),
         };
       }).toList();
@@ -1660,7 +1609,7 @@ class _filledpageState extends State<filledpage> {
           'rate': 0.0,
           'qty': 0.0,
           'description': '',
-          'itemNameController': TextEditingController(), // Add this
+          'itemNameController': TextEditingController(),
           'rateController': TextEditingController(),
           'qtyController': TextEditingController(),
           'descriptionController': TextEditingController(),
@@ -1680,8 +1629,8 @@ class _filledpageState extends State<filledpage> {
     }
     _discountController.dispose(); // Dispose discount controller
     _customerController.dispose();
-    _dateController.dispose();
     _mazdooriController.dispose();
+    _dateController.dispose();
     _referenceController.dispose();
     super.dispose();
   }
@@ -1701,8 +1650,8 @@ class _filledpageState extends State<filledpage> {
             title: Text(
               // widget.filled == null
               _isReadOnly
-                  ? (languageProvider.isEnglish ? 'Update Filled' : 'انوائس بنائیں')
-                  : (languageProvider.isEnglish ? 'Create Filled' : 'انوائس کو اپ ڈیٹ کریں'),
+                  ? (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ بنائیں')
+                  : (languageProvider.isEnglish ? 'Create Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
               style: const TextStyle(color: Colors.white,
               ),
             ),
@@ -1712,14 +1661,10 @@ class _filledpageState extends State<filledpage> {
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white), // Three-dot menu icon
                 onSelected: (String value) async {
-                  // final filledNumber = _filledId ?? generateFilledNumber();
-                  // Get the appropriate filled number
                   String filledNumber;
                   if (widget.filled != null) {
-                    // For existing filled, use their original number
                     filledNumber = widget.filled!['filledNumber'];
                   } else {
-                    // For new filled, get the next sequential number
                     final filledProvider = Provider.of<FilledProvider>(context, listen: false);
                     filledNumber = (await filledProvider.getNextFilledNumber()).toString();
                   }
@@ -1740,7 +1685,6 @@ class _filledpageState extends State<filledpage> {
                           );
                           return;
                         }
-                        // await _generateAndPrintPDF(filledNumber);
                         await _generateAndPrintPDF();
 
                       } catch (e) {
@@ -1754,7 +1698,6 @@ class _filledpageState extends State<filledpage> {
                           ),
                         );
                       }
-                      // _generateAndPrintPDF(filledNumber);
                       break;
                     case 'save':
                       await _savePDF(filledNumber);
@@ -1797,7 +1740,6 @@ class _filledpageState extends State<filledpage> {
                   ),
                 ],
               ),
-
             ],
           ),
 
@@ -1882,7 +1824,6 @@ class _filledpageState extends State<filledpage> {
                             _selectedCustomerName = selectedCustomer.name;
                             _customerController.text = selectedCustomer.name;
                           });
-                          _fetchRemainingBalance(); // This updates the remaining balance
                         },
                         optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
                             Iterable<Customer> options) {
@@ -1920,7 +1861,6 @@ class _filledpageState extends State<filledpage> {
                         style: TextStyle(color: Colors.teal.shade600),
                       ),
                       // Space between sections
-                      // Add a TextField for the date
                       TextField(
                         controller: _dateController,
                         decoration: InputDecoration(
@@ -1935,7 +1875,7 @@ class _filledpageState extends State<filledpage> {
                       ),
                       const SizedBox(height: 20),
                       // Display columns for the filled details
-                      Text(languageProvider.isEnglish ? 'Filled Details:' : 'انوائس کی تفصیلات:',
+                      Text(languageProvider.isEnglish ? 'Filled Details:' : 'فلڈ کی تفصیلات:',
                         style: TextStyle(color: Colors.teal.shade800, fontSize: 18),
                       ),
                       // Replace the Table widget with a ListView.builder
@@ -2024,7 +1964,6 @@ class _filledpageState extends State<filledpage> {
                                         ),
                                       ),
                                       const SizedBox(height: 5,),
-                                      const SizedBox(height: 5,),
                                       // Descriptions
                                       TextField(
                                         controller: _filledRows[i]['descriptionController'],
@@ -2102,7 +2041,6 @@ class _filledpageState extends State<filledpage> {
                         },
                         decoration: InputDecoration(hintText: languageProvider.isEnglish ? 'Enter discount' : 'رعایت درج کریں'),
                       ),
-                      // After the discount TextField
                       const SizedBox(height: 20),
                       Text(languageProvider.isEnglish ? 'Router Mazdoori:' : 'روٹر مزدوری:', style: const TextStyle(fontSize: 18)),
                       TextField(
@@ -2318,8 +2256,21 @@ class _filledpageState extends State<filledpage> {
                                   return;
                                 }
 
-                                // Validate weight and rate fields
+                                // Validate qty and rate fields
                                 for (var row in _filledRows) {
+                                  if (row['qty'] == null || row['qty'] <= 0) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          languageProvider.isEnglish
+                                              ? 'qty cannot be zero or less'
+                                              : 'تعداد صفر یا اس سے کم نہیں ہو سکتا',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
                                   if (row['rate'] == null || row['rate'] <= 0) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
@@ -2428,8 +2379,7 @@ class _filledpageState extends State<filledpage> {
                                   // For updates, keep the original number
                                   filledNumber = widget.filled!['filledNumber'];
                                 } else {
-                                  // For new filled, use sequential numbering
-                                  // For new filled, get the next sequential number
+
                                   final filledProvider = Provider.of<FilledProvider>(context, listen: false);
                                   filledNumber = (await filledProvider.getNextFilledNumber()).toString();
                                 }
@@ -2441,12 +2391,12 @@ class _filledpageState extends State<filledpage> {
                                   await Provider.of<FilledProvider>(context, listen: false).updateFilled(
                                     filledId: _filledId!, // Pass the correct ID for updating
                                     filledNumber: filledNumber,
+                                    mazdoori: _mazdoori, // Add this
                                     customerId: _selectedCustomerId!,
                                     customerName: _selectedCustomerName ?? 'Unknown Customer',
                                     subtotal: subtotal,
                                     discount: _discount,
                                     grandTotal: grandTotal,
-                                    mazdoori: _mazdoori, // Add this
                                     paymentType: _paymentType,
                                     referenceNumber: _referenceController.text, // Add this
                                     paymentMethod: _instantPaymentMethod,
@@ -2467,7 +2417,7 @@ class _filledpageState extends State<filledpage> {
                                       content: Text(
                                         languageProvider.isEnglish
                                             ? 'Filled updated successfully'
-                                            : 'انوائس کامیابی سے تبدیل ہوگئی',
+                                            : 'فلڈ کامیابی سے تبدیل ہوگئی',
                                       ),
                                     ),
                                   );
@@ -2476,10 +2426,10 @@ class _filledpageState extends State<filledpage> {
                                   await Provider.of<FilledProvider>(context, listen: false).saveFilled(
                                     filledId: filledNumber,
                                     filledNumber: filledNumber,
+                                    mazdoori: _mazdoori, // Add this
                                     customerId: _selectedCustomerId!,
                                     customerName: _selectedCustomerName ?? 'Unknown Customer',
                                     subtotal: subtotal,
-                                    mazdoori: _mazdoori, // Add this
                                     discount: _discount,
                                     grandTotal: grandTotal,
                                     paymentType: _paymentType,
@@ -2513,24 +2463,17 @@ class _filledpageState extends State<filledpage> {
                                       content: Text(
                                         languageProvider.isEnglish
                                             ? 'Filled saved successfully'
-                                            : 'انوائس کامیابی سے محفوظ ہوگئی',
+                                            : 'فلڈ کامیابی سے محفوظ ہوگئی',
                                       ),
                                     ),
                                   );
                                 }
                                 // Update qtyOnHand after saving/updating the filled
                                 _updateQtyOnHand(_filledRows);
-                                // Navigate back
-                                // Navigator.pushReplacement(
-                                //   context,
-                                //   MaterialPageRoute(builder: (context) => filledListpage()),
-                                // );
-                                // After successful save:
-                                // After successful save:
-                                // After saving the filled:
                                 setState(() {
                                   _currentFilled = {
-                                    'filledNumber': filledNumber, // Ensure this is included
+                                    'id': filledNumber, // Add 'id' field with filledNumber
+                                    'filledNumber': filledNumber,
                                     'grandTotal': _calculateGrandTotal(),
                                     'customerId': _selectedCustomerId!,
                                     'customerName': _selectedCustomerName ?? 'Unknown Customer',
@@ -2549,7 +2492,7 @@ class _filledpageState extends State<filledpage> {
                                     content: Text(
                                       languageProvider.isEnglish
                                           ? 'Failed to save filled'
-                                          : 'انوائس محفوظ کرنے میں ناکام',
+                                          : 'فلڈ محفوظ کرنے میں ناکام',
                                     ),
                                   ),
                                 );
@@ -2561,27 +2504,15 @@ class _filledpageState extends State<filledpage> {
                             },
                             child: Text(
                               widget.filled == null
-                                  ? (languageProvider.isEnglish ? 'Save Filled' : 'انوائس محفوظ کریں')
-                                  : (languageProvider.isEnglish ? 'Update filled' : 'انوائس کو اپ ڈیٹ کریں'),
+                                  ? (languageProvider.isEnglish ? 'Save Filled' : 'فلڈ محفوظ کریں')
+                                  : (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
                               style: const TextStyle(color: Colors.white),
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.teal.shade400, // Button background color
                             ),
                           ),
-                          // if (widget.filled != null)
-                          //   Row(
-                          //     children: [
-                          //       IconButton(
-                          //         icon: const Icon(Icons.payment),
-                          //         onPressed: () => onPaymentPressed(widget.filled!),
-                          //       ),
-                          //       IconButton(
-                          //         icon: const Icon(Icons.history),
-                          //         onPressed: () => onViewPayments(widget.filled!),
-                          //       ),
-                          //     ],
-                          //   ),
+
                           if ((widget.filled != null || _currentFilled != null) && _selectedCustomerId != null)
                             Row(
                               children: [

@@ -198,7 +198,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                   if (_filteredInvoices.isEmpty) {
                     return Center(
                       child: Text(
-                        languageProvider.isEnglish ? 'No Filled Found' : 'کوئی انوائس موجود نہیں',
+                        languageProvider.isEnglish ? 'No Invoice Found' : 'کوئی انوائس موجود نہیں',
                       ),
                     );
                   }

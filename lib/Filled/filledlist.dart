@@ -19,7 +19,7 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'dart:html' as html;
-import 'Filledpage.dart';
+import 'filledpage.dart';
 
 
 class filledListpage extends StatefulWidget {
@@ -215,7 +215,7 @@ class _filledListpageState extends State<filledListpage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => filledpage(filled: filled),
+                                builder: (context) => FilledPage(filled: filled),
                               ),
                             );
                           },
@@ -302,7 +302,7 @@ class _filledListpageState extends State<filledListpage> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => filledpage()),
+              MaterialPageRoute(builder: (context) => FilledPage()),
             );
           },
         ),
@@ -323,7 +323,7 @@ class _filledListpageState extends State<filledListpage> {
       final matchesSearch = filledNumber.contains(searchQuery) || customerName.contains(searchQuery);
 
       if (_selectedDateRange != null) {
-        final filledDateStr = filled['createdAt'];
+        final filledDateStr = filled['transactionDate'];
         DateTime? filledDate;
         try {
           filledDate = DateTime.tryParse(filledDateStr) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(filledDateStr));
@@ -652,7 +652,7 @@ class _filledListpageState extends State<filledListpage> {
       tableData.add([
         filled['filledNumber'] ?? 'N/A',
         pw.Image(customerNameImage),
-        filled['createdAt'] ?? 'N/A',
+        filled['transactionDate'] ?? 'N/A',
         'Rs ${filled['grandTotal']}',
         'Rs ${(filled['grandTotal'] - filled['debitAmount']).toStringAsFixed(2)}',
       ]);
@@ -1060,7 +1060,7 @@ class _filledListpageState extends State<filledListpage> {
                     final amount = double.tryParse(_paymentController.text);
                     if (amount != null && amount > 0) {
                       await filledProvider.payFilledWithSeparateMethod(
-                        createdAt: filled['createdAt'],
+                        createdAt: filled['transactionDate'],
                         context,
                         filled['id'],
                         amount,
@@ -1360,34 +1360,9 @@ class FilledList extends StatelessWidget {
   Future<double> _getCustomerRemainingBalance(String customerId) async {
     try {
       double totalBalance = 0.0;
-
-      // Fetch from 'ledger' (filled balance)
-      final ledgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
-      final ledgerQuery = ledgerRef.orderByChild('createdAt');
-      final ledgerSnapshot = await ledgerQuery.get();
-
-      if (ledgerSnapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
-        if (ledgerData != null) {
-          // Convert to list and sort by date (newest first)
-          final entries = ledgerData.entries.toList()
-            ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
-
-          // Find the most recent balance
-          for (var entry in entries) {
-            final entryData = entry.value as Map<dynamic, dynamic>;
-            final dynamic balanceValue = entryData['remainingBalance'];
-            totalBalance = (balanceValue is int)
-                ? balanceValue.toDouble()
-                : (balanceValue as double? ?? 0.0);
-            break; // We only need the most recent balance
-          }
-        }
-      }
-
       // Fetch from 'filledledger' (filled balance)
       final filledLedgerRef = FirebaseDatabase.instance.ref('filledledger').child(customerId);
-      final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      final filledSnapshot = await filledLedgerRef.orderByChild('transactionDate').limitToLast(1).once();
 
       if (filledSnapshot.snapshot.exists) {
         final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;

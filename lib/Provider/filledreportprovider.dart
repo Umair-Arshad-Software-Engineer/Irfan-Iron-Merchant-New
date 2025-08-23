@@ -114,7 +114,7 @@ class FilledCustomerReportProvider with ChangeNotifier {
 
           transactions.add({
             'id': key,
-            'date': value['createdAt'],
+            'date': value['transactionDate'],
             'filledNumber': value['filledNumber'],
             'referenceNumber': value['referenceNumber'],
             'bankName':value['bankName'],

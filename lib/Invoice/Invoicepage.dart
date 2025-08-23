@@ -15,7 +15,7 @@ import 'package:photo_view/photo_view.dart';
   import 'package:pdf/pdf.dart';
   import 'package:pdf/widgets.dart' as pw;
   import '../Models/itemModel.dart';
-  import '../Provider/customerprovider.dart';
+import '../Provider/customerprovider.dart';
   import '../Provider/invoice provider.dart';
   import '../Provider/lanprovider.dart';
   import 'package:flutter/rendering.dart';
@@ -65,23 +65,6 @@ import '../bankmanagement/banknames.dart';
     TextEditingController _chequeNumberController = TextEditingController();
     DateTime? _selectedChequeDate;
 
-    Future<void> _fetchRemainingBalance() async {
-      if (_selectedCustomerId != null) {
-        try {
-          final balance = await _getRemainingBalance(_selectedCustomerId!);
-          setState(() {
-            _remainingBalance = balance;
-          });
-        } catch (e) {
-          setState(() {
-            _remainingBalance = 0.0; // Set a default value in case of error
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to fetch remaining balance: $e')),
-          );
-        }
-      }
-    }
 
     // Method to show the date picker
     Future<void> _selectDate(BuildContext context) async {
@@ -594,6 +577,14 @@ import '../bankmanagement/banknames.dart';
 
     Future<double> _getRemainingBalance(String customerId, {bool excludeCurrentInvoice = false}) async {
       try {
+        // First try to get the balance from the customerBalances node
+        final balanceSnapshot = await _db.child('customerBalances').child(customerId).child('balance').get();
+
+        if (balanceSnapshot.exists) {
+          return _parseToDouble(balanceSnapshot.value);
+        }
+
+        // Fallback to the old method if customerBalances doesn't exist
         double totalBalance = 0.0;
 
         // Fetch from 'ledger' (invoice balance)
@@ -1879,7 +1870,6 @@ import '../bankmanagement/banknames.dart';
       super.initState();
       _fetchItems();
       _currentInvoice = widget.invoice;
-      _fetchRemainingBalance();
 
       if (widget.invoice != null) {
         _mazdoori = (widget.invoice!['mazdoori'] as num).toDouble();
@@ -2177,7 +2167,6 @@ import '../bankmanagement/banknames.dart';
                               _selectedCustomerName = selectedCustomer.name;
                               _customerController.text = selectedCustomer.name;
                             });
-                            _fetchRemainingBalance(); // This updates the remaining balance
                           },
                           optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
                               Iterable<Customer> options) {

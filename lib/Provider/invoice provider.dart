@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../Models/cashbookModel.dart';
 import '../Models/itemModel.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-
 
 
 class InvoiceProvider with ChangeNotifier {
@@ -265,22 +263,20 @@ class InvoiceProvider with ChangeNotifier {
   }
 
   Future<void> saveInvoice({
-    required String invoiceId, // Accepts the invoice ID (instead of using push)
-    required String invoiceNumber, // Can be timestamp or sequential
+    required String invoiceId,
+    required String invoiceNumber,
     required String customerId,
-    required String customerName, // Accept the customer name as a parameter
+    required String customerName,
     required double subtotal,
     required double discount,
-    required double mazdoori, // Add this parameter
+    required double mazdoori,
     required double grandTotal,
     required String paymentType,
-    required String referenceNumber, // Add this
-    String? paymentMethod, // For instant payments
-    required String createdAt, // Add this parameter
-
+    required String referenceNumber,
+    String? paymentMethod,
+    required String createdAt,
     required List<Map<String, dynamic>> items,
-  })
-  async {
+  }) async {
     try {
       final cleanedItems = items.map((item) {
         return {
@@ -294,32 +290,31 @@ class InvoiceProvider with ChangeNotifier {
       }).toList();
 
       final invoiceData = {
-        'referenceNumber': referenceNumber, // Add this
+        'referenceNumber': referenceNumber,
         'invoiceNumber': invoiceNumber,
         'customerId': customerId,
-        'customerName': customerName, // Save customer name here
+        'customerName': customerName,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
-        'mazdoori': mazdoori, // Add this line
-        'createdAt': createdAt, // Use the provided date
+        'mazdoori': mazdoori,
+        'createdAt': createdAt,
         'numberType': _isTimestampNumber(invoiceNumber) ? 'timestamp' : 'sequential',
-
       };
-      // Save the invoice at the specified invoiceId path
+
       await _db.child('invoices').child(invoiceId).set(invoiceData);
-      print('invoice saved');
+
       // Now update the ledger for this customer
       await _updateCustomerLedger(
-        referenceNumber: referenceNumber,
         customerId,
-        creditAmount: grandTotal, // The invoice total as a credit
-        debitAmount: 0.0, // No payment yet
-        remainingBalance: grandTotal, // Full amount due initially
+        creditAmount: grandTotal,
+        debitAmount: 0.0,
+        remainingBalance: grandTotal,
         invoiceNumber: invoiceNumber,
+        referenceNumber: referenceNumber,
         createdAt: createdAt,
       );
     } catch (e) {
@@ -347,14 +342,13 @@ class InvoiceProvider with ChangeNotifier {
     required double subtotal,
     required double discount,
     required double grandTotal,
-    required double mazdoori, // Add this parameter
+    required double mazdoori,
     required String paymentType,
     String? paymentMethod,
-    required String referenceNumber, // Add this
+    required String referenceNumber,
     required List<Map<String, dynamic>> items,
     required String createdAt,
-  })
-  async {
+  }) async {
     try {
       // Fetch the old invoice data
       final oldInvoice = await getInvoiceById(invoiceId);
@@ -377,17 +371,16 @@ class InvoiceProvider with ChangeNotifier {
           'weight': item['weight'] ?? 0.0,
           'description': item['description'] ?? '',
           'total': item['total'],
-
         };
       }).toList();
 
       // Prepare the updated invoice data
       final invoiceData = {
-        'referenceNumber': referenceNumber, // Add this
+        'referenceNumber': referenceNumber,
         'invoiceNumber': invoiceNumber,
         'customerId': customerId,
         'customerName': customerName,
-        'mazdoori': mazdoori, // Add this line
+        'mazdoori': mazdoori,
         'subtotal': subtotal,
         'discount': discount,
         'grandTotal': grandTotal,
@@ -397,7 +390,6 @@ class InvoiceProvider with ChangeNotifier {
         'updatedAt': DateTime.now().toIso8601String(),
         'createdAt': createdAt,
         'numberType': isTimestamp ? 'timestamp' : 'sequential',
-
       };
 
       // Update the invoice in the database
@@ -425,6 +417,9 @@ class InvoiceProvider with ChangeNotifier {
             'creditAmount': newCredit,
             'remainingBalance': newRemaining,
           });
+
+          // Update the customer balance
+          await _updateCustomerBalance(customerId, newRemaining, DateTime.now().toIso8601String());
         }
       }
 
@@ -442,8 +437,8 @@ class InvoiceProvider with ChangeNotifier {
         if (dbItem.id.isNotEmpty) {
           final String itemId = dbItem.id;
           final double currentQty = dbItem.qtyOnHand;
-          final double newWeight = item['weight'] ?? 0.0; // Use 'weight' instead of 'qty'
-          final double initialWeight = item['initialWeight'] ?? 0.0; // Ensure this is 'initialWeight'
+          final double newWeight = item['weight'] ?? 0.0;
+          final double initialWeight = item['initialWeight'] ?? 0.0;
 
           // Calculate the difference between the initial quantity and the new quantity
           double delta = initialWeight - newWeight;
@@ -481,13 +476,7 @@ class InvoiceProvider with ChangeNotifier {
       return DateTime.now();
     }
 
-    // Helper function to safely parse numeric values
-    // double parseDouble(dynamic value) {
-    //   if (value == null) return 0.0;
-    //   if (value is num) return value.toDouble();
-    //   if (value is String) return double.tryParse(value) ?? 0.0;
-    //   return 0.0;
-    // }
+
     double parseDouble(dynamic value) {
       if (value == null) return 0.0;
       if (value is num) return value.toDouble();
@@ -553,36 +542,15 @@ class InvoiceProvider with ChangeNotifier {
 
       final customerId = invoice['customerId'] as String;
       final invoiceNumber = invoice['invoiceNumber'] as String;
+      final grandTotal = _parseToDouble(invoice['grandTotal']);
 
       // Get the items from the invoice
       final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(invoice['items']);
 
       // Reverse the qtyOnHand deduction for each item
-      // for (var item in items) {
-      //   final itemName = item['itemName'] as String;
-      //   final weight = (item['weight'] as num).toDouble(); // Get the weight from the invoice
-      //
-      //   // Fetch the item from the database
-      //   final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
-      //
-      //   if (itemSnapshot.exists) {
-      //     final itemData = itemSnapshot.value as Map<dynamic, dynamic>;
-      //     final itemKey = itemData.keys.first;
-      //     final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
-      //
-      //     // Get the current qtyOnHand
-      //     double currentQtyOnHand = (currentItem['qtyOnHand'] as num).toDouble();
-      //
-      //     // Add back the weight to qtyOnHand
-      //     double updatedQtyOnHand = currentQtyOnHand + weight;
-      //
-      //     // Update the item in the database
-      //     await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
-      //   }
-      // }
       for (var item in items) {
         final itemName = item['itemName'] as String;
-        final weight = _parseToDouble(item['weight']); // Use helper function
+        final weight = _parseToDouble(item['weight']);
 
         final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
 
@@ -591,9 +559,7 @@ class InvoiceProvider with ChangeNotifier {
           final itemKey = itemData.keys.first;
           final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
 
-          // NULL-SAFE ACCESS: Use helper function for qtyOnHand
           double currentQtyOnHand = _parseToDouble(currentItem['qtyOnHand']);
-
           double updatedQtyOnHand = currentQtyOnHand + weight;
 
           await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
@@ -616,6 +582,16 @@ class InvoiceProvider with ChangeNotifier {
         }
       }
 
+      // Update customer balance by subtracting the invoice amount
+      final balanceRef = _db.child('customerBalances').child(customerId);
+      final balanceSnapshot = await balanceRef.get();
+
+      if (balanceSnapshot.exists) {
+        final currentBalance = _parseToDouble(balanceSnapshot.value);
+        final newBalance = (currentBalance - grandTotal).clamp(0.0, double.infinity);
+        await _updateCustomerBalance(customerId, newBalance, DateTime.now().toIso8601String());
+      }
+
       // Refresh the invoices list after deletion
       await fetchInvoices();
 
@@ -633,8 +609,9 @@ class InvoiceProvider with ChangeNotifier {
         required String invoiceNumber,
         required String referenceNumber,
         required String createdAt,
-        String? paymentMethod, // Add paymentMethod parameter
+        String? paymentMethod,
         String? bankName,
+
       })
   async {
     try {
@@ -647,8 +624,6 @@ class InvoiceProvider with ChangeNotifier {
       if (snapshot.exists) {
         final data = snapshot.value as Map<dynamic, dynamic>;
         final lastTransaction = data.values.first;
-
-        // Ensure lastRemainingBalance is safely converted to double
         lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
       }
 
@@ -657,19 +632,20 @@ class InvoiceProvider with ChangeNotifier {
 
       // Ledger data to be saved
       final ledgerData = {
-        'referenceNumber':referenceNumber,
+        'referenceNumber': referenceNumber,
         'invoiceNumber': invoiceNumber,
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
-        'remainingBalance': newRemainingBalance, // Updated balance
+        'remainingBalance': newRemainingBalance,
         'createdAt': createdAt,
-        if (paymentMethod != null) 'paymentMethod': paymentMethod, // Add paymentMethod to ledger
+        if (paymentMethod != null) 'paymentMethod': paymentMethod,
         if (bankName != null) 'bankName': bankName,
-
-
       };
 
       await customerLedgerRef.push().set(ledgerData);
+
+      // Update the customer balance in the separate node
+      await _updateCustomerBalance(customerId, newRemainingBalance, createdAt);
     } catch (e) {
       throw Exception('Failed to update customer ledger: $e');
     }
@@ -907,16 +883,15 @@ class InvoiceProvider with ChangeNotifier {
           'simpleCashbookPaidAmount':
           (_parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0) + paymentAmount),
       });
-
       // Update customer ledger
       await _updateCustomerLedger(
-        createdAt: createdAt,
         customerId,
         creditAmount: 0.0,
         debitAmount: paymentAmount,
         remainingBalance: _parseToDouble(invoice['grandTotal']) - updatedDebit,
         invoiceNumber: invoiceNumber,
         referenceNumber: referenceNumber,
+        createdAt: createdAt,
         paymentMethod: paymentMethod,
         bankName: paymentMethod == 'Bank'
             ? bankName
@@ -975,6 +950,19 @@ class InvoiceProvider with ChangeNotifier {
         SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
       );
       throw Exception('Failed to save payment: $e');
+    }
+  }
+
+  Future<double> getCustomerBalance(String customerId) async {
+    try {
+      final snapshot = await _db.child('customerBalances').child(customerId).child('balance').get();
+      if (snapshot.exists) {
+        return _parseToDouble(snapshot.value);
+      }
+      return 0.0;
+    } catch (e) {
+      print('Error fetching customer balance: $e');
+      return 0.0;
     }
   }
 
@@ -1442,6 +1430,22 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
+
+  // Add this method to your InvoiceProvider class
+  Future<void> _updateCustomerBalance(
+      String customerId,
+      double newBalance,
+      String updatedAt
+      ) async {
+    try {
+      await _db.child('customerBalances').child(customerId).set({
+        'balance': newBalance,
+        'updatedAt': updatedAt,
+      });
+    } catch (e) {
+      throw Exception('Failed to update customer balance: $e');
+    }
+  }
 
 
 }
