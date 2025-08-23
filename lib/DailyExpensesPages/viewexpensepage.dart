@@ -8,9 +8,8 @@ import 'addexpensepage.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'dart:ui' as ui; // Keep this import only once
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
-import 'package:flutter/rendering.dart'; // This can be removed if not necessary
 
 class ViewExpensesPage extends StatefulWidget {
   @override
@@ -19,12 +18,15 @@ class ViewExpensesPage extends StatefulWidget {
 
 class _ViewExpensesPageState extends State<ViewExpensesPage> {
   final DatabaseReference dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
+  final DatabaseReference cashbookRef = FirebaseDatabase.instance.ref("cashbook");
+  final DatabaseReference banksRef = FirebaseDatabase.instance.ref("banks");
+
   List<Map<String, dynamic>> expenses = [];
   double _originalOpeningBalance = 0.0;
   double _totalExpense = 0.0;
   double _remainingBalance = 0.0;
-  DateTime _selectedDate = DateTime.now(); // Default date is today
-  double _openingBalance = 0.0; // Add this line
+  DateTime _selectedDate = DateTime.now();
+  double _openingBalance = 0.0;
 
   @override
   void initState() {
@@ -63,6 +65,14 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
           "description": value["description"] ?? "No Description",
           "amount": (value["amount"] as num).toDouble(),
           "date": value["date"] ?? formattedDate,
+          "source": value["source"] ?? "cashbook",
+          "bankId": value["bankId"],
+          "bankName": value["bankName"],
+          "chequeBankId": value["chequeBankId"],
+          "chequeBankName": value["chequeBankName"],
+          "chequeNumber": value["chequeNumber"],
+          "chequeDate": value["chequeDate"],
+          "reference": value["reference"],
         });
 
         totalExpense += (value["amount"] as num).toDouble();
@@ -86,14 +96,13 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     if (pickedDate != null) {
       setState(() {
         _selectedDate = pickedDate;
-        _fetchOpeningBalance(); // Fetch opening balance for the new date
-        _fetchExpenses(); // Fetch expenses for the new date
+        _fetchOpeningBalance();
+        _fetchExpenses();
       });
     }
   }
 
   Future<pw.MemoryImage> _createTextImage(String text) async {
-    // Create a custom painter with the Urdu text
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromPoints(Offset(0, 0), Offset(500, 50)));
     final paint = Paint()..color = Colors.black;
@@ -101,41 +110,32 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     final textStyle = TextStyle(fontSize: 16, fontFamily: 'JameelNoori', color: Colors.black, fontWeight: FontWeight.bold);
     final textSpan = TextSpan(text: text, style: textStyle);
 
-    // Explicitly pass a nullable TextDirection
     final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left,
-      // textDirection: TextDirection.ltr, // Correct enum value usage
-      textDirection: ui.TextDirection.ltr
+        text: textSpan,
+        textAlign: TextAlign.left,
+        textDirection: ui.TextDirection.ltr
     );
-
 
     textPainter.layout();
     textPainter.paint(canvas, Offset(0, 0));
 
-    // Create image from the canvas
     final picture = recorder.endRecording();
     final img = await picture.toImage(textPainter.width.toInt(), textPainter.height.toInt());
     final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
     final buffer = byteData!.buffer.asUint8List();
 
-    return pw.MemoryImage(buffer);  // Return the image as MemoryImage
+    return pw.MemoryImage(buffer);
   }
 
   void _generatePdf() async {
     final pdf = pw.Document();
-
-    // Load the footer logo
     final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
-
-    // Load the image asset for the logo
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
     final buffer = bytes.buffer.asUint8List();
     final image = pw.MemoryImage(buffer);
 
-    // Pre-generate images for descriptions
     List<pw.MemoryImage> descriptionImages = [];
     for (var expense in expenses) {
       final image = await _createTextImage(expense['description']);
@@ -146,50 +146,46 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(20),
-
-        // Header
         header: (pw.Context context) => pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'Daily Expense Report',
-                  style: pw.TextStyle(
-                    fontSize: 28,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColor.fromInt(0xFF00695C),
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Daily Expense Report',
+                    style: pw.TextStyle(
+                      fontSize: 28,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColor.fromInt(0xFF00695C),
+                    ),
                   ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.Text(
-                  'Opening Balance: ${_originalOpeningBalance.toStringAsFixed(2)} rs',
-                  style: pw.TextStyle(fontSize: 20),
-                ),
-                pw.Text(
-                  'Selected Date: ${DateFormat('dd:MM:yyyy').format(_selectedDate)}',
-                  style: pw.TextStyle(fontSize: 20),
-                ),
-                pw.SizedBox(height: 15),
-                pw.Text(
-                  'Expenses',
-                  style: pw.TextStyle(
-                    fontSize: 24,
-                    fontWeight: pw.FontWeight.bold,
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    'Opening Balance: ${_originalOpeningBalance.toStringAsFixed(2)} rs',
+                    style: pw.TextStyle(fontSize: 20),
                   ),
-                ),
-                pw.SizedBox(height: 10),
-              ]
+                  pw.Text(
+                    'Selected Date: ${DateFormat('dd:MM:yyyy').format(_selectedDate)}',
+                    style: pw.TextStyle(fontSize: 20),
+                  ),
+                  pw.SizedBox(height: 15),
+                  pw.Text(
+                    'Expenses',
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 10),
+                ]
             ),
-            pw.Image(image, width: 100, height: 100,dpi: 1000), // Adjust logo size
+            pw.Image(image, width: 100, height: 100,dpi: 1000),
           ],
         ),
-
-        // Body (Expense List)
         build: (pw.Context context) => [
           pw.TableHelper.fromTextArray(
-            headers: ['Description', 'Amount (rs)', 'Date'],
+            headers: ['Description', 'Amount (rs)', 'Date', 'Source'],
             data: List.generate(
               expenses.length,
                   (index) {
@@ -198,6 +194,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
                   pw.Image(descriptionImages[index], dpi: 300),
                   "${expense["amount"].toStringAsFixed(2)} rs",
                   expense["date"],
+                  expense["source"],
                 ];
               },
             ),
@@ -207,8 +204,6 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
             cellStyle: pw.TextStyle(fontSize: 16),
           ),
         ],
-
-        // Footer
         footer: (pw.Context context) => pw.Column(
           children: [
             pw.SizedBox(height: 10),
@@ -247,7 +242,6 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
       ),
     );
 
-    // Save the PDF to a file or print it
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
     );
@@ -304,7 +298,6 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
 
   void _confirmDeleteExpense(Map<String, dynamic> expense, BuildContext context) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    final cashbookRef = FirebaseDatabase.instance.ref("cashbook");
 
     final confirmDelete = await showDialog<bool>(
       context: context,
@@ -332,47 +325,72 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
       try {
         final expenseId = expense["id"];
         final expenseAmount = expense["amount"];
+        final expenseSource = expense["source"];
         String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
 
-        // First delete the expense
+        // Delete the expense
         await dbRef.child(formattedDate).child("expenses").child(expenseId).remove();
 
-        // Then update the opening balance by adding back the deleted expense amount
-        final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
-        if (openingBalanceSnapshot.exists) {
-          double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
-          double newOpeningBalance = currentOpeningBalance + expenseAmount;
+        // Handle different expense sources
+        if (expenseSource == "cashbook") {
+          // For cashbook expenses, update opening balance
+          final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
+          if (openingBalanceSnapshot.exists) {
+            double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
+            double newOpeningBalance = currentOpeningBalance + expenseAmount;
 
-          await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
+            await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
 
-          // Update local state
-          setState(() {
-            _openingBalance = newOpeningBalance;
-          });
+            setState(() {
+              _openingBalance = newOpeningBalance;
+            });
+          }
+
+          // Delete corresponding cashbook entry
+          final cashbookQuery = await cashbookRef
+              .orderByChild('expenseKey')
+              .equalTo(expenseId)
+              .once();
+
+          if (cashbookQuery.snapshot.exists) {
+            Map<dynamic, dynamic> cashbookEntries = cashbookQuery.snapshot.value as Map<dynamic, dynamic>;
+            cashbookEntries.forEach((key, value) async {
+              if (value['expenseKey'] == expenseId) {
+                await cashbookRef.child(key).remove();
+              }
+            });
+          }
         }
+        else if (expenseSource == "bank") {
+          // For bank transactions, delete the original transaction instead of reversal
+          final bankId = expense["bankId"];
+          final reference = expense["reference"];
 
-        // Now try to find and delete the corresponding cashbook entry
-        final cashbookQuery = await cashbookRef
-            .orderByChild('expenseKey')
-            .equalTo(expenseId)
-            .once();
+          if (bankId != null && reference != null) {
+            final bankTransactionsQuery = await banksRef.child(bankId).child('transactions')
+                .orderByChild('reference')
+                .equalTo(reference)
+                .once();
 
-        if (cashbookQuery.snapshot.exists) {
-          Map<dynamic, dynamic> cashbookEntries = cashbookQuery.snapshot.value as Map<dynamic, dynamic>;
-          cashbookEntries.forEach((key, value) async {
-            if (value['expenseKey'] == expenseId) {
-              await cashbookRef.child(key).remove();
+            if (bankTransactionsQuery.snapshot.exists) {
+              Map<dynamic, dynamic> transactions = bankTransactionsQuery.snapshot.value as Map<dynamic, dynamic>;
+              transactions.forEach((key, value) async {
+                if (value['reference'] == reference) {
+                  await banksRef.child(bankId).child('transactions').child(key).remove();
+                }
+              });
             }
-          });
+          }
         }
+
 
         _fetchExpenses();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(languageProvider.isEnglish
-                ? 'Expense deleted successfully from both records'
-                : 'اخراجات کامیابی سے دونوں ریکارڈز سے حذف ہو گئے'),
+                ? 'Expense deleted successfully'
+                : 'اخراجات کامیابی سے حذف ہو گئے'),
           ),
         );
       } catch (error) {
@@ -387,14 +405,79 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
     }
   }
 
+  void _showExpenseDetails(Map<String, dynamic> expense) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final isEnglish = languageProvider.isEnglish;
+
+    String details = '';
+    if (expense["source"] == "bank") {
+      details = isEnglish
+          ? 'Bank Transfer\nBank: ${expense["bankName"] ?? "Unknown"}\nReference: ${expense["reference"] ?? "N/A"}'
+          : 'بینک ٹرانسفر\nبینک: ${expense["bankName"] ?? "نامعلوم"}\nریفرنس: ${expense["reference"] ?? "N/A"}';
+    } else if (expense["source"] == "cheque") {
+      final chequeDate = expense["chequeDate"] != null
+          ? DateFormat('yyyy-MM-dd').format(DateTime.parse(expense["chequeDate"]))
+          : 'N/A';
+      details = isEnglish
+          ? 'Cheque Payment\nBank: ${expense["chequeBankName"] ?? "Unknown"}\nCheque No: ${expense["chequeNumber"] ?? "N/A"}\nDate: $chequeDate'
+          : 'چیک ادائیگی\nبینک: ${expense["chequeBankName"] ?? "نامعلوم"}\nچیک نمبر: ${expense["chequeNumber"] ?? "N/A"}\nتاریخ: $chequeDate';
+    } else {
+      details = isEnglish ? 'Cashbook Payment' : 'کیش بک ادائیگی';
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isEnglish ? 'Expense Details' : 'اخراجات کی تفصیلات'),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${expense["description"]}'),
+            SizedBox(height: 8),
+            Text('Amount: ${expense["amount"].toStringAsFixed(2)} rs'),
+            SizedBox(height: 8),
+            Text(details),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isEnglish ? 'Close' : 'بند کریں'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMobileExpenseList() {
     return ListView.separated(
       itemCount: expenses.length,
       separatorBuilder: (context, index) => Divider(height: 1),
       itemBuilder: (ctx, index) {
         final expense = expenses[index];
+        final source = expense["source"];
+
+        IconData sourceIcon;
+        Color iconColor;
+
+        switch (source) {
+          case "bank":
+            sourceIcon = Icons.account_balance;
+            iconColor = Colors.blue;
+            break;
+          case "cheque":
+            sourceIcon = Icons.receipt_long;
+            iconColor = Colors.orange;
+            break;
+          default:
+            sourceIcon = Icons.wallet;
+            iconColor = Colors.green;
+        }
+
         return ListTile(
           contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          leading: Icon(sourceIcon, color: iconColor),
           title: Text(
             expense["description"],
             style: TextStyle(
@@ -403,10 +486,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
               fontSize: 16,
             ),
           ),
-          subtitle: Text(
-            expense["date"],
-            style: TextStyle(color: Colors.teal.shade600),
-          ),
+          subtitle: Text(expense["date"]),
           trailing: Container(
             padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             decoration: BoxDecoration(
@@ -422,6 +502,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
               ),
             ),
           ),
+          onTap: () => _showExpenseDetails(expense),
           onLongPress: () => _confirmDeleteExpense(expense, context),
         );
       },
@@ -435,13 +516,38 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
         columnSpacing: 20,
         horizontalMargin: 16,
         columns: [
+          DataColumn(label: Text('Source')),
           DataColumn(label: Text('Description')),
           DataColumn(label: Text('Date'), numeric: false),
           DataColumn(label: Text('Amount'), numeric: true),
         ],
         rows: expenses.map((expense) {
+          final source = expense["source"];
+          String sourceText;
+          Color sourceColor;
+
+          switch (source) {
+            case "bank":
+              sourceText = "Bank";
+              sourceColor = Colors.blue;
+              break;
+            case "cheque":
+              sourceText = "Cheque";
+              sourceColor = Colors.orange;
+              break;
+            default:
+              sourceText = "Cashbook";
+              sourceColor = Colors.green;
+          }
+
           return DataRow(
             cells: [
+              DataCell(
+                Text(
+                  sourceText,
+                  style: TextStyle(color: sourceColor, fontWeight: FontWeight.bold),
+                ),
+              ),
               DataCell(Text(expense["description"])),
               DataCell(Text(expense["date"])),
               DataCell(
@@ -462,6 +568,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
               ),
             ],
             onLongPress: () => _confirmDeleteExpense(expense, context),
+            onSelectChanged: (_) => _showExpenseDetails(expense),
           );
         }).toList(),
       ),
@@ -521,7 +628,7 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      onPressed: _pickDate, // Moved onPressed to proper location
+      onPressed: _pickDate,
     );
   }
 
@@ -596,13 +703,16 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
 
     return Scaffold(
       appBar: AppBar(
-          leading: IconButton(onPressed: (){
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => Dashboard()), // Replace HomePage with your target screen
-                  (Route<dynamic> route) => false,
-            );
-          }, icon: const Icon(Icons.arrow_back)),
+          leading: IconButton(
+              onPressed: () {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => Dashboard()),
+                      (Route<dynamic> route) => false,
+                );
+              },
+              icon: const Icon(Icons.arrow_back)
+          ),
           title: Text(
             languageProvider.isEnglish ? 'View Daily Expense' : 'روزانہ کے اخراجات',
             style: TextStyle(color: Colors.white),
@@ -610,30 +720,32 @@ class _ViewExpensesPageState extends State<ViewExpensesPage> {
           backgroundColor: Colors.teal,
           centerTitle: true,
           actions: [
-          IconButton(
-          icon: const Icon(Icons.add, color: Colors.white),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => AddExpensePage()),),),
-          IconButton(
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.white),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AddExpensePage()),
+              ),
+            ),
+            IconButton(
               icon: const Icon(Icons.print, color: Colors.white),
               onPressed: _generatePdf,
             ),
           ]
-    ),
-    body: Container(
-    constraints: BoxConstraints(maxWidth: 1200),
-    padding: EdgeInsets.all(16),
-    child: Column(
-    children: [
-    _buildHeader(languageProvider),
-    const SizedBox(height: 16),
-    _buildExpenseList(languageProvider),
-    const SizedBox(height: 16),
-    _buildTotalSection(languageProvider),
-    ],
-    ),
-    ),
+      ),
+      body: Container(
+        constraints: BoxConstraints(maxWidth: 1200),
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildHeader(languageProvider),
+            const SizedBox(height: 16),
+            _buildExpenseList(languageProvider),
+            const SizedBox(height: 16),
+            _buildTotalSection(languageProvider),
+          ],
+        ),
+      ),
     );
   }
 }

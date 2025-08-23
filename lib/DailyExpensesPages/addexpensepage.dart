@@ -19,11 +19,82 @@ class _AddExpensePageState extends State<AddExpensePage> {
   DateTime _selectedDate = DateTime.now();
   double _openingBalance = 0.0; // Variable to store the opening balance
   bool _isSaveButtonPressed = false; // Flag to track button press status
+  String? _selectedBankId;
+  String? _selectedBankName;
+  TextEditingController _chequeNumberController = TextEditingController();
+  DateTime? _selectedChequeDate;
+  List<Map<String, dynamic>> _cachedBanks = [];
+  final TextEditingController _referenceController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _checkOpeningBalanceForToday();
+  }
+
+  Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    if (_cachedBanks.isEmpty) {
+      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+      if (bankSnapshot.snapshot.value == null) return null;
+
+      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+      _cachedBanks = banks.entries.map((e) => {
+        'id': e.key,
+        'name': e.value['name'],
+        'balance': e.value['balance'] ?? 0.0
+      }).toList();
+    }
+
+    Map<String, dynamic>? selectedBank;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _cachedBanks.length,
+            itemBuilder: (context, index) {
+              final bankData = _cachedBanks[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: Icon(Icons.account_balance, size: 40),
+                  title: Text(
+                    bankData['name'],
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'Balance: ${bankData['balance']} Rs',
+                  ),
+                  onTap: () {
+                    selectedBank = {
+                      'id': bankData['id'],
+                      'name': bankData['name'],
+                      'balance': bankData['balance']
+                    };
+                    Navigator.pop(context);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+        ],
+      ),
+    );
+
+    return selectedBank;
   }
 
   // Check if the opening balance is already set for the current day
@@ -138,85 +209,136 @@ class _AddExpensePageState extends State<AddExpensePage> {
     });
   }
 
-  void _saveExpense() async {
+  void _saveExpense(String source) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     if (_descriptionController.text.isEmpty || _amountController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-            languageProvider.isEnglish ? 'Please fill in all fields' : 'براہ کرم تمام فیلڈز کو پُر کریں۔',
-          )));
+        SnackBar(content: Text(
+          languageProvider.isEnglish ? 'Please fill in all fields' : 'براہ کرم تمام فیلڈز کو پُر کریں۔',
+        )),
+      );
       return;
     }
 
     double expenseAmount = double.parse(_amountController.text);
 
-    // Check if opening balance is sufficient for the expense
-    if (_openingBalance < expenseAmount) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    // For bank transfers, check bank balance
+    if (source == "bank" && _selectedBankId != null) {
+      final bankSnapshot = await FirebaseDatabase.instance.ref('banks/$_selectedBankId/balance').once();
+      final bankBalance = (bankSnapshot.snapshot.value as num?)?.toDouble() ?? 0.0;
+
+      if (bankBalance < expenseAmount) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(
-            languageProvider.isEnglish ? 'Insufficient funds!' : 'ناکافی فنڈز!',
-          )));
+            languageProvider.isEnglish ? 'Insufficient funds in selected bank!' : 'منتخب بینک میں ناکافی فنڈز!',
+          )),
+        );
+        return;
+      }
+    }
+
+    // For cashbook, check opening balance
+    if (_openingBalance < expenseAmount && source == "cashbook") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(
+          languageProvider.isEnglish ? 'Insufficient funds in Cashbook!' : 'کیش بک میں ناکافی فنڈز!',
+        )),
+      );
       return;
     }
 
-    // Disable the button to prevent multiple submissions
     setState(() {
       _isSaveButtonPressed = true;
     });
 
-    // Deduct the expense from the opening balance
-    _openingBalance -= expenseAmount;
+    if (source == "cashbook") {
+      _openingBalance -= expenseAmount;
+    }
 
-    // Format the date to dd:mm:yyyy
     String formattedDate = DateFormat('dd:MM:yyyy').format(_selectedDate);
+    String entryId = DateTime.now().millisecondsSinceEpoch.toString();
 
-    final data = {
+    final newExpenseRef = dbRef.child(formattedDate).child("expenses").push();
+    final expenseKey = newExpenseRef.key;
+
+    final expenseData = {
       "description": _descriptionController.text,
       "amount": expenseAmount,
       "date": formattedDate,
+      "source": source,
+      // Add bank/cheque details if applicable
+      if (source == "bank" && _selectedBankId != null) "bankId": _selectedBankId,
+      if (source == "bank" && _selectedBankName != null) "bankName": _selectedBankName,
+      if (source == "cheque" && _selectedBankId != null) "chequeBankId": _selectedBankId,
+      if (source == "cheque" && _selectedBankName != null) "chequeBankName": _selectedBankName,
+      if (source == "cheque") "chequeNumber": _chequeNumberController.text,
+      if (source == "cheque" && _selectedChequeDate != null) "chequeDate": _selectedChequeDate!.toIso8601String(),
+      if (_referenceController.text.isNotEmpty) "reference": _referenceController.text,
+    };
+
+    final cashbookEntry = {
+      "id": entryId,
+      "description": "Expense: ${_descriptionController.text}",
+      "amount": expenseAmount,
+      "dateTime": _selectedDate.toIso8601String(),
+      "type": "cash_out",
+      "source": source,
+      "expenseKey": expenseKey,
+      // Add bank/cheque details if applicable
+      if (source == "bank" && _selectedBankId != null) "bankId": _selectedBankId,
+      if (source == "bank" && _selectedBankName != null) "bankName": _selectedBankName,
+      if (source == "cheque" && _selectedBankId != null) "chequeBankId": _selectedBankId,
+      if (source == "cheque" && _selectedBankName != null) "chequeBankName": _selectedBankName,
+      if (source == "cheque") "chequeNumber": _chequeNumberController.text,
+      if (source == "cheque" && _selectedChequeDate != null) "chequeDate": _selectedChequeDate!.toIso8601String(),
+      if (_referenceController.text.isNotEmpty) "reference": _referenceController.text,
     };
 
     try {
-      // await dbRef.child(formattedDate).child("expenses").push().set(data);
+      await newExpenseRef.set(expenseData);
 
+      // For bank transactions, update bank balance
+      if (source == "bank" && _selectedBankId != null) {
+        final bankRef = FirebaseDatabase.instance.ref('banks/$_selectedBankId');
+        await bankRef.child('transactions').push().set({
+          'amount': expenseAmount,
+          'description': _descriptionController.text,
+          'type': 'cash_out',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'reference': _referenceController.text.isNotEmpty ? _referenceController.text : null,
+        });
+      }
 
-      String entryId = DateTime.now().millisecondsSinceEpoch.toString();
-      final newExpenseRef = dbRef.child(formattedDate).child("expenses").push();
-      final expenseKey = newExpenseRef.key; // Get the generated key
-      // Also create a cash_out entry in cashbook
-      final cashbookEntry = {
-        "id": entryId, // Add the ID field
-        "description": "Expense: ${_descriptionController.text}", // Add prefix
-        "amount": expenseAmount,
-        "dateTime": _selectedDate.toIso8601String(),
-        "type": "cash_out",
-        "source": "expense_page", // Add source field
-        "expenseKey": expenseKey, // Store the expense reference
-      };
-      // await cashbookRef.child(entryId).set(cashbookEntry);
-      // Save both entries
-      await newExpenseRef.set(data);
-      await cashbookRef.child(entryId).set(cashbookEntry);
+      // Only push to cashbook if selected source is cashbook
+      if (source == "cashbook") {
+        await cashbookRef.child(entryId).set(cashbookEntry);
+        _saveUpdatedOpeningBalance();
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-            languageProvider.isEnglish ? 'Expense added successfully' : 'اخراجات کامیابی کے ساتھ شامل ہو گئے۔',
-          )));
+        SnackBar(content: Text(
+          languageProvider.isEnglish ? 'Expense added successfully' : 'اخراجات کامیابی کے ساتھ شامل ہو گئے۔',
+        )),
+      );
+
       _descriptionController.clear();
       _amountController.clear();
+      _referenceController.clear();
       setState(() {
         _selectedDate = DateTime.now();
+        _selectedBankId = null;
+        _selectedBankName = null;
+        _chequeNumberController.clear();
+        _selectedChequeDate = null;
       });
-
-      // Save updated opening balance to Firebase after adding expense
-       _saveUpdatedOpeningBalance();
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-            languageProvider.isEnglish ? 'Error adding expense: $error' : 'اخراجات شامل کرنے میں خرابی:$error',
-          )));
+        SnackBar(content: Text(
+          languageProvider.isEnglish ? 'Error adding expense: $error' : 'اخراجات شامل کرنے میں خرابی: $error',
+        )),
+      );
     } finally {
-      // Re-enable the button after the operation is complete
       setState(() {
         _isSaveButtonPressed = false;
       });
@@ -551,32 +673,138 @@ class _AddExpensePageState extends State<AddExpensePage> {
   );
 
   Widget _buildSaveButton(bool isEnglish) => ElevatedButton.icon(
-  icon: _isSaveButtonPressed
-  ? const SizedBox(
-  width: 24,
-  height: 24,
-  child: CircularProgressIndicator(
-  color: Colors.white,
-  strokeWidth: 2,
-  ),
-  )
-      : const Icon(Icons.save_rounded),
-  label: Text(
-  _isSaveButtonPressed
-  ? (isEnglish ? 'Saving...' : 'محفوظ ہو رہا ہے...')
-      : (isEnglish ? 'Save Expense' : 'اخراجات محفوظ کریں'),
-  style: const TextStyle(fontSize: 16),
-  ),
-  onPressed: _isSaveButtonPressed ? null : _saveExpense,
-  style: ElevatedButton.styleFrom(
-  backgroundColor: Colors.teal,
-  foregroundColor: Colors.white,
-  padding: const EdgeInsets.symmetric(vertical: 18),
-  shape: RoundedRectangleBorder(
-  borderRadius: BorderRadius.circular(12),
-  // elevation: 2,
-  ),
-  )
+    icon: _isSaveButtonPressed
+        ? const SizedBox(
+      width: 24,
+      height: 24,
+      child: CircularProgressIndicator(
+        color: Colors.white,
+        strokeWidth: 2,
+      ),
+    )
+        : const Icon(Icons.save_rounded),
+    label: Text(
+      _isSaveButtonPressed
+          ? (isEnglish ? 'Saving...' : 'محفوظ ہو رہا ہے...')
+          : (isEnglish ? 'Save Expense' : 'اخراجات محفوظ کریں'),
+      style: const TextStyle(fontSize: 16),
+    ),
+    onPressed: _isSaveButtonPressed ? null : _showExpenseSourceDialog,
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.teal,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    ),
   );
+
+  void _showExpenseSourceDialog() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final isEnglish = languageProvider.isEnglish;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(isEnglish ? "Select Expense Source" : "اخراجات کا ذریعہ منتخب کریں"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.account_balance, color: Colors.teal),
+                title: Text(isEnglish ? "Bank Transfer" : "بینک ٹرانسفر"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showBankTransferDialog();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.wallet, color: Colors.teal),
+                title: Text(isEnglish ? "Cashbook" : "کیش بک"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _saveExpense("cashbook");
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showBankTransferDialog() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final isEnglish = languageProvider.isEnglish;
+
+    // Reset bank selection
+    _selectedBankId = null;
+    _selectedBankName = null;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(isEnglish ? "Bank Transfer" : "بینک ٹرانسفر"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Card(
+                child: ListTile(
+                  title: Text(_selectedBankName ?? (isEnglish ? 'Select Bank' : 'بینک منتخب کریں')),
+                  trailing: Icon(Icons.arrow_drop_down),
+                  onTap: () async {
+                    final selectedBank = await _selectBank(context);
+                    if (selectedBank != null) {
+                      setState(() {
+                        _selectedBankId = selectedBank['id'];
+                        _selectedBankName = selectedBank['name'];
+                      });
+                    }
+                  },
+                ),
+              ),
+              SizedBox(height: 16),
+              TextField(
+                controller: _referenceController,
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Reference Number' : 'ریفرنس نمبر',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(isEnglish ? 'Cancel' : 'منسوخ کریں'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (_selectedBankId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(isEnglish ? 'Please select a bank' : 'براہ کرم بینک منتخب کریں')),
+                  );
+                  return;
+                }
+                Navigator.pop(context);
+                _saveExpense("bank");
+              },
+              child: Text(isEnglish ? 'Confirm' : 'تصدیق کریں'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+
+  @override
+  void dispose() {
+    _referenceController.dispose();
+    super.dispose();
+  }
 
 }
