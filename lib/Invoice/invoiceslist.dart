@@ -227,9 +227,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                               languageProvider,
                             );
                           },
-                          onPaymentPressed: (invoice) {
-                            _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
-                          },
+                          // onPaymentPressed: (invoice) {
+                          //   _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
+                          // },
                         ),
                       ),
 
@@ -483,329 +483,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
     return pw.MemoryImage(buffer);
   }
 
-  Future<Uint8List?> _pickImage(BuildContext context) async {
-    Uint8List? imageBytes;
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-    if (kIsWeb) {
-      // For web, use file_picker
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        imageBytes = result.files.first.bytes;
-      }
-    } else {
-      // For mobile, show source selection dialog
-      final ImagePicker _picker = ImagePicker();
-
-      // Show dialog to choose camera or gallery
-      final ImageSource? source = await showDialog<ImageSource>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Select Source' : 'ذریعہ منتخب کریں'),
-          actions: [
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Camera' : 'کیمرہ'),
-              onPressed: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            TextButton(
-              child: Text(languageProvider.isEnglish ? 'Gallery' : 'گیلری'),
-              onPressed: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      );
-
-      if (source == null) return null; // User canceled
-
-      XFile? pickedFile = await _picker.pickImage(source: source);
-      if (pickedFile != null) {
-        final file = File(pickedFile.path);
-        imageBytes = await file.readAsBytes();
-      }
-    }
-
-    return imageBytes;
-  }
-
-  Future<void> _showInvoicePaymentDialog(
-      Map<String, dynamic> invoice,
-      InvoiceProvider invoiceProvider,
-      LanguageProvider languageProvider,
-      )
-  async {
-    String? selectedPaymentMethod;
-    _paymentController.clear();
-    bool _isPaymentButtonPressed = false;
-    String? _description;
-    Uint8List? _imageBytes;
-    DateTime _selectedPaymentDate = DateTime.now();
-    // Move these inside the dialog state
-    String? _selectedBankId;
-    String? _selectedBankName;
-
-    Future<void> _selectBank(BuildContext context) async {
-      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
-
-      if (bankSnapshot.snapshot.value == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(languageProvider.isEnglish
-              ? 'No banks available'
-              : 'کوئی بینک دستیاب نہیں')),
-        );
-        return;
-      }
-
-      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
-      final bankList = banks.entries.map((e) {
-        return {
-          'id': e.key,
-          'name': e.value['name'],
-          'balance': e.value['balance'],
-        };
-      }).toList();
-
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: bankList.length,
-              itemBuilder: (context, index) {
-                final bank = bankList[index];
-                return ListTile(
-                  title: Text(bank['name']),
-                  subtitle: Text('${bank['balance']} Rs'),
-                  onTap: () {
-                    setState(() {
-                      _selectedBankId = bank['id'];
-                      _selectedBankName = bank['name'];
-                    });
-                    Navigator.pop(context);
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-      );
-    }
 
 
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text(languageProvider.isEnglish ? 'Pay Invoice' : 'انوائس کی رقم ادا کریں'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Add this widget to the payment dialog content
-                    ListTile(
-                      title: Text(languageProvider.isEnglish
-                          ? 'Payment Date: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'
-                          : 'ادائیگی کی تاریخ: ${DateFormat('yyyy-MM-dd – HH:mm').format(_selectedPaymentDate)}'),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final pickedDate = await showDatePicker(
-                          context: context,
-                          initialDate: _selectedPaymentDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
-                        if (pickedDate != null) {
-                          final pickedTime = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(_selectedPaymentDate),
-                          );
-                          if (pickedTime != null) {
-                            setState(() {
-                              _selectedPaymentDate = DateTime(
-                                pickedDate.year,
-                                pickedDate.month,
-                                pickedDate.day,
-                                pickedTime.hour,
-                                pickedTime.minute,
-                              );
-                            });
-                          }
-                        }
-                      },
-                    ),
-                    DropdownButtonFormField<String>(
-                      value: selectedPaymentMethod,
-                      items: [
-                        DropdownMenuItem(
-                          value: 'Cash',
-                          child: Text(languageProvider.isEnglish ? 'Cash' : 'نقدی'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Online',
-                          child: Text(languageProvider.isEnglish ? 'Online' : 'آن لائن'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Check',
-                          child: Text(languageProvider.isEnglish ? 'Check' : 'چیک'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Bank',
-                          child: Text(languageProvider.isEnglish ? 'Bank' : 'بینک'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Slip',
-                          child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          selectedPaymentMethod = value;
-                          if (value != 'Bank') {
-                            _selectedBankId = null;
-                            _selectedBankName = null;
-                          }
-                        });
-                      },
-                      decoration: InputDecoration(
-                        labelText: languageProvider.isEnglish ? 'Select Payment Method' : 'ادائیگی کا طریقہ منتخب کریں',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    // Bank selection UI
-                    if (selectedPaymentMethod == 'Bank')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Card(
-                          child: ListTile(
-                            title: Text(_selectedBankName ??
-                                (languageProvider.isEnglish
-                                    ? 'Select Bank'
-                                    : 'بینک منتخب کریں')),
-                            trailing: const Icon(Icons.arrow_drop_down),
-                            onTap: () => _selectBank(context),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _paymentController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: languageProvider.isEnglish ? 'Enter Payment Amount' : 'رقم لکھیں',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      onChanged: (value) {
-                        setState(() {
-                          _description = value;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () async {
-                        Uint8List? imageBytes = await _pickImage(context);
-                        if (imageBytes != null && imageBytes.isNotEmpty) {
-                          print('Image selected with ${imageBytes.length} bytes'); // Debug log
-                          setState(() {
-                            _imageBytes = imageBytes;
-                          });
-                        } else {
-                          print('No image selected or empty bytes'); // Debug log
-                        }
-                      },
-                      child: Text(languageProvider.isEnglish ? 'Pick Image' : 'تصویر اپ لوڈ کریں'),
-                    ),
-                    // Display selected image
-                    if (_imageBytes != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 16),
-                        height: 100,
-                        width: 100,
-                        child: Image.memory(_imageBytes!), // Changed from DecorationImage to Image.memory
-                      ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(languageProvider.isEnglish ? 'Cancel' : 'انکار'),
-                ),
-                TextButton(
-                  onPressed: _isPaymentButtonPressed
-                      ? null
-                      : () async {
-                    setState(() {
-                      _isPaymentButtonPressed = true;
-                    });
-
-                    if (selectedPaymentMethod == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(languageProvider.isEnglish
-                              ? 'Please select a payment method.'
-                              : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
-                        ),
-                      );
-                      setState(() {
-                        _isPaymentButtonPressed = false;
-                      });
-                      return;
-                    }
-
-                    final amount = double.tryParse(_paymentController.text);
-                    if (amount != null && amount > 0) {
-                      await invoiceProvider.payInvoiceWithSeparateMethod(
-                        context,
-                        invoice['id'],
-                        amount,
-                        selectedPaymentMethod!,
-                        description: _description,
-                        imageBytes: _imageBytes,
-                        paymentDate: _selectedPaymentDate, // Pass selected date
-                        bankId: _selectedBankId,
-                        bankName: _selectedBankName,
-                        createdAt: _dateController.text,
-                      );
-                      Navigator.of(context).pop();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(languageProvider.isEnglish
-                              ? 'Please enter a valid payment amount.'
-                              : 'براہ کرم ایک درست رقم درج کریں۔'),
-                        ),
-                      );
-                    }
-
-                    setState(() {
-                      _isPaymentButtonPressed = false;
-                    });
-                  },
-                  child: Text(languageProvider.isEnglish ? 'Pay' : 'رقم ادا کریں'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
 }
 
@@ -817,7 +496,6 @@ class InvoiceList extends StatelessWidget {
   final InvoiceProvider invoiceProvider;
   final Function(Map<String, dynamic>) onInvoiceTap;
   final Function(Map<String, dynamic>) onInvoiceLongPress;
-  final Function(Map<String, dynamic>) onPaymentPressed;
 
   const InvoiceList({
     required this.scrollController,
@@ -826,7 +504,6 @@ class InvoiceList extends StatelessWidget {
     required this.invoiceProvider,
     required this.onInvoiceTap,
     required this.onInvoiceLongPress,
-    required this.onPaymentPressed,
 
   });
 
@@ -1015,34 +692,8 @@ class InvoiceList extends StatelessWidget {
   Future<double> _getCustomerRemainingBalance(String customerId) async {
     try {
       double totalBalance = 0.0;
-
-      // Fetch from 'ledger' (invoice balance)
-      final ledgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
-      final ledgerQuery = ledgerRef.orderByChild('createdAt');
-      final ledgerSnapshot = await ledgerQuery.get();
-
-      if (ledgerSnapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
-        if (ledgerData != null) {
-          // Convert to list and sort by date (newest first)
-          final entries = ledgerData.entries.toList()
-            ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
-
-          // Find the most recent balance
-          for (var entry in entries) {
-            final entryData = entry.value as Map<dynamic, dynamic>;
-            final dynamic balanceValue = entryData['remainingBalance'];
-            totalBalance = (balanceValue is int)
-                ? balanceValue.toDouble()
-                : (balanceValue as double? ?? 0.0);
-            break; // We only need the most recent balance
-          }
-        }
-      }
-
-      // Fetch from 'filledledger' (filled balance)
-      final filledLedgerRef = FirebaseDatabase.instance.ref('filledledger').child(customerId);
-      final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      final filledLedgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
+      final filledSnapshot = await filledLedgerRef.orderByChild('transactionDate').limitToLast(1).once();
 
       if (filledSnapshot.snapshot.exists) {
         final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
@@ -1065,29 +716,6 @@ class InvoiceList extends StatelessWidget {
     }
   }
 
-
-  Widget _infoBlock({
-    required String title,
-    required String value,
-    double fontSize = 14,
-    FontWeight fontWeight = FontWeight.normal,
-    Color? color,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: TextStyle(fontSize: fontSize - 2, color: Colors.grey[600])),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: fontWeight,
-            color: color ?? Colors.black,
-          ),
-        ),
-      ],
-    );
-  }
 
   String _formatDate(dynamic dateValue) {
     try {

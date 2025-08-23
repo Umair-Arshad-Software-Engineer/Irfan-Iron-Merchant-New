@@ -18,7 +18,6 @@ class InvoiceProvider with ChangeNotifier {
   bool get hasMoreData => _hasMoreData;
   int _lastLoadedIndex = 0;
   String? _lastKey;
-  // Page size for pagination
   final int _pageSize = 20;
 
 
@@ -102,7 +101,6 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-// You should also update the _processInvoiceData method to handle empty or null entries
   void _processInvoiceData(Map<dynamic, dynamic> values) {
     // Skip null or empty values
     if (values.isEmpty) return;
@@ -127,7 +125,6 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-// Also update the loadMoreInvoices method with similar changes
   Future<void> loadMoreInvoices() async {
     if (_isLoading || !_hasMoreData) return;
 
@@ -183,7 +180,6 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-// Helper method to process paginated data
   void _processPaginatedData(Map<dynamic, dynamic> values) {
     if (values.isEmpty) {
       _hasMoreData = false;
@@ -227,7 +223,6 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-  // Clear all loaded data and reset pagination
   void resetPagination() {
     _invoices = [];
     _hasMoreData = true;
@@ -258,7 +253,6 @@ class InvoiceProvider with ChangeNotifier {
   }
 
   bool _isTimestampNumber(String number) {
-    // Only consider numbers longer than 10 digits as timestamps
     return number.length > 10 && int.tryParse(number) != null;
   }
 
@@ -276,7 +270,8 @@ class InvoiceProvider with ChangeNotifier {
     String? paymentMethod,
     required String createdAt,
     required List<Map<String, dynamic>> items,
-  }) async {
+  })
+  async {
     try {
       final cleanedItems = items.map((item) {
         return {
@@ -315,7 +310,9 @@ class InvoiceProvider with ChangeNotifier {
         remainingBalance: grandTotal,
         invoiceNumber: invoiceNumber,
         referenceNumber: referenceNumber,
-        createdAt: createdAt,
+        // createdAt: createdAt,
+        transactionDate: createdAt, // Use the invoice date as transaction date
+
       );
     } catch (e) {
       throw Exception('Failed to save invoice: $e');
@@ -348,7 +345,8 @@ class InvoiceProvider with ChangeNotifier {
     required String referenceNumber,
     required List<Map<String, dynamic>> items,
     required String createdAt,
-  }) async {
+  })
+  async {
     try {
       // Fetch the old invoice data
       final oldInvoice = await getInvoiceById(invoiceId);
@@ -418,8 +416,7 @@ class InvoiceProvider with ChangeNotifier {
             'remainingBalance': newRemaining,
           });
 
-          // Update the customer balance
-          await _updateCustomerBalance(customerId, newRemaining, DateTime.now().toIso8601String());
+
         }
       }
 
@@ -550,7 +547,7 @@ class InvoiceProvider with ChangeNotifier {
       // Reverse the qtyOnHand deduction for each item
       for (var item in items) {
         final itemName = item['itemName'] as String;
-        final weight = _parseToDouble(item['weight']);
+        final qty = _parseToDouble(item['qty']);
 
         final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
 
@@ -560,11 +557,14 @@ class InvoiceProvider with ChangeNotifier {
           final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
 
           double currentQtyOnHand = _parseToDouble(currentItem['qtyOnHand']);
-          double updatedQtyOnHand = currentQtyOnHand + weight;
+          double updatedQtyOnHand = currentQtyOnHand + qty;
 
           await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
         }
       }
+
+      // Delete all payment entries from external nodes before deleting the invoice
+      await _deleteAllInvoicePayments(invoiceId, customerId, invoiceNumber);
 
       // Delete the invoice from the database
       await _db.child('invoices').child(invoiceId).remove();
@@ -582,22 +582,345 @@ class InvoiceProvider with ChangeNotifier {
         }
       }
 
-      // Update customer balance by subtracting the invoice amount
-      final balanceRef = _db.child('customerBalances').child(customerId);
-      final balanceSnapshot = await balanceRef.get();
-
-      if (balanceSnapshot.exists) {
-        final currentBalance = _parseToDouble(balanceSnapshot.value);
-        final newBalance = (currentBalance - grandTotal).clamp(0.0, double.infinity);
-        await _updateCustomerBalance(customerId, newBalance, DateTime.now().toIso8601String());
-      }
-
-      // Refresh the invoices list after deletion
+      // Refresh the invoice list after deletion
       await fetchInvoices();
 
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to delete invoice and ledger entries: $e');
+      throw Exception('Failed to delete invoice and related entries: $e');
+    }
+  }
+
+  Future<void> _deleteAllInvoicePayments(String invoiceId, String customerId, String invoiceNumber) async {
+    try {
+      final invoiceRef = _db.child('invoices').child(invoiceId);
+
+      // Get all payment methods to check
+      final paymentMethods = ['cash', 'online', 'check', 'bank', 'slip', 'simplecashbook'];
+
+      for (String method in paymentMethods) {
+        final paymentsSnapshot = await invoiceRef.child('${method}Payments').get();
+
+        if (paymentsSnapshot.exists) {
+          final payments = paymentsSnapshot.value as Map<dynamic, dynamic>;
+
+          for (var paymentKey in payments.keys) {
+            final paymentData = Map<String, dynamic>.from(payments[paymentKey]);
+            final paymentAmount = _parseToDouble(paymentData['amount']);
+
+            // Delete from external nodes based on payment method
+            await _deleteFromExternalNode(
+              method: method,
+              paymentKey: paymentKey.toString(),
+              invoiceId: invoiceId,
+              customerId: customerId,
+              invoiceNumber: invoiceNumber,
+              paymentAmount: paymentAmount,
+              paymentData: paymentData,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error deleting invoice payments from external nodes: $e');
+      throw Exception('Failed to delete invoice payments from external nodes: $e');
+    }
+  }
+
+  Future<void> _deleteFromExternalNode({
+    required String method,
+    required String paymentKey,
+    required String invoiceId,
+    required String customerId,
+    required String invoiceNumber,
+    required double paymentAmount,
+    required Map<String, dynamic> paymentData,
+  })
+  async {
+    try {
+      switch (method.toLowerCase()) {
+        case 'cash':
+        // Delete from cashbook node
+          final cashbookSnapshot = await _db.child('cashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (cashbookSnapshot.exists) {
+            final entries = cashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cashbook').child(entryKey).remove();
+            }
+          }
+          break;
+
+        case 'online':
+        // Delete from onlinePayments node
+          await _db.child('onlinePayments').child(paymentKey).remove();
+          break;
+
+        case 'check':
+        // Delete from cheques node
+          await _db.child('cheques').child(paymentKey).remove();
+
+          // Also delete from bank's cheques if bank info exists
+          final chequeBankId = paymentData['chequeBankId'];
+          if (chequeBankId != null) {
+            final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
+            final bankChequeSnapshot = await bankChequesRef
+                .orderByChild('invoiceId')
+                .equalTo(invoiceId)
+                .get();
+
+            if (bankChequeSnapshot.exists) {
+              final entries = bankChequeSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount &&
+                    entry['invoiceNumber'] == invoiceNumber) {
+                  await bankChequesRef.child(entryKey).remove();
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'bank':
+        // Delete from bankTransactions node
+          await _db.child('bankTransactions').child(paymentKey).remove();
+
+          // Delete from bank's transactions and update balance
+          final bankId = paymentData['bankId'];
+          if (bankId != null) {
+            final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+            final bankTransactionSnapshot = await bankTransactionsRef
+                .orderByChild('invoiceId')
+                .equalTo(invoiceId)
+                .get();
+
+            if (bankTransactionSnapshot.exists) {
+              final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount) {
+                  await bankTransactionsRef.child(entryKey).remove();
+
+                  // Update bank balance
+                  final bankBalanceRef = _db.child('banks/$bankId/balance');
+                  final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+                  final updatedBalance = (currentBalance - paymentAmount).clamp(0.0, double.infinity);
+                  await bankBalanceRef.set(updatedBalance);
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'slip':
+        // Delete from slipPayments node
+          await _db.child('slipPayments').child(paymentKey).remove();
+          break;
+
+        case 'simplecashbook':
+        // Delete from simplecashbook node
+          final simpleCashbookSnapshot = await _db.child('simplecashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (simpleCashbookSnapshot.exists) {
+            final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('simplecashbook').child(entryKey).remove();
+            }
+          }
+          break;
+      }
+    } catch (e) {
+      print('Error deleting from external node for method $method: $e');
+      // Continue with other deletions even if one fails
+    }
+  }
+
+  Future<void> deletePaymentEntry({
+    required BuildContext context,
+    required String invoiceId,
+    required String paymentKey,
+    required String paymentMethod,
+    required double paymentAmount,
+  })
+  async {
+    try {
+      final invoiceRef = _db.child('invoices').child(invoiceId);
+      print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
+
+      // Step 1: Fetch payment data before deleting it
+      final paymentSnapshot = await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).get();
+
+      if (!paymentSnapshot.exists) {
+        print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
+        throw Exception("Payment not found.");
+      }
+
+      final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
+      print("✅ Payment data found: $paymentData");
+
+      // Step 2: Fetch invoice data
+      final invoiceSnapshot = await invoiceRef.get();
+      if (!invoiceSnapshot.exists) {
+        throw Exception("Invoice not found.");
+      }
+
+      final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
+      final customerId = invoice['customerId']?.toString() ?? '';
+      final invoiceNumber = invoice['invoiceNumber']?.toString() ?? '';
+
+      // Step 3: Delete from external nodes
+      await _deleteFromExternalNode(
+        method: paymentMethod,
+        paymentKey: paymentKey,
+        invoiceId: invoiceId,
+        customerId: customerId,
+        invoiceNumber: invoiceNumber,
+        paymentAmount: paymentAmount,
+        paymentData: paymentData,
+      );
+
+      // Step 4: Remove the payment entry from the invoice
+      print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
+      await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+
+      // Step 5: Update invoice amounts
+      double currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
+      double currentOnlinePaid = _parseToDouble(invoice['onlinePaidAmount']);
+      double currentCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
+      double currentSlipPaid = _parseToDouble(invoice['slipPaidAmount'] ?? 0.0);
+      double currentBankPaid = _parseToDouble(invoice['bankPaidAmount'] ?? 0.0);
+      double currentSimpleCashbookPaid = _parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0);
+      double currentDebit = _parseToDouble(invoice['debitAmount']);
+
+      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
+
+      // Deduct the payment amount from the respective payment method
+      switch (paymentMethod.toLowerCase()) {
+        case 'cash':
+          currentCashPaid = (currentCashPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'online':
+          currentOnlinePaid = (currentOnlinePaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'check':
+          currentCheckPaid = (currentCheckPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'bank':
+          currentBankPaid = (currentBankPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'slip':
+          currentSlipPaid = (currentSlipPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'simplecashbook':
+          currentSimpleCashbookPaid = (currentSimpleCashbookPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        default:
+          throw Exception("Invalid payment method.");
+      }
+
+      final updatedDebit = (currentDebit - paymentAmount).clamp(0.0, double.infinity);
+      print("🔄 Updating invoice with new values...");
+
+      await invoiceRef.update({
+        'cashPaidAmount': currentCashPaid,
+        'onlinePaidAmount': currentOnlinePaid,
+        'checkPaidAmount': currentCheckPaid,
+        'bankPaidAmount': currentBankPaid,
+        'slipPaidAmount': currentSlipPaid,
+        'simpleCashbookPaidAmount': currentSimpleCashbookPaid,
+        'debitAmount': updatedDebit,
+      });
+
+      print("✅ Invoice updated successfully.");
+
+      // Step 6: Update customer ledger
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+
+      // Find and delete the specific ledger entry for this payment
+      final paymentLedgerSnapshot = await customerLedgerRef
+          .orderByChild('invoiceNumber')
+          .equalTo(invoiceNumber)
+          .get();
+
+      if (paymentLedgerSnapshot.exists) {
+        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
+        for (var entryKey in paymentLedgerData.keys) {
+          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
+          // Find the entry with matching debit amount (payment)
+          if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
+            await customerLedgerRef.child(entryKey).remove();
+            break;
+          }
+        }
+      }
+
+      // Recalculate ledger balances after deletion
+      await _recalculateAllLedgerBalances(customerId);
+
+      print("🔄 Refreshing invoice list...");
+      await fetchInvoices();
+      print("✅ Payment deletion successful.");
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment deleted successfully from all locations.')),
+      );
+      Navigator.pop(context);
+
+    } catch (e) {
+      print("❌ Error deleting payment: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _recalculateAllLedgerBalances(String customerId) async {
+    try {
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double runningBalance = 0.0;
+
+          // Recalculate all balances in chronological order
+          for (var entry in entries) {
+            final entryKey = entry.key as String;
+            final entryData = Map<String, dynamic>.from(entry.value as Map<dynamic, dynamic>);
+
+            final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+            final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+            runningBalance += entryCredit - entryDebit;
+
+            // Update the entry with the new running balance
+            await customerLedgerRef.child(entryKey).update({
+              'remainingBalance': runningBalance,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print('Error recalculating all ledger balances: $e');
     }
   }
 
@@ -608,27 +931,56 @@ class InvoiceProvider with ChangeNotifier {
         required double remainingBalance,
         required String invoiceNumber,
         required String referenceNumber,
-        required String createdAt,
+        required String transactionDate, // Use this for date-based calculations
         String? paymentMethod,
         String? bankName,
-
       })
   async {
     try {
       final customerLedgerRef = _db.child('ledger').child(customerId);
 
-      // Fetch the last ledger entry to calculate the new remaining balance
-      final snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
+      // Fetch all ledger entries to calculate the correct balance
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
 
-      double lastRemainingBalance = 0.0;
+      double newRemainingBalance = 0.0;
+
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        final lastTransaction = data.values.first;
-        lastRemainingBalance = (lastTransaction['remainingBalance'] as num?)?.toDouble() ?? 0.0;
-      }
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
 
-      // Calculate the new remaining balance
-      final newRemainingBalance = lastRemainingBalance + creditAmount - debitAmount;
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          // Calculate balance up to the transaction date
+          double runningBalance = 0.0;
+          final currentTransactionDate = DateTime.parse(transactionDate);
+
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Only include entries before or equal to our transaction date
+            if (entryDate.isBefore(currentTransactionDate) ||
+                entryDate.isAtSameMomentAs(currentTransactionDate)) {
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+            }
+          }
+
+          // Add the current transaction to the running balance
+          newRemainingBalance = runningBalance + creditAmount - debitAmount;
+        }
+      } else {
+        // No existing entries, start fresh
+        newRemainingBalance = creditAmount - debitAmount;
+      }
 
       // Ledger data to be saved
       final ledgerData = {
@@ -637,19 +989,79 @@ class InvoiceProvider with ChangeNotifier {
         'creditAmount': creditAmount,
         'debitAmount': debitAmount,
         'remainingBalance': newRemainingBalance,
-        'createdAt': createdAt,
+        'createdAt': DateTime.now().toIso8601String(), // When the record was created
+        'transactionDate': transactionDate, // The actual date of the transaction
         if (paymentMethod != null) 'paymentMethod': paymentMethod,
         if (bankName != null) 'bankName': bankName,
       };
 
       await customerLedgerRef.push().set(ledgerData);
 
-      // Update the customer balance in the separate node
-      await _updateCustomerBalance(customerId, newRemainingBalance, createdAt);
+      // Update all subsequent entries to maintain correct balances
+      await _recalculateSubsequentBalances(customerId, transactionDate);
+
     } catch (e) {
       throw Exception('Failed to update customer ledger: $e');
     }
   }
+
+  Future<void> _recalculateSubsequentBalances(String customerId, String insertedDate) async {
+    try {
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double runningBalance = 0.0;
+          final insertedDateTime = DateTime.parse(insertedDate);
+          bool foundInserted = false;
+
+          // Recalculate all balances in chronological order
+          for (var entry in entries) {
+            final entryKey = entry.key as String;
+            final entryData = Map<String, dynamic>.from(entry.value as Map<dynamic, dynamic>);
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Check if we've reached the inserted transaction
+            if (entryDate.isAtSameMomentAs(insertedDateTime)) {
+              foundInserted = true;
+            }
+
+            if (foundInserted) {
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+
+              // Update the entry with the new running balance
+              await customerLedgerRef.child(entryKey).update({
+                'remainingBalance': runningBalance,
+              });
+            } else {
+              // For entries before the inserted one, just accumulate the balance
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error recalculating subsequent balances: $e');
+    }
+  }
+
 
   List<Map<String, dynamic>> getInvoicesByPaymentMethod(String paymentMethod) {
     return _invoices.where((invoice) {
@@ -891,7 +1303,8 @@ class InvoiceProvider with ChangeNotifier {
         remainingBalance: _parseToDouble(invoice['grandTotal']) - updatedDebit,
         invoiceNumber: invoiceNumber,
         referenceNumber: referenceNumber,
-        createdAt: createdAt,
+        // createdAt: createdAt,
+        transactionDate: paymentDate.toIso8601String(), // Use payment date
         paymentMethod: paymentMethod,
         bankName: paymentMethod == 'Bank'
             ? bankName
@@ -953,18 +1366,6 @@ class InvoiceProvider with ChangeNotifier {
     }
   }
 
-  Future<double> getCustomerBalance(String customerId) async {
-    try {
-      final snapshot = await _db.child('customerBalances').child(customerId).child('balance').get();
-      if (snapshot.exists) {
-        return _parseToDouble(snapshot.value);
-      }
-      return 0.0;
-    } catch (e) {
-      print('Error fetching customer balance: $e');
-      return 0.0;
-    }
-  }
 
   Future<List<Map<String, dynamic>>> getInvoicePayments(String invoiceId) async {
     try {
@@ -1009,295 +1410,6 @@ class InvoiceProvider with ChangeNotifier {
       return payments;
     } catch (e) {
       throw Exception('Failed to fetch payments: $e');
-    }
-  }
-
-  Future<void> deletePaymentEntry({
-    required BuildContext context,
-    required String invoiceId,
-    required String paymentKey,
-    required String paymentMethod,
-    required double paymentAmount,
-  })
-  async {
-    try {
-      final invoiceRef = _db.child('invoices').child(invoiceId);
-      print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
-
-
-      // Step 1: Fetch payment data before deleting it
-      final paymentSnapshot = await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).get();
-
-
-      if (!paymentSnapshot.exists) {
-        print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
-        throw Exception("Payment not found.");
-      }
-
-      final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
-      print("✅ Payment data found: $paymentData");
-
-
-      // For SimpleCashbook payments, delete from simplecashbook node first
-      if (paymentMethod.toLowerCase() == 'simplecashbook') {
-        // Find the simplecashbook entry with this paymentKey
-        final simpleCashbookSnapshot = await _db.child('simplecashbook')
-            .orderByChild('paymentKey')
-            .equalTo(paymentKey)
-            .get();
-
-        if (simpleCashbookSnapshot.exists) {
-          final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
-          for (var entryKey in entries.keys) {
-            await _db.child('simplecashbook').child(entryKey).remove();
-          }
-        }
-      }
-
-
-      if (paymentMethod.toLowerCase() == 'cash') {
-        final cashbookEntryId = paymentData['cashbookEntryId'];
-        if (cashbookEntryId != null && cashbookEntryId.isNotEmpty) {
-          print('Deleting cashbook entry: $cashbookEntryId');
-          await _db.child('cashbook').child(cashbookEntryId).remove();
-        } else {
-          print('Warning: cashbookEntryId is missing for cash payment.');
-        }
-      }
-
-      // Step 2: Handle Bank Payment - Delete specific bank transaction using unique ID
-      if (paymentMethod.toLowerCase() == 'bank') {
-        String? bankId = paymentData['bankId']?.toString();
-        String? transactionId = paymentData['transactionId']?.toString();
-
-        print("🏦 Bank Payment detected. bankId: $bankId, transactionId: $transactionId");
-
-        if (bankId == null || bankId.isEmpty) {
-          print("❌ Error: Bank ID is missing!");
-          throw Exception("Bank ID is missing in the payment record.");
-        }
-
-        if (transactionId == null || transactionId.isEmpty) {
-          print("🔍 Searching for transaction in the bank node...");
-          final bankTransactionsRef = _db.child('banks/$bankId/transactions');
-          final transactionSnapshot = await bankTransactionsRef.orderByChild('invoiceId').equalTo(invoiceId).get();
-
-          if (transactionSnapshot.exists) {
-            final transactions = Map<String, dynamic>.from(transactionSnapshot.value as Map);
-            for (var key in transactions.keys) {
-              final transaction = Map<String, dynamic>.from(transactions[key]);
-              if (transaction['amount'] == paymentAmount) {
-                transactionId = key;
-                print("✅ Found matching bank transaction ID: $transactionId");
-                break;
-              }
-            }
-          }
-        }
-
-        if (transactionId == null) {
-          print("❌ Error: Unable to find transaction ID for this payment.");
-          throw Exception("Transaction ID not found for this bank payment.");
-        }
-
-        final bankTransactionRef = _db.child('banks/$bankId/transactions/$transactionId');
-        final transactionSnapshot = await bankTransactionRef.get();
-
-        if (transactionSnapshot.exists) {
-          final transactionData = Map<String, dynamic>.from(transactionSnapshot.value as Map);
-          final transactionAmount = (transactionData['amount'] as num).toDouble();
-
-          print("🗑️ Deleting bank transaction: $transactionData");
-          await bankTransactionRef.remove();
-          print("✅ Transaction deleted successfully.");
-
-          // Update bank balance
-          final bankBalanceRef = _db.child('banks/$bankId/balance');
-          final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
-          final updatedBalance = (currentBalance - transactionAmount).clamp(0.0, double.infinity);
-
-          print("💰 Updating bank balance from $currentBalance to $updatedBalance");
-          await bankBalanceRef.set(updatedBalance);
-        } else {
-          print("❌ Error: Bank transaction not found for deletion.");
-        }
-      }
-
-      // Step 3: Remove the payment entry from the invoice
-      print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
-      await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).remove();
-
-      // Step 4: Fetch the invoice data
-      final invoiceSnapshot = await invoiceRef.get();
-      if (!invoiceSnapshot.exists) {
-        throw Exception("Invoice not found.");
-      }
-
-      final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
-      final customerId = invoice['customerId']?.toString() ?? '';
-      final invoiceNumber = invoice['invoiceNumber']?.toString() ?? '';
-
-      print("📄 Invoice details retrieved: customerId = $customerId, invoiceNumber = $invoiceNumber");
-
-      // Step 5: Get current payment amounts
-      double currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
-      double currentOnlinePaid = _parseToDouble(invoice['onlinePaidAmount']);
-      double currentCheckPaid = _parseToDouble(invoice['checkPaidAmount']);
-      double currentSlipPaid = _parseToDouble(invoice['slipPaidAmount'] ?? 0.0);
-      double currentBankPaid = _parseToDouble(invoice['bankPaidAmount'] ?? 0.0);
-      double currentSimpleCashbookPaid = _parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0);
-      double currentDebit = _parseToDouble(invoice['debitAmount']);
-
-      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
-
-      // Deduct the payment amount from the respective payment method
-      switch (paymentMethod.toLowerCase()) {
-        case 'cash':
-          currentCashPaid = (currentCashPaid - paymentAmount).clamp(0.0, double.infinity);
-          break;
-        case 'online':
-          currentOnlinePaid = (currentOnlinePaid - paymentAmount).clamp(0.0, double.infinity);
-          break;
-        case 'check':
-          currentCheckPaid = (currentCheckPaid - paymentAmount).clamp(0.0, double.infinity);
-          break;
-        case 'bank':
-          currentBankPaid = (currentBankPaid - paymentAmount).clamp(0.0, double.infinity);
-          break;
-        case 'slip':
-          currentSlipPaid = (currentSlipPaid - paymentAmount).clamp(0.0, double.infinity);
-          break;
-        case 'simplecashbook':
-          currentSimpleCashbookPaid = (currentSimpleCashbookPaid - paymentAmount).clamp(0.0, double.infinity);
-          break;
-        default:
-          throw Exception("Invalid payment method.");
-      }
-
-      final updatedDebit = (currentDebit - paymentAmount).clamp(0.0, double.infinity);
-      print("🔄 Updating invoice with new values...");
-
-      await invoiceRef.update({
-        'cashPaidAmount': currentCashPaid,
-        'onlinePaidAmount': currentOnlinePaid,
-        'checkPaidAmount': currentCheckPaid,
-        'bankPaidAmount': currentBankPaid,
-        'slipPaidAmount': currentSlipPaid,
-        'simpleCashbookPaidAmount': currentSimpleCashbookPaid,
-        'debitAmount': updatedDebit,
-      });
-
-      print("✅ Invoice updated successfully.");
-
-      // Step 6: Fetch latest ledger entry for the customer
-      final customerLedgerRef = _db.child('ledger').child(customerId);
-      final ledgerSnapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
-
-      if (ledgerSnapshot.exists) {
-        final ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>;
-        final latestEntryKey = ledgerData.keys.first;
-        final latestEntry = Map<String, dynamic>.from(ledgerData[latestEntryKey]);
-
-        double currentRemainingBalance = _parseToDouble(latestEntry['remainingBalance']);
-        double updatedRemainingBalance = currentRemainingBalance + paymentAmount;
-        print("🔄 Updating ledger balance to: $updatedRemainingBalance");
-
-        await customerLedgerRef.child(latestEntryKey).update({
-          'remainingBalance': updatedRemainingBalance,
-        });
-      }
-
-      // Step 7: Delete ledger entry for the payment
-      final paymentLedgerSnapshot = await customerLedgerRef.orderByChild('invoiceNumber').equalTo(invoiceNumber).get();
-
-      if (paymentLedgerSnapshot.exists) {
-        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
-        for (var entryKey in paymentLedgerData.keys) {
-          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
-          if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
-            await customerLedgerRef.child(entryKey).remove();
-            break;
-          }
-        }
-      }
-
-      print("🔄 Refreshing invoices list...");
-      await fetchInvoices();
-      print("✅ Payment deletion successful.");
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment deleted successfully.')),
-      );
-      Navigator.pop(context);
-
-    } catch (e) {
-      print("❌ Error deleting payment: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
-      );
-    }
-  }
-
-  Future<void> editPaymentEntry({
-    required String invoiceId,
-    required String paymentKey,
-    required String paymentMethod,
-    required double oldPaymentAmount,
-    required double newPaymentAmount,
-    required String newDescription,
-    required Uint8List? newImageBytes,
-    required String createdAt,
-  })
-  async {
-    try {
-      final invoiceRef = _db.child('invoices').child(invoiceId);
-
-      // Step 1: Update the payment entry in the invoice
-      final updatedPaymentData = {
-        'amount': newPaymentAmount,
-        'date': createdAt,
-        'paymentMethod': paymentMethod,
-        'description': newDescription,
-      };
-
-      // if (newImageBytes != null) {
-      //   updatedPaymentData['image'] = base64Encode(newImageBytes);
-      // }
-
-      await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).update(updatedPaymentData);
-
-      // Step 2: Update the debitAmount in the invoice
-      final invoiceSnapshot = await invoiceRef.get();
-      if (invoiceSnapshot.exists) {
-        final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map);
-        final currentDebit = _parseToDouble(invoice['debitAmount']);
-        final updatedDebit = currentDebit - oldPaymentAmount + newPaymentAmount;
-
-        await invoiceRef.update({
-          'debitAmount': updatedDebit,
-        });
-
-        // Step 3: Update the customer ledger
-        final customerId = invoice['customerId'];
-        final invoiceNumber = invoice['invoiceNumber'];
-        final referenceNumber = invoice['referenceNumber'];
-        final grandTotal = _parseToDouble(invoice['grandTotal']);
-
-        await _updateCustomerLedger(
-          createdAt:createdAt,
-          customerId,
-          creditAmount: 0.0,
-          debitAmount: newPaymentAmount - oldPaymentAmount, // Adjust the ledger
-          remainingBalance: grandTotal - updatedDebit,
-          invoiceNumber: invoiceNumber,
-          referenceNumber:referenceNumber,
-        );
-      }
-
-      // Refresh the invoices list
-      await fetchInvoices();
-    } catch (e) {
-      throw Exception('Failed to edit payment entry: $e');
     }
   }
 
@@ -1431,21 +1543,6 @@ class InvoiceProvider with ChangeNotifier {
   }
 
 
-  // Add this method to your InvoiceProvider class
-  Future<void> _updateCustomerBalance(
-      String customerId,
-      double newBalance,
-      String updatedAt
-      ) async {
-    try {
-      await _db.child('customerBalances').child(customerId).set({
-        'balance': newBalance,
-        'updatedAt': updatedAt,
-      });
-    } catch (e) {
-      throw Exception('Failed to update customer balance: $e');
-    }
-  }
 
 
 }

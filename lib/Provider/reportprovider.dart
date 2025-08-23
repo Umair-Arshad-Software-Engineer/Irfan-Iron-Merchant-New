@@ -113,7 +113,7 @@ class CustomerReportProvider with ChangeNotifier {
           if (debit != 0.0 || credit != 0.0) {
             transactions.add({
               'id': key,
-              'date': value['createdAt'],
+              'date': value['transactionDate'],
               'invoiceNumber': value['invoiceNumber'],
               'referenceNumber': value['referenceNumber'],
               'debit': debit,

@@ -66,7 +66,6 @@ import '../bankmanagement/banknames.dart';
     DateTime? _selectedChequeDate;
 
 
-    // Method to show the date picker
     Future<void> _selectDate(BuildContext context) async {
       final DateTime? picked = await showDatePicker(
         context: context,
@@ -135,6 +134,51 @@ import '../bankmanagement/banknames.dart';
       double discountAmount = _discount;
       return subtotal - discountAmount + _mazdoori;
     }
+
+    Future<double> _getRemainingBalance(String customerId, {DateTime? asOfDate}) async {
+      try {
+        final customerLedgerRef = _db.child('ledger').child(customerId);
+        final query = customerLedgerRef.orderByChild('transactionDate');
+
+        final snapshot = await query.get();
+
+        if (snapshot.exists) {
+          final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+          if (ledgerData != null) {
+            // Convert to list and sort by transactionDate
+            final entries = ledgerData.entries.toList()
+              ..sort((a, b) {
+                final dateA = DateTime.parse(a.value['transactionDate'] as String);
+                final dateB = DateTime.parse(b.value['transactionDate'] as String);
+                return dateA.compareTo(dateB);
+              });
+
+            double lastBalance = 0.0;
+            final targetDate = asOfDate ?? DateTime.now();
+
+            for (var entry in entries) {
+              final entryData = entry.value as Map<dynamic, dynamic>;
+              final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+              if (entryDate.isBefore(targetDate) || entryDate.isAtSameMomentAs(targetDate)) {
+                lastBalance = (entryData['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+              } else {
+                break; // We've passed the target date
+              }
+            }
+
+            return lastBalance;
+          }
+        }
+
+        return 0.0;
+      } catch (e) {
+        print("Error fetching remaining balance: $e");
+        return 0.0;
+      }
+    }
+
 
     Future<Uint8List> _generatePDFBytes(String invoiceNumber) async {
       final pdf = pw.Document();
@@ -213,7 +257,7 @@ import '../bankmanagement/banknames.dart';
       final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
 
       // Get the remaining balance from the ledger (excluding current invoice)
-      double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!, excludeCurrentInvoice: true);
+      double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!);
       double remainingBalance = remainingBalanceold;
 
       double grandTotal = _calculateGrandTotal();
@@ -575,74 +619,6 @@ import '../bankmanagement/banknames.dart';
       return pw.MemoryImage(buffer);
     }
 
-    Future<double> _getRemainingBalance(String customerId, {bool excludeCurrentInvoice = false}) async {
-      try {
-        // First try to get the balance from the customerBalances node
-        final balanceSnapshot = await _db.child('customerBalances').child(customerId).child('balance').get();
-
-        if (balanceSnapshot.exists) {
-          return _parseToDouble(balanceSnapshot.value);
-        }
-
-        // Fallback to the old method if customerBalances doesn't exist
-        double totalBalance = 0.0;
-
-        // Fetch from 'ledger' (invoice balance)
-        final ledgerRef = _db.child('ledger').child(customerId);
-        final ledgerQuery = ledgerRef.orderByChild('createdAt');
-        final ledgerSnapshot = await ledgerQuery.get();
-
-        if (ledgerSnapshot.exists) {
-          final Map<dynamic, dynamic>? ledgerData = ledgerSnapshot.value as Map<dynamic, dynamic>?;
-          if (ledgerData != null) {
-            // Convert to list and sort by date (newest first)
-            final entries = ledgerData.entries.toList()
-              ..sort((a, b) => (b.value['createdAt'] as String).compareTo(a.value['createdAt'] as String));
-
-            // Find the most recent balance
-            for (var entry in entries) {
-              final entryData = entry.value as Map<dynamic, dynamic>;
-
-              // Skip current invoice if excludeCurrentInvoice is true
-              if (excludeCurrentInvoice &&
-                  entryData['invoiceNumber'] == _invoiceId) {
-                continue;
-              }
-
-              final dynamic balanceValue = entryData['remainingBalance'];
-              totalBalance = (balanceValue is int)
-                  ? balanceValue.toDouble()
-                  : (balanceValue as double? ?? 0.0);
-              break; // We only need the most recent balance
-            }
-          }
-        }
-
-        // Fetch from 'filledledger' (filled balance)
-        final filledLedgerRef = _db.child('filledledger').child(customerId);
-        final filledSnapshot = await filledLedgerRef.orderByChild('createdAt').limitToLast(1).once();
-
-        if (filledSnapshot.snapshot.exists) {
-          final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-          if (filledData != null) {
-            final lastEntryKey = filledData.keys.first;
-            final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
-            if (lastEntry != null) {
-              final dynamic balanceValue = lastEntry['remainingBalance'];
-              totalBalance += (balanceValue is int)
-                  ? balanceValue.toDouble()
-                  : (balanceValue as double? ?? 0.0);
-            }
-          }
-        }
-
-        return totalBalance;
-      } catch (e) {
-        print("Error fetching remaining balance: $e");
-        return 0.0;
-      }
-    }
-
     Future<List<Item>> fetchItems() async {
       final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
       final DatabaseEvent snapshot = await itemsRef.once();
@@ -960,219 +936,6 @@ import '../bankmanagement/banknames.dart';
       }
     }
 
-    // Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
-    //   final pdf = pw.Document();
-    //   // Load the image asset for the logo
-    //   final ByteData bytes = await rootBundle.load('assets/images/logo.png');
-    //   final buffer = bytes.buffer.asUint8List();
-    //   final image = pw.MemoryImage(buffer);
-    //
-    //   // Load the footer logo if different
-    //   final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
-    //   final footerBuffer = footerBytes.buffer.asUint8List();
-    //   final footerLogo = pw.MemoryImage(footerBuffer);
-    //   // Generate all description images asynchronously
-    //   final List<List<dynamic>> tableData = await Future.wait(
-    //     payments.map((payment) async {
-    //       final paymentAmount = _parseToDouble(payment['amount']);
-    //       final paymentDate = _parsePaymentDate(payment['date']);
-    //       final description = payment['description'] ?? 'N/A';
-    //       // DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate);
-    //
-    //       // Generate image from description text
-    //       final descriptionImage = await _createTextImage(description);
-    //
-    //       return [
-    //         payment['method'],
-    //         'Rs ${paymentAmount.toStringAsFixed(2)}',
-    //         DateFormat('yyyy-MM-dd – HH:mm').format(paymentDate),
-    //         pw.Image(descriptionImage), // Use the generated image
-    //       ];
-    //     }),
-    //   );
-    //
-    //   // Add a multi-page layout to handle multiple payments
-    //   pdf.addPage(
-    //     pw.MultiPage(
-    //       pageFormat: PdfPageFormat.a4,
-    //       margin: const pw.EdgeInsets.all(20),
-    //       build: (pw.Context context) => [
-    //         // Header section
-    //         pw.Row(
-    //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-    //           children: [
-    //             pw.Image(image, width: 80, height: 80), // Adjust logo size
-    //             pw.Text('Payment History',
-    //                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-    //           ],
-    //         ),
-    //
-    //         // Table with payment history
-    //         // pw.Table.fromTextArray(
-    //         //   headers: ['Method', 'Amount', 'Date', 'Description'],
-    //         //   // data: tableData,
-    //         //   data: payments.map((payment) {
-    //         //     return [
-    //         //       payment['method'] == 'Bank'
-    //         //           ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
-    //         //           : payment['method'],
-    //         //       'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}',
-    //         //       DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date'])),
-    //         //       // payment['description'] ?? 'N/A',
-    //         //       payment['description'] ?? 'N/A',
-    //         //     ];
-    //         //   }).toList(),
-    //         //   border: pw.TableBorder.all(),
-    //         //   headerStyle: pw.TextStyle(
-    //         //     fontWeight: pw.FontWeight.bold,
-    //         //     fontSize: 14, // Increased header font size
-    //         //   ),
-    //         //   cellStyle: const pw.TextStyle(
-    //         //     fontSize: 12, // Increased cell font size from 10 to 12
-    //         //   ),
-    //         //   cellAlignment: pw.Alignment.centerLeft,
-    //         //   cellPadding: const pw.EdgeInsets.all(6),
-    //         // ),
-    //         // Construct the table manually
-    //         // pw.Table(
-    //         //   border: pw.TableBorder.all(),
-    //         //   defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-    //         //   children: [
-    //         //     // Table header row
-    //         //     pw.TableRow(
-    //         //       decoration: pw.BoxDecoration(color: PdfColors.grey300),
-    //         //       children: [
-    //         //         pw.Padding(
-    //         //           padding: const pw.EdgeInsets.all(6),
-    //         //           child: pw.Text('Method', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //         //         ),
-    //         //         pw.Padding(
-    //         //           padding: const pw.EdgeInsets.all(6),
-    //         //           child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //         //         ),
-    //         //         pw.Padding(
-    //         //           padding: const pw.EdgeInsets.all(6),
-    //         //           child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //         //         ),
-    //         //         pw.Padding(
-    //         //           padding: const pw.EdgeInsets.all(6),
-    //         //           child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //         //         ),
-    //         //       ],
-    //         //     ),
-    //         //
-    //         //     // Data rows with Urdu description as image
-    //         //     ...await Future.wait(payments.map((payment) async {
-    //         //       final method = payment['method'] == 'Bank'
-    //         //           ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
-    //         //           : payment['method'];
-    //         //
-    //         //       final amount = 'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}';
-    //         //       final date = DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date']));
-    //         //       final description = payment['description'] ?? 'N/A';
-    //         //       final descriptionImage = await _createTextImage(description);
-    //         //
-    //         //       return pw.TableRow(
-    //         //         children: [
-    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(method, style: const pw.TextStyle(fontSize: 12))),
-    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(amount, style: const pw.TextStyle(fontSize: 12))),
-    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(date, style: const pw.TextStyle(fontSize: 12))),
-    //         //           pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Image(descriptionImage, width: 100, height: 30, fit: pw.BoxFit.contain)),
-    //         //         ],
-    //         //       );
-    //         //     })),
-    //         //   ],
-    //         // ),
-    //       final List<pw.TableRow> tableRows = [];
-    //
-    //   /// Add header manually
-    //   tableRows.add(
-    //   pw.TableRow(
-    //   decoration: pw.BoxDecoration(color: PdfColors.grey300),
-    //   children: [
-    //   pw.Padding(
-    //   padding: const pw.EdgeInsets.all(6),
-    //   child: pw.Text('Method', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //   ),
-    //   pw.Padding(
-    //   padding: const pw.EdgeInsets.all(6),
-    //   child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //   ),
-    //   pw.Padding(
-    //   padding: const pw.EdgeInsets.all(6),
-    //   child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //   ),
-    //   pw.Padding(
-    //   padding: const pw.EdgeInsets.all(6),
-    //   child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-    //   ),
-    //   ],
-    //   ),
-    //   );
-    //
-    //   /// Generate each row asynchronously
-    //   for (final payment in payments) {
-    //   final method = payment['method'] == 'Bank'
-    //   ? 'Bank: ${payment['bankName'] ?? 'Bank'}'
-    //       : payment['method'];
-    //
-    //   final amount = 'Rs ${_parseToDouble(payment['amount']).toStringAsFixed(2)}';
-    //   final date = DateFormat('yyyy-MM-dd – HH:mm').format(_parsePaymentDate(payment['date']));
-    //   final description = payment['description'] ?? 'N/A';
-    //   final descriptionImage = await _createTextImage(description);
-    //
-    //   tableRows.add(
-    //   pw.TableRow(
-    //   children: [
-    //   pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(method, style: const pw.TextStyle(fontSize: 12))),
-    //   pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(amount, style: const pw.TextStyle(fontSize: 12))),
-    //   pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(date, style: const pw.TextStyle(fontSize: 12))),
-    //   pw.Padding(
-    //   padding: const pw.EdgeInsets.all(6),
-    //   child: pw.Image(descriptionImage, width: 100, height: 30, fit: pw.BoxFit.contain),
-    //   ),
-    //   ],
-    //   ),
-    //   );
-    //   }
-    //
-    //
-    //
-    //   pw.SizedBox(height: 20),
-    //         pw.Divider(),
-    //         pw.Spacer(),
-    //         // Footer section
-    //         pw.Row(
-    //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-    //           children: [
-    //             pw.Image(footerLogo, width: 20, height: 20), // Footer logo
-    //             pw.Column(
-    //               crossAxisAlignment: pw.CrossAxisAlignment.center,
-    //               children: [
-    //                 pw.Text(
-    //                   'Dev Valley Software House',
-    //                   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-    //                 ),
-    //                 pw.Text(
-    //                   'Contact: 0303-4889663',
-    //                   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-    //                 ),
-    //               ],
-    //             ),
-    //           ],
-    //         ),
-    //         pw.Align(
-    //           alignment: pw.Alignment.centerRight,
-    //           child: pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-    //               style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
-    //         ),
-    //       ],
-    //     ),
-    //   );
-    //
-    //   // Print the PDF
-    //   await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-    // }
 
     Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
       final pdf = pw.Document();
@@ -1342,7 +1105,8 @@ import '../bankmanagement/banknames.dart';
       return imageBytes;
     }
 
-    Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
+    Future<Map<String, dynamic>?> _selectBank(BuildContext context)
+    async {
       if (_cachedBanks.isEmpty) {
         final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
         if (bankSnapshot.snapshot.value == null) return null;
@@ -1780,90 +1544,6 @@ import '../bankmanagement/banknames.dart';
       }
       _showPaymentDetails(invoice);
     }
-
-    // Create text image for PDF
-    // Future<pw.MemoryImage> _createTexttoImage(String text) async {
-    //   const double scaleFactor = 1.5;
-    //   final recorder = ui.PictureRecorder();
-    //   final canvas = Canvas(
-    //     recorder,
-    //     Rect.fromPoints(
-    //       const Offset(0, 0),
-    //       const Offset(500 * scaleFactor, 50 * scaleFactor),
-    //     ),
-    //   );
-    //
-    //   final paint = Paint()..color = Colors.black;
-    //   final textStyle = const TextStyle(
-    //     fontSize: 13 * scaleFactor,
-    //     fontFamily: 'JameelNoori',
-    //     color: Colors.black,
-    //     fontWeight: FontWeight.bold,
-    //   );
-    //
-    //   final textSpan = TextSpan(text: text, style: textStyle);
-    //   final textPainter = TextPainter(
-    //     text: textSpan,
-    //     textAlign: TextAlign.left,
-    //     textDirection: ui.TextDirection.ltr,
-    //   );
-    //
-    //   textPainter.layout();
-    //   textPainter.paint(canvas, const Offset(0, 0));
-    //
-    //   final picture = recorder.endRecording();
-    //   final img = await picture.toImage(
-    //     (textPainter.width * scaleFactor).toInt(),
-    //     (textPainter.height * scaleFactor).toInt(),
-    //   );
-    //
-    //   final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    //   final buffer = byteData!.buffer.asUint8List();
-    //
-    //   return pw.MemoryImage(buffer);
-    // }
-
-    // Future<pw.MemoryImage> _createTextImage(String text) async {
-    //   const double scaleFactor = 1.5;
-    //   final recorder = ui.PictureRecorder();
-    //   final canvas = Canvas(
-    //     recorder,
-    //     Rect.fromPoints(
-    //       const Offset(0, 0),
-    //       const Offset(500 * scaleFactor, 50 * scaleFactor),
-    //     ),
-    //   );
-    //
-    //   final paint = Paint()..color = Colors.black;
-    //   const textStyle = TextStyle(
-    //     fontSize: 13 * scaleFactor,
-    //     fontFamily: 'JameelNoori',
-    //     color: Colors.black,
-    //     fontWeight: FontWeight.bold,
-    //   );
-    //
-    //   final textSpan = TextSpan(text: text, style: textStyle);
-    //   final textPainter = TextPainter(
-    //     text: textSpan,
-    //     textAlign: TextAlign.left,
-    //     textDirection: ui.TextDirection.ltr,
-    //   );
-    //
-    //   textPainter.layout();
-    //   textPainter.paint(canvas, const Offset(0, 0));
-    //
-    //   final picture = recorder.endRecording();
-    //   final img = await picture.toImage(
-    //     (textPainter.width * scaleFactor).toInt(),
-    //     (textPainter.height * scaleFactor).toInt(),
-    //   );
-    //
-    //   final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    //   final buffer = byteData!.buffer.asUint8List();
-    //
-    //   return pw.MemoryImage(buffer);
-    // }
-
 
     @override
     void initState() {

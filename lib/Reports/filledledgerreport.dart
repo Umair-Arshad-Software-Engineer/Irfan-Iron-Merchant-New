@@ -12,7 +12,6 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import '../Provider/filled provider.dart';
 import '../Provider/filledreportprovider.dart';
-import '../Provider/invoice provider.dart';
 import '../Provider/lanprovider.dart';
 import '../Provider/reportprovider.dart';
 import '../bankmanagement/banknames.dart';
@@ -654,7 +653,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       String? paymentMethod,
       double amount,
       CustomerReportProvider reportProvider,
-      ) async {
+      )
+  async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     print('deleting records');
     return showDialog(
@@ -697,7 +697,8 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
       String? paymentMethod,
       double amount,
       CustomerReportProvider reportProvider,
-      ) async {
+      )
+  async {
     final filledProvider = Provider.of<FilledProvider>(context, listen: false);
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
