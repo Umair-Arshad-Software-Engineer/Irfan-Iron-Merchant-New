@@ -11,7 +11,7 @@ class CashbookEntry {
   String? invoiceId;
   String? invoiceNumber; // Add this line
   String? filledNumber; // Add this field
-
+  String? filledId;
   String? paymentKey;
   final String? source;
   final String? expenseKey;
@@ -38,6 +38,7 @@ class CashbookEntry {
     this.invoiceId,
     this.invoiceNumber, // Add this line
     this.filledNumber, // Add this line
+    this.filledId, // Add this line
     this.paymentKey,
     this.source,
     this.expenseKey,
@@ -71,6 +72,7 @@ class CashbookEntry {
       invoiceId: json['invoiceId'],
       invoiceNumber: json['invoiceNumber'], // Add this line
       filledNumber: json['filledNumber'], // Add this line
+      filledId: json['filledId'], // Add this line
       paymentKey: json['paymentKey'],
       source: json['source'],
       expenseKey: json['expenseKey'],
@@ -101,6 +103,7 @@ class CashbookEntry {
       if (invoiceId != null) 'invoiceId': invoiceId,
       if (invoiceNumber != null) 'invoiceNumber': invoiceNumber, // Add this line
       if (filledNumber != null) 'filledNumber': filledNumber, // Add this line
+      if (filledId != null) 'filledId': filledId, // Add this line
       if (paymentKey != null) 'paymentKey': paymentKey,
       if (source != null) 'source': source,
       if (expenseKey != null) 'expenseKey': expenseKey,
@@ -129,6 +132,7 @@ class CashbookEntry {
     String? invoiceId,
     String? invoiceNumber, // Add this line\\
     String? filledNumber,
+    String? filledId,
     String? paymentKey,
     String? source,
     String? expenseKey,
@@ -153,6 +157,7 @@ class CashbookEntry {
       invoiceId: invoiceId ?? this.invoiceId,
       invoiceNumber: invoiceNumber ?? this.invoiceNumber, // Add this line
       filledNumber: filledNumber ?? this.filledNumber, // Add this line
+      filledId: filledId ?? this.filledId, // Add this line
       paymentKey: paymentKey ?? this.paymentKey,
       source: source ?? this.source,
       expenseKey: expenseKey ?? this.expenseKey,

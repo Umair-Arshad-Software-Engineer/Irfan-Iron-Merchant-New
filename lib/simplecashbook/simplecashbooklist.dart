@@ -15,8 +15,6 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:ui' as ui;
 import '../Provider/customerprovider.dart';
-import '../Provider/filled provider.dart';
-import '../Provider/invoice provider.dart';
 import '../Provider/lanprovider.dart';
 import '../bankmanagement/banknames.dart';
 import 'simplecashbookform.dart';
@@ -42,7 +40,6 @@ class SimpleCashbookListPage extends StatefulWidget {
 }
 
 class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
-  List<Map<String, dynamic>> _banks = [];
   Map<String, dynamic>? _selectedBank;
   Map<String, dynamic>? _selectedChequeBank;
   List<Map<String, dynamic>> _cachedBanks = [];
@@ -658,7 +655,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                       decoration: InputDecoration(
                         labelText: languageProvider.isEnglish
                             ? 'Transfer to Payment Method'
-                            : 'ادائیگی کا طریقہ منتخب کریں',
+                            : 'ادائیگی کا طریقہ منتکل کریں',
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -692,6 +689,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         ),
                       ),
                     ],
+
+
 
                     // Cheque Details for Cheque Payment
                     if (selectedPaymentMethod == 'Cheque') ...[
@@ -909,6 +908,30 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           });
           break;
 
+        // case 'bank':
+        //   await _db.child('bankTransactions').child(timestampId).set({
+        //     'id': timestampId,
+        //     'customerId': entry.customerId,
+        //     'customerName': entry.customerName,
+        //     'amount': amount,
+        //     'description': description,
+        //     'dateTime': date.toIso8601String(),
+        //     'paymentKey': timestampId,
+        //     'createdAt': DateTime.now().toIso8601String(),
+        //     'bankId': bankId,
+        //     'bankName': bankName,
+        //     'type': 'cash_in',
+        //     'transferredFrom': 'simplecashbook',
+        //     'originalEntryId': entry.id,
+        //   });
+        //
+        //   // Update bank balance
+        //   if (bankId != null) {
+        //     final bankBalanceRef = _db.child('banks/$bankId/balance');
+        //     final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+        //     await bankBalanceRef.set(currentBalance + amount);
+        //   }
+        //   break;
         case 'bank':
           await _db.child('bankTransactions').child(timestampId).set({
             'id': timestampId,
@@ -924,10 +947,30 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
             'type': 'cash_in',
             'transferredFrom': 'simplecashbook',
             'originalEntryId': entry.id,
+            'filledId': entry.filledId, // Add this if available
+            'filledNumber': entry.filledNumber, // Add this if available
           });
 
-          // Update bank balance
+          // Add bank transaction record (similar to your example)
           if (bankId != null) {
+            final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+            await bankTransactionsRef.push().set({
+              'amount': amount,
+              'description': description.isNotEmpty
+                  ? description
+                  : 'Transfer from SimpleCashbook: ${entry.filledNumber ?? entry.description}',
+              'type': 'cash_in',
+              'timestamp': date.millisecondsSinceEpoch,
+              'filledId': entry.filledId, // Add this if available in your CashbookEntry model
+              'filledNumber': entry.filledNumber,
+              'customerId': entry.customerId,
+              'customerName': entry.customerName,
+              'bankName': bankName,
+              'transferredFrom': 'simplecashbook',
+              'originalEntryId': entry.id,
+            });
+
+            // Update bank balance
             final bankBalanceRef = _db.child('banks/$bankId/balance');
             final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
             await bankBalanceRef.set(currentBalance + amount);
