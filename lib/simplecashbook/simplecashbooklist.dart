@@ -45,32 +45,11 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
   List<Map<String, dynamic>> _banks = [];
   Map<String, dynamic>? _selectedBank;
   Map<String, dynamic>? _selectedChequeBank;
-  bool _isLoadingBanks = false;
   List<Map<String, dynamic>> _cachedBanks = [];
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
-  String _selectedLedgerType = 'ledger'; // Default to 'ledger'
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
-// Add this method to fetch banks
-  Future<void> _fetchBanks() async {
-    setState(() => _isLoadingBanks = true);
-    try {
-      DataSnapshot snapshot = await FirebaseDatabase.instance.ref().child('banks').get();
-      if (snapshot.value != null) {
-        Map<dynamic, dynamic> banksMap = snapshot.value as Map<dynamic, dynamic>;
-        _banks = banksMap.entries.map((entry) {
-          return {
-            'id': entry.key,
-            'name': entry.value['bankName'] ?? 'No Name',
-          };
-        }).toList();
-      }
-    } catch (e) {
-      print('Error fetching banks: $e');
-    } finally {
-      setState(() => _isLoadingBanks = false);
-    }
-  }
+
 
   Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
     if (_cachedBanks.isEmpty) {
@@ -872,7 +851,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     );
   }
 
-
   Future<void> _transferToPaymentMethod({
     required CashbookEntry entry,
     required String paymentMethod,
@@ -884,7 +862,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     String? chequeNumber,
     DateTime? chequeDate,
     Uint8List? imageBytes,
-  }) async {
+  })
+  async {
     try {
       String? imageBase64;
       if (imageBytes != null) {
@@ -1123,13 +1102,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
               });
 
               // *** STEP 4: Update the ledger with the new payment method ***
-              // await _updateLedgerPaymentMethod(
-              //   entry.customerId!,
-              //   entry.filledNumber!,
-              //   amount,
-              //   paymentMethod,
-              //   bankName,
-              // );
               await _createLedgerEntryForTransfer(
                 customerId: entry.customerId!,
                 filledNumber: entry.filledNumber!,
@@ -1164,7 +1136,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     required String? bankName,
     required DateTime transactionDate,
     required String referenceNumber,
-  }) async {
+  })
+  async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
 
@@ -1217,186 +1190,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     }
   }
 
-// Add this new method to update the ledger payment method
-  Future<void> _updateLedgerPaymentMethod(
-      String customerId,
-      String filledNumber,
-      double amount,
-      String newPaymentMethod,
-      String? bankName,
-      ) async {
-    try {
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
-
-      // Find the ledger entry for this filled and payment amount
-      final snapshot = await customerLedgerRef
-          .orderByChild('filledNumber')
-          .equalTo(filledNumber)
-          .get();
-
-      if (snapshot.exists) {
-        final Map<dynamic, dynamic> entries = snapshot.value as Map<dynamic, dynamic>;
-
-        // Find the specific payment entry (debit entry with matching amount)
-        for (var entryKey in entries.keys) {
-          final entry = Map<String, dynamic>.from(entries[entryKey]);
-          final entryDebitAmount = _parseToDouble(entry['debitAmount']);
-          final entryPaymentMethod = entry['paymentMethod']?.toString() ?? '';
-
-          // Check if this is the simplecashbook payment entry we want to update
-          if (entryDebitAmount == amount && entryPaymentMethod.toLowerCase() == 'simplecashbook') {
-            // Update the payment method in the ledger entry
-            await customerLedgerRef.child(entryKey).update({
-              'paymentMethod': newPaymentMethod,
-              if (bankName != null) 'bankName': bankName,
-              'updatedAt': DateTime.now().toIso8601String(),
-            });
-            break;
-          }
-        }
-      }
-    } catch (e) {
-      print('Error updating ledger payment method: $e');
-      throw Exception('Failed to update ledger payment method: $e');
-    }
-  }
-
-  Future<void> _updateCustomerLedger(
-      String customerId, {
-        required double creditAmount,
-        required double debitAmount,
-        required double remainingBalance,
-        required String filledNumber,
-        required String referenceNumber,
-        required String transactionDate,
-        String? paymentMethod, // Add this parameter
-        String? bankName, // Add this parameter
-      })
-  async {
-    try {
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
-
-      // Fetch all ledger entries to calculate the correct balance
-      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
-
-      double newRemainingBalance = 0.0;
-
-      if (snapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
-
-        if (ledgerData != null) {
-          // Convert to list and sort by transactionDate
-          final entries = ledgerData.entries.toList()
-            ..sort((a, b) {
-              final dateA = DateTime.parse(a.value['transactionDate'] as String);
-              final dateB = DateTime.parse(b.value['transactionDate'] as String);
-              return dateA.compareTo(dateB);
-            });
-
-          // Calculate balance up to the transaction date
-          double runningBalance = 0.0;
-          final currentTransactionDate = DateTime.parse(transactionDate);
-
-          for (var entry in entries) {
-            final entryData = entry.value as Map<dynamic, dynamic>;
-            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
-
-            // Only include entries before or equal to our transaction date
-            if (entryDate.isBefore(currentTransactionDate) ||
-                entryDate.isAtSameMomentAs(currentTransactionDate)) {
-              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
-              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
-
-              runningBalance += entryCredit - entryDebit;
-            }
-          }
-
-          // Add the current transaction to the running balance
-          newRemainingBalance = runningBalance + creditAmount - debitAmount;
-        }
-      } else {
-        // No existing entries, start fresh
-        newRemainingBalance = creditAmount - debitAmount;
-      }
-
-      // Ledger data to be saved - include paymentMethod and bankName
-      final ledgerData = {
-        'referenceNumber': referenceNumber,
-        'filledNumber': filledNumber,
-        'creditAmount': creditAmount,
-        'debitAmount': debitAmount,
-        'remainingBalance': newRemainingBalance,
-        'createdAt': DateTime.now().toIso8601String(),
-        'transactionDate': transactionDate,
-        if (paymentMethod != null) 'paymentMethod': paymentMethod, // Add payment method
-        if (bankName != null) 'bankName': bankName, // Add bank name
-      };
-
-      await customerLedgerRef.push().set(ledgerData);
-
-      // Update all subsequent entries to maintain correct balances
-      await _recalculateSubsequentBalances(customerId, transactionDate);
-
-    } catch (e) {
-      throw Exception('Failed to update customer ledger: $e');
-    }
-  }
-
-  Future<void> _recalculateSubsequentBalances(String customerId, String transactionDate) async {
-    try {
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
-      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
-
-      if (!snapshot.exists) return;
-
-      final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
-      if (ledgerData == null) return;
-
-      // Convert to list and sort by transactionDate
-      final entries = ledgerData.entries.toList()
-        ..sort((a, b) {
-          final dateA = DateTime.parse(a.value['transactionDate'] as String);
-          final dateB = DateTime.parse(b.value['transactionDate'] as String);
-          return dateA.compareTo(dateB);
-        });
-
-      double runningBalance = 0.0;
-      final currentTransactionDate = DateTime.parse(transactionDate);
-      bool foundCurrent = false;
-
-      for (var entry in entries) {
-        final entryKey = entry.key as String;
-        final entryData = entry.value as Map<dynamic, dynamic>;
-        final entryDate = DateTime.parse(entryData['transactionDate'] as String);
-
-        final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
-        final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
-
-        // If this is the current transaction or later, recalculate balance
-        if (entryDate.isAfter(currentTransactionDate) ||
-            (entryDate.isAtSameMomentAs(currentTransactionDate) && !foundCurrent)) {
-
-          if (entryDate.isAtSameMomentAs(currentTransactionDate)) {
-            foundCurrent = true;
-          }
-
-          runningBalance += entryCredit - entryDebit;
-
-          // Update this entry's remaining balance
-          await customerLedgerRef.child(entryKey).update({
-            'remainingBalance': runningBalance,
-          });
-        } else {
-          // For entries before our transaction, just accumulate the balance
-          runningBalance += entryCredit - entryDebit;
-        }
-      }
-    } catch (e) {
-      print('Error recalculating subsequent balances: $e');
-    }
-  }
-
-  // Helper method to parse double values
   double _parseToDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is int) return value.toDouble();
