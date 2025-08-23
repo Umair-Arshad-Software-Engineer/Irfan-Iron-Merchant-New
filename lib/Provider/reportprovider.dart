@@ -118,7 +118,7 @@ class CustomerReportProvider with ChangeNotifier {
               'referenceNumber': value['referenceNumber'],
               'debit': debit,
               'credit': credit,
-              'paymentMethod': value['paymentMethod'], // ADD PAYMENT METHOD
+              'paymentMethod': value['paymentMethod'],
               'bankName':value['bankName']
             });
           }
