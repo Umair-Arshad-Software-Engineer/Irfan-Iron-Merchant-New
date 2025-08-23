@@ -6,14 +6,29 @@ class Customer {
   final String name;
   final String address;
   final String phone;
+  final String? email;
+  final double balance;
+  final DateTime? createdAt;
 
-  Customer({required this.id, required this.name, required this.address, required this.phone});
+  Customer({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.phone,
+    this.email,
+    this.balance = 0.0,
+    this.createdAt,
+  });
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'address': address,
       'phone': phone,
+      if (email != null) 'email': email,
+      'balance': balance,
+      if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
     };
   }
 
@@ -23,8 +38,64 @@ class Customer {
       name: data['name'] ?? '',
       address: data['address'] ?? '',
       phone: data['phone'] ?? '',
+      email: data['email'],
+      balance: (data['balance'] as num?)?.toDouble() ?? 0.0,
+      createdAt: data['createdAt'] != null
+          ? DateTime.parse(data['createdAt'])
+          : null,
     );
   }
+
+  // Add fromJson factory constructor for consistency
+  factory Customer.fromJson(Map<String, dynamic> json) {
+    return Customer(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      address: json['address'] ?? '',
+      phone: json['phone'] ?? '',
+      email: json['email'],
+      balance: (json['balance'] as num?)?.toDouble() ?? 0.0,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
+    );
+  }
+
+  // Add copyWith method
+  Customer copyWith({
+    String? id,
+    String? name,
+    String? address,
+    String? phone,
+    String? email,
+    double? balance,
+    DateTime? createdAt,
+  }) {
+    return Customer(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      address: address ?? this.address,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      balance: balance ?? this.balance,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'Customer{id: $id, name: $name, phone: $phone, balance: $balance}';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+          other is Customer &&
+              runtimeType == other.runtimeType &&
+              id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class CustomerProvider with ChangeNotifier {
@@ -40,7 +111,6 @@ class CustomerProvider with ChangeNotifier {
       notifyListeners();
     }
   }
-
 
   Future<void> addCustomer(String name, String address, String phone) async {
     final newCustomer = _dbRef.push();

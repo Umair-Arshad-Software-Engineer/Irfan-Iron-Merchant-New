@@ -1413,6 +1413,57 @@ class FilledProvider with ChangeNotifier {
   }
 
 
+  Future<void> removePaymentFromCashbook({
+    required String filledNumber,
+    required double paymentAmount,
+  }) async {
+    try {
+      // Find the filled by number
+      final filledSnapshot = await _db.child('filled')
+          .orderByChild('filledNumber')
+          .equalTo(filledNumber)
+          .once();
+
+      if (filledSnapshot.snapshot.exists) {
+        dynamic snapshotValue = filledSnapshot.snapshot.value;
+
+        // Handle both Map and List data structures
+        Map<dynamic, dynamic> filledData;
+
+        if (snapshotValue is Map<dynamic, dynamic>) {
+          filledData = snapshotValue;
+        } else if (snapshotValue is List<dynamic>) {
+          // Convert list to map with indices as keys
+          filledData = {};
+          for (int i = 0; i < snapshotValue.length; i++) {
+            if (snapshotValue[i] != null) {
+              filledData[i.toString()] = snapshotValue[i];
+            }
+          }
+        } else {
+          throw Exception('Unexpected data format from Firebase');
+        }
+
+        if (filledData.isNotEmpty) {
+          final filledId = filledData.keys.first;
+          final filled = Map<String, dynamic>.from(filledData[filledId]);
+
+          // Update the filled amounts
+          final currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
+          final currentDebit = _parseToDouble(filled['debitAmount']);
+
+          await _db.child('filled').child(filledId).update({
+            'simpleCashbookPaidAmount': (currentSimpleCashbookPaid - paymentAmount).clamp(0.0, double.infinity),
+            'debitAmount': (currentDebit - paymentAmount).clamp(0.0, double.infinity),
+          });
+        }
+      }
+    } catch (e) {
+      print('Error removing payment from filled: $e');
+      throw Exception('Failed to remove payment from filled: $e');
+    }
+  }
+
   List<Map<String, dynamic>> getTodaysFilled() {
     final today = DateTime.now();
     // final startOfDay = DateTime(today.year, today.month, today.day - 1); // Include yesterday
