@@ -823,6 +823,186 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     );
   }
 
+  // Future<void> _transferToPaymentMethod({
+  //   required CashbookEntry entry,
+  //   required String paymentMethod,
+  //   required double amount,
+  //   required String description,
+  //   required DateTime date,
+  //   String? bankId,
+  //   String? bankName,
+  //   String? chequeNumber,
+  //   DateTime? chequeDate,
+  //   Uint8List? imageBytes,
+  // })
+  // async {
+  //   try {
+  //     String? imageBase64;
+  //     if (imageBytes != null) {
+  //       imageBase64 = base64Encode(imageBytes);
+  //     }
+  //
+  //     final String timestampId = DateTime.now().millisecondsSinceEpoch.toString();
+  //
+  //     // *** STEP 1: Remove the original entry FIRST ***
+  //     await _removeOriginalEntry(entry);
+  //
+  //     // *** STEP 2: Create the new entry in the selected payment method ***
+  //     switch (paymentMethod.toLowerCase()) {
+  //       case 'cash':
+  //         await _db.child('cashbook').child(timestampId).set({
+  //           'id': timestampId,
+  //           'customerId': entry.customerId,
+  //           'customerName': entry.customerName,
+  //           'amount': amount,
+  //           'description': description,
+  //           'dateTime': date.toIso8601String(),
+  //           'paymentKey': timestampId,
+  //           'createdAt': DateTime.now().toIso8601String(),
+  //           'type': 'cash_in',
+  //           'transferredFrom': 'simplecashbook',
+  //           'originalEntryId': entry.id,
+  //         });
+  //         break;
+  //
+  //       case 'online':
+  //         await _db.child('onlinePayments').child(timestampId).set({
+  //           'id': timestampId,
+  //           'customerId': entry.customerId,
+  //           'customerName': entry.customerName,
+  //           'amount': amount,
+  //           'description': description,
+  //           'dateTime': date.toIso8601String(),
+  //           'paymentKey': timestampId,
+  //           'createdAt': DateTime.now().toIso8601String(),
+  //           'transferredFrom': 'simplecashbook',
+  //           'originalEntryId': entry.id,
+  //         });
+  //         break;
+  //
+  //       case 'bank':
+  //         await _db.child('bankTransactions').child(timestampId).set({
+  //           'id': timestampId,
+  //           'customerId': entry.customerId,
+  //           'customerName': entry.customerName,
+  //           'amount': amount,
+  //           'description': description,
+  //           'dateTime': date.toIso8601String(),
+  //           'paymentKey': timestampId,
+  //           'createdAt': DateTime.now().toIso8601String(),
+  //           'bankId': bankId,
+  //           'bankName': bankName,
+  //           'type': 'cash_in',
+  //           'transferredFrom': 'simplecashbook',
+  //           'originalEntryId': entry.id,
+  //           'filledId': entry.filledId,
+  //           'filledNumber': entry.filledNumber,
+  //           'invoiceId': entry.invoiceId,
+  //           'invoiceNumber': entry.invoiceNumber,
+  //         });
+  //
+  //         if (bankId != null) {
+  //           final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+  //           await bankTransactionsRef.push().set({
+  //             'amount': amount,
+  //             'description': description.isNotEmpty
+  //                 ? description
+  //                 : 'Transfer from SimpleCashbook: ${entry.filledNumber ?? entry.invoiceNumber ?? entry.description}',
+  //             'type': 'cash_in',
+  //             'timestamp': date.millisecondsSinceEpoch,
+  //             'filledId': entry.filledId,
+  //             'filledNumber': entry.filledNumber,
+  //             'invoiceId': entry.invoiceId,
+  //             'invoiceNumber': entry.invoiceNumber,
+  //             'customerId': entry.customerId,
+  //             'customerName': entry.customerName,
+  //             'bankName': bankName,
+  //             'transferredFrom': 'simplecashbook',
+  //             'originalEntryId': entry.id,
+  //           });
+  //
+  //           final bankBalanceRef = _db.child('banks/$bankId/balance');
+  //           final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+  //           await bankBalanceRef.set(currentBalance + amount);
+  //         }
+  //         break;
+  //
+  //       case 'cheque':
+  //         await _db.child('cheques').child(timestampId).set({
+  //           'id': timestampId,
+  //           'customerId': entry.customerId,
+  //           'customerName': entry.customerName,
+  //           'amount': amount,
+  //           'description': description,
+  //           'dateTime': date.toIso8601String(),
+  //           'paymentKey': timestampId,
+  //           'createdAt': DateTime.now().toIso8601String(),
+  //           'chequeNumber': chequeNumber,
+  //           'chequeDate': chequeDate?.toIso8601String(),
+  //           'bankId': bankId,
+  //           'bankName': bankName,
+  //           'status': 'pending',
+  //           'transferredFrom': 'simplecashbook',
+  //           'originalEntryId': entry.id,
+  //           'filledId': entry.filledId,
+  //           'filledNumber': entry.filledNumber,
+  //           'invoiceId': entry.invoiceId,
+  //           'invoiceNumber': entry.invoiceNumber,
+  //         });
+  //
+  //         if (bankId != null) {
+  //           await _db.child('banks/$bankId/cheques').child(timestampId).set({
+  //             'amount': amount,
+  //             'chequeNumber': chequeNumber,
+  //             'chequeDate': chequeDate?.toIso8601String(),
+  //             'status': 'pending',
+  //             'customerName': entry.customerName,
+  //             'createdAt': DateTime.now().toIso8601String(),
+  //             'filledNumber': entry.filledNumber,
+  //             'invoiceNumber': entry.invoiceNumber,
+  //           });
+  //         }
+  //         break;
+  //
+  //       case 'slip':
+  //         await _db.child('slipPayments').child(timestampId).set({
+  //           'id': timestampId,
+  //           'customerId': entry.customerId,
+  //           'customerName': entry.customerName,
+  //           'amount': amount,
+  //           'description': description,
+  //           'dateTime': date.toIso8601String(),
+  //           'paymentKey': timestampId,
+  //           'createdAt': DateTime.now().toIso8601String(),
+  //           if (imageBase64 != null) 'image': imageBase64,
+  //           'transferredFrom': 'simplecashbook',
+  //           'originalEntryId': entry.id,
+  //           'filledId': entry.filledId,
+  //           'filledNumber': entry.filledNumber,
+  //           'invoiceId': entry.invoiceId,
+  //           'invoiceNumber': entry.invoiceNumber,
+  //         });
+  //         break;
+  //     }
+  //
+  //     // *** STEP 3: Update the appropriate node (filled or invoices) ***
+  //     if (entry.filledNumber != null && entry.filledNumber!.isNotEmpty) {
+  //       await _updateFilledNode(entry, paymentMethod, amount, description, date,
+  //           bankId, bankName, chequeNumber, chequeDate, imageBase64, timestampId);
+  //     } else if (entry.invoiceNumber != null && entry.invoiceNumber!.isNotEmpty) {
+  //       await _updateInvoiceNode(entry, paymentMethod, amount, description, date,
+  //           bankId, bankName, chequeNumber, chequeDate, imageBase64, timestampId);
+  //     }
+  //     print("Data not deleted");
+  //     // *** STEP 4: Remove the original simplecashbook entry ***
+  //      //await widget.databaseRef.child(entry.id!).remove();
+  //
+  //   } catch (e) {
+  //     print('Error transferring payment: $e');
+  //     rethrow;
+  //   }
+  // }
+
   Future<void> _transferToPaymentMethod({
     required CashbookEntry entry,
     required String paymentMethod,
@@ -834,7 +1014,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     String? chequeNumber,
     DateTime? chequeDate,
     Uint8List? imageBytes,
-  }) async {
+  })
+  async {
     try {
       String? imageBase64;
       if (imageBytes != null) {
@@ -844,7 +1025,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       final String timestampId = DateTime.now().millisecondsSinceEpoch.toString();
 
       // *** STEP 1: Remove the original entry FIRST ***
-      await _removeOriginalEntry(entry);
+      // COMMENTED OUT - Don't remove from simplecashbook
+      // await _removeOriginalEntry(entry);
 
       // *** STEP 2: Create the new entry in the selected payment method ***
       switch (paymentMethod.toLowerCase()) {
@@ -993,8 +1175,17 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
             bankId, bankName, chequeNumber, chequeDate, imageBase64, timestampId);
       }
 
-      // *** STEP 4: Remove the original simplecashbook entry ***
-      await widget.databaseRef.child(entry.id!).remove();
+      // *** STEP 4: Mark the original simplecashbook entry as transferred ***
+      // Instead of removing, mark as transferred
+      await widget.databaseRef.child(entry.id!).update({
+        'isTransferred': true,
+        'transferredTo': paymentMethod,
+        'transferredDate': DateTime.now().toIso8601String(),
+        'transferredAmount': amount,
+        'transferId': timestampId,
+      });
+
+      print("Entry marked as transferred but kept in simplecashbook");
 
     } catch (e) {
       print('Error transferring payment: $e');
@@ -1013,7 +1204,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       String? chequeNumber,
       DateTime? chequeDate,
       String? imageBase64,
-      String timestampId) async {
+      String timestampId)
+  async {
     try {
       final filledSnapshot = await _db.child('filled')
           .orderByChild('filledNumber')
@@ -1151,7 +1343,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       String? chequeNumber,
       DateTime? chequeDate,
       String? imageBase64,
-      String timestampId) async {
+      String timestampId)
+  async {
     try {
       final invoiceSnapshot = await _db.child('invoices')
           .orderByChild('invoiceNumber')
@@ -1287,7 +1480,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     required String? bankName,
     required DateTime transactionDate,
     required String referenceNumber,
-  }) async {
+  })
+  async {
     try {
       final ledgerRef = _db.child(documentType == 'filled' ? 'filledledger' : 'ledger').child(customerId);
 
@@ -1336,7 +1530,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       throw Exception('Failed to create ledger entry: $e');
     }
   }
-
 
   Future<void> _removeOriginalEntry(CashbookEntry entry) async {
     try {
