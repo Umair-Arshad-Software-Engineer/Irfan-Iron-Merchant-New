@@ -513,6 +513,10 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                 itemCount: entries.length,
                 itemBuilder: (context, index) {
                   final entry = entries[index];
+                  // Check if this entry is from Invoice or Filled
+                  bool isTransferable = (entry.invoiceNumber != null && entry.invoiceNumber!.isNotEmpty) ||
+                      (entry.filledNumber != null && entry.filledNumber!.isNotEmpty);
+
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     child: ListTile(
@@ -542,6 +546,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (isTransferable)
                           IconButton(
                             icon: const Icon(Icons.swap_horiz, color: Colors.orange),
                             onPressed: () => _showPaymentDialog(entry),
@@ -1037,6 +1042,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           final filled = Map<String, dynamic>.from(filledData[filledId]);
 
           final currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
+          final currentDebitAmount = _parseToDouble(filled['debitAmount'] ?? 0.0); // Get current debit amount
 
           final newPaymentData = {
             'amount': amount,
@@ -1114,6 +1120,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           await _db.child('filled').child(filledId).update({
             'simpleCashbookPaidAmount': (currentSimpleCashbookPaid - amount).clamp(0.0, double.infinity),
             filledAmountField: currentNewMethodAmount + amount,
+            'debitAmount': currentDebitAmount + amount, // Update debit amount
           });
 
           await _createLedgerEntryForTransfer(
@@ -1173,6 +1180,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           final invoice = Map<String, dynamic>.from(invoiceData[invoiceId]);
 
           final currentSimpleCashbookPaid = _parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0);
+          final currentDebitAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0); // Get current debit amount
 
           final newPaymentData = {
             'amount': amount,
@@ -1250,6 +1258,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           await _db.child('invoices').child(invoiceId).update({
             'simpleCashbookPaidAmount': (currentSimpleCashbookPaid - amount).clamp(0.0, double.infinity),
             invoiceAmountField: currentNewMethodAmount + amount,
+            'debitAmount': currentDebitAmount + amount,
           });
 
           await _createLedgerEntryForTransfer(

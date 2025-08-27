@@ -63,6 +63,26 @@ class _FilledPageState extends State<FilledPage> {
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
 
+  Future<void> _fetchRemainingBalance() async {
+    if (_selectedCustomerId != null) {
+      try {
+        final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+        final balance = await filledProvider.getCustomerRemainingBalance(_selectedCustomerId!);
+        setState(() {
+          _remainingBalance = balance;
+        });
+      } catch (e) {
+        print("Error fetching balance: $e");
+        setState(() {
+          _remainingBalance = 0.0;
+        });
+      }
+    } else {
+      setState(() {
+        _remainingBalance = 0.0;
+      });
+    }
+  }
 
 
   // Method to show the date picker
@@ -1824,6 +1844,7 @@ class _FilledPageState extends State<FilledPage> {
                             _selectedCustomerName = selectedCustomer.name;
                             _customerController.text = selectedCustomer.name;
                           });
+                          _fetchRemainingBalance();
                         },
                         optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
                             Iterable<Customer> options) {

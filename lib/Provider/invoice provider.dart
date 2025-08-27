@@ -724,7 +724,19 @@ class InvoiceProvider with ChangeNotifier {
           break;
 
         case 'simplecashbook':
-        // Delete from simplecashbook node
+        // // Delete from simplecashbook node
+        //   final simpleCashbookSnapshot = await _db.child('simplecashbook')
+        //       .orderByChild('paymentKey')
+        //       .equalTo(paymentKey)
+        //       .get();
+        //
+        //   if (simpleCashbookSnapshot.exists) {
+        //     final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
+        //     for (var entryKey in entries.keys) {
+        //       await _db.child('simplecashbook').child(entryKey).remove();
+        //     }
+        //   }
+        // Delete from simplecashbook node (external node only)
           final simpleCashbookSnapshot = await _db.child('simplecashbook')
               .orderByChild('paymentKey')
               .equalTo(paymentKey)
@@ -756,16 +768,19 @@ class InvoiceProvider with ChangeNotifier {
       final invoiceRef = _db.child('invoices').child(invoiceId);
       print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
 
-      // Step 1: Fetch payment data before deleting it
-      final paymentSnapshot = await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).get();
+      // Step 1: Fetch payment data (only if not SimpleCashbook, since we don’t delete its node)
+      Map<String, dynamic> paymentData = {};
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        final paymentSnapshot = await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).get();
 
-      if (!paymentSnapshot.exists) {
-        print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
-        throw Exception("Payment not found.");
+        if (!paymentSnapshot.exists) {
+          print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
+          throw Exception("Payment not found.");
+        }
+
+        paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
+        print("✅ Payment data found: $paymentData");
       }
-
-      final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
-      print("✅ Payment data found: $paymentData");
 
       // Step 2: Fetch invoice data
       final invoiceSnapshot = await invoiceRef.get();
@@ -777,7 +792,7 @@ class InvoiceProvider with ChangeNotifier {
       final customerId = invoice['customerId']?.toString() ?? '';
       final invoiceNumber = invoice['invoiceNumber']?.toString() ?? '';
 
-      // Step 3: Delete from external nodes
+      // Step 3: Delete from external nodes (if needed)
       await _deleteFromExternalNode(
         method: paymentMethod,
         paymentKey: paymentKey,
@@ -788,9 +803,13 @@ class InvoiceProvider with ChangeNotifier {
         paymentData: paymentData,
       );
 
-      // Step 4: Remove the payment entry from the invoice
-      print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
-      await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+      // Step 4: Remove the payment entry from the invoice (skip for SimpleCashbook)
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
+        await invoiceRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+      } else {
+        print("ℹ️ Skipped deleting node for SimpleCashbook payment.");
+      }
 
       // Step 5: Update invoice amounts
       double currentCashPaid = _parseToDouble(invoice['cashPaidAmount']);
@@ -801,7 +820,9 @@ class InvoiceProvider with ChangeNotifier {
       double currentSimpleCashbookPaid = _parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0);
       double currentDebit = _parseToDouble(invoice['debitAmount']);
 
-      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
+      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, "
+          "Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, "
+          "SimpleCashbook: $currentSimpleCashbookPaid, Debit: $currentDebit");
 
       // Deduct the payment amount from the respective payment method
       switch (paymentMethod.toLowerCase()) {
@@ -845,7 +866,6 @@ class InvoiceProvider with ChangeNotifier {
       // Step 6: Update customer ledger
       final customerLedgerRef = _db.child('ledger').child(customerId);
 
-      // Find and delete the specific ledger entry for this payment
       final paymentLedgerSnapshot = await customerLedgerRef
           .orderByChild('invoiceNumber')
           .equalTo(invoiceNumber)
@@ -855,7 +875,6 @@ class InvoiceProvider with ChangeNotifier {
         final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
         for (var entryKey in paymentLedgerData.keys) {
           final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
-          // Find the entry with matching debit amount (payment)
           if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
             await customerLedgerRef.child(entryKey).remove();
             break;
@@ -882,6 +901,7 @@ class InvoiceProvider with ChangeNotifier {
       );
     }
   }
+
 
   Future<void> _recalculateAllLedgerBalances(String customerId) async {
     try {
@@ -1137,38 +1157,38 @@ class InvoiceProvider with ChangeNotifier {
         if (paymentMethod == 'Check' && chequeBankName != null) 'chequeBankName': chequeBankName,
       };
 
-      // Determine the payment node based on payment method
-      String paymentNode;
-      switch (paymentMethod.toLowerCase()) {
-        case 'cash':
-          paymentNode = 'cashPayments';
-          break;
-        case 'online':
-          paymentNode = 'onlinePayments';
-          break;
-        case 'check':
-          paymentNode = 'checkPayments';
-          break;
-        case 'bank':
-          paymentNode = 'bankPayments';
-          break;
-        case 'slip':
-          paymentNode = 'slipPayments';
-          break;
-        case 'simplecashbook':
-          paymentNode = 'simplecashbookPayments';
-          break;
-        default:
-          paymentNode = 'otherPayments';
-      }
+      // For SimpleCashbook method, only save to external node, not to invoice payment node
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        // Determine the payment node based on payment method
+        String paymentNode;
+        switch (paymentMethod.toLowerCase()) {
+          case 'cash':
+            paymentNode = 'cashPayments';
+            break;
+          case 'online':
+            paymentNode = 'onlinePayments';
+            break;
+          case 'check':
+            paymentNode = 'checkPayments';
+            break;
+          case 'bank':
+            paymentNode = 'bankPayments';
+            break;
+          case 'slip':
+            paymentNode = 'slipPayments';
+            break;
+          default:
+            paymentNode = 'otherPayments';
+        }
 
-      // Save payment under respective method-based node
-      final paymentRef = _db
-          .child('invoices')
-          .child(invoiceId)
-          .child(paymentNode)
-          .child(timestampId);
-      await paymentRef.set(paymentData);
+        // Save payment under respective method-based node (except for SimpleCashbook)
+        final paymentRef = _db
+            .child('invoices')
+            .child(invoiceId)
+            .child(paymentNode)
+            .child(timestampId);
+        await paymentRef.set(paymentData);
+      }
 
       // Create corresponding entry in the respective payment ledger
       switch (paymentMethod.toLowerCase()) {
@@ -1258,6 +1278,7 @@ class InvoiceProvider with ChangeNotifier {
           break;
 
         case 'simplecashbook':
+        // Only save to external simplecashbook node, not to invoice payment node
           await _db.child('simplecashbook').child(timestampId).set({
             'id': timestampId,
             'invoiceId': invoiceId,
@@ -1274,43 +1295,43 @@ class InvoiceProvider with ChangeNotifier {
           break;
       }
 
-      // Update invoice with new paid amount
-      final currentDebit = _parseToDouble(invoice['debitAmount']);
-      final updatedDebit = currentDebit + paymentAmount;
+      // For SimpleCashbook, skip updating invoice amounts and ledger
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        // Update invoice with new paid amount
+        final currentDebit = _parseToDouble(invoice['debitAmount']);
+        final updatedDebit = currentDebit + paymentAmount;
 
-      await _db.child('invoices').child(invoiceId).update({
-        'debitAmount': updatedDebit,
-        if (paymentMethod == 'Cash')
-          'cashPaidAmount': (_parseToDouble(invoice['cashPaidAmount']) + paymentAmount),
-        if (paymentMethod == 'Online')
-          'onlinePaidAmount': (_parseToDouble(invoice['onlinePaidAmount']) + paymentAmount),
-        if (paymentMethod == 'Check')
-          'checkPaidAmount': (_parseToDouble(invoice['checkPaidAmount'] ?? 0.0) + paymentAmount),
-        if (paymentMethod == 'Bank')
-          'bankPaidAmount': (_parseToDouble(invoice['bankPaidAmount'] ?? 0.0) + paymentAmount),
-        if (paymentMethod == 'Slip')
-          'slipPaidAmount': (_parseToDouble(invoice['slipPaidAmount'] ?? 0.0) + paymentAmount),
-        if (paymentMethod == 'SimpleCashbook')
-          'simpleCashbookPaidAmount':
-          (_parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0) + paymentAmount),
-      });
-      // Update customer ledger
-      await _updateCustomerLedger(
-        customerId,
-        creditAmount: 0.0,
-        debitAmount: paymentAmount,
-        remainingBalance: _parseToDouble(invoice['grandTotal']) - updatedDebit,
-        invoiceNumber: invoiceNumber,
-        referenceNumber: referenceNumber,
-        // createdAt: createdAt,
-        transactionDate: paymentDate.toIso8601String(), // Use payment date
-        paymentMethod: paymentMethod,
-        bankName: paymentMethod == 'Bank'
-            ? bankName
-            : paymentMethod == 'Check'
-            ? chequeBankName
-            : null,
-      );
+        await _db.child('invoices').child(invoiceId).update({
+          'debitAmount': updatedDebit,
+          if (paymentMethod == 'Cash')
+            'cashPaidAmount': (_parseToDouble(invoice['cashPaidAmount']) + paymentAmount),
+          if (paymentMethod == 'Online')
+            'onlinePaidAmount': (_parseToDouble(invoice['onlinePaidAmount']) + paymentAmount),
+          if (paymentMethod == 'Check')
+            'checkPaidAmount': (_parseToDouble(invoice['checkPaidAmount'] ?? 0.0) + paymentAmount),
+          if (paymentMethod == 'Bank')
+            'bankPaidAmount': (_parseToDouble(invoice['bankPaidAmount'] ?? 0.0) + paymentAmount),
+          if (paymentMethod == 'Slip')
+            'slipPaidAmount': (_parseToDouble(invoice['slipPaidAmount'] ?? 0.0) + paymentAmount),
+        });
+
+        // Update customer ledger
+        await _updateCustomerLedger(
+          customerId,
+          creditAmount: 0.0,
+          debitAmount: paymentAmount,
+          remainingBalance: _parseToDouble(invoice['grandTotal']) - updatedDebit,
+          invoiceNumber: invoiceNumber,
+          referenceNumber: referenceNumber,
+          transactionDate: paymentDate.toIso8601String(),
+          paymentMethod: paymentMethod,
+          bankName: paymentMethod == 'Bank'
+              ? bankName
+              : paymentMethod == 'Check'
+              ? chequeBankName
+              : null,
+        );
+      }
 
       // For cheque payments, log cheque in bank
       if (paymentMethod == 'Check' && chequeBankId != null) {
@@ -1402,7 +1423,7 @@ class InvoiceProvider with ChangeNotifier {
       await fetchPayments('check');
       await fetchPayments('bank');
       await fetchPayments('slip');
-      await fetchPayments('simplecashbook');
+      // await fetchPayments('simplecashbook');
 
       // Sort payments by date (newest first)
       payments.sort((a, b) => b['date'].compareTo(a['date']));
@@ -1542,219 +1563,36 @@ class InvoiceProvider with ChangeNotifier {
   }
 
 
-  Future<void> updateInvoicePaymentFromCashbook({
-    required String invoiceNumber,
-    required double paymentAmount,
-    required String paymentMethod,
-    required DateTime paymentDate,
-    String? description,
-    String? bankId,
-    String? bankName,
-    String? chequeNumber,
-    DateTime? chequeDate,
-    String? chequeBankId,
-    String? chequeBankName,
-  })
-  async {
+
+  // Add this method to your InvoiceProvider class
+  Future<double> getCustomerRemainingBalance(String customerId) async {
     try {
-      // Find the invoice by invoiceNumber
-      final invoicesRef = _db.child('invoices');
-      final query = invoicesRef.orderByChild('invoiceNumber').equalTo(invoiceNumber);
-      final snapshot = await query.get();
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
 
-      if (!snapshot.exists) {
-        throw Exception("Invoice not found with number: $invoiceNumber");
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate (newest first)
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateB.compareTo(dateA); // Newest first
+            });
+
+          // Return the most recent balance (first entry after sorting)
+          if (entries.isNotEmpty) {
+            final latestEntry = entries.first.value as Map<dynamic, dynamic>;
+            return (latestEntry['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+          }
+        }
       }
-
-      // Get the invoice data
-      Map<dynamic, dynamic> invoicesData = snapshot.value as Map<dynamic, dynamic>;
-      String invoiceId = invoicesData.keys.first;
-      Map<String, dynamic> invoice = Map<String, dynamic>.from(invoicesData[invoiceId]);
-
-      // Generate timestamp-based ID for the payment
-      final String timestampId = DateTime.now().millisecondsSinceEpoch.toString();
-
-      // Determine the payment node based on payment method
-      String paymentNode;
-      switch (paymentMethod.toLowerCase()) {
-        case 'cash':
-          paymentNode = 'cashPayments';
-          break;
-        case 'online':
-          paymentNode = 'onlinePayments';
-          break;
-        case 'check':
-          paymentNode = 'checkPayments';
-          break;
-        case 'bank':
-          paymentNode = 'bankPayments';
-          break;
-        case 'slip':
-          paymentNode = 'slipPayments';
-          break;
-        case 'simplecashbook':
-          paymentNode = 'simplecashbookPayments';
-          break;
-        default:
-          paymentNode = 'otherPayments';
-      }
-
-      // Prepare payment data
-      final paymentData = {
-        'amount': paymentAmount,
-        'date': paymentDate.toIso8601String(),
-        'paymentMethod': paymentMethod,
-        'description': description,
-        if (paymentMethod == 'Bank' && bankId != null) 'bankId': bankId,
-        if (paymentMethod == 'Bank' && bankName != null) 'bankName': bankName,
-        if (paymentMethod == 'Check' && chequeNumber != null) 'chequeNumber': chequeNumber,
-        if (paymentMethod == 'Check' && chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
-        if (paymentMethod == 'Check' && chequeBankId != null) 'chequeBankId': chequeBankId,
-        if (paymentMethod == 'Check' && chequeBankName != null) 'chequeBankName': chequeBankName,
-      };
-
-      // Save payment under respective method-based node
-      final paymentRef = _db
-          .child('invoices')
-          .child(invoiceId)
-          .child(paymentNode)
-          .child(timestampId);
-      await paymentRef.set(paymentData);
-
-      // Update invoice with new paid amount
-      final currentDebit = _parseToDouble(invoice['debitAmount']);
-      final updatedDebit = currentDebit + paymentAmount;
-
-      Map<String, dynamic> updateData = {
-        'debitAmount': updatedDebit,
-      };
-
-      // Update specific payment method amount
-      switch (paymentMethod.toLowerCase()) {
-        case 'cash':
-          updateData['cashPaidAmount'] = (_parseToDouble(invoice['cashPaidAmount']) + paymentAmount);
-          break;
-        case 'online':
-          updateData['onlinePaidAmount'] = (_parseToDouble(invoice['onlinePaidAmount']) + paymentAmount);
-          break;
-        case 'check':
-          updateData['checkPaidAmount'] = (_parseToDouble(invoice['checkPaidAmount'] ?? 0.0) + paymentAmount);
-          break;
-        case 'bank':
-          updateData['bankPaidAmount'] = (_parseToDouble(invoice['bankPaidAmount'] ?? 0.0) + paymentAmount);
-          break;
-        case 'slip':
-          updateData['slipPaidAmount'] = (_parseToDouble(invoice['slipPaidAmount'] ?? 0.0) + paymentAmount);
-          break;
-        case 'simplecashbook':
-          updateData['simpleCashbookPaidAmount'] = (_parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0) + paymentAmount);
-          break;
-      }
-
-      await _db.child('invoices').child(invoiceId).update(updateData);
-
-      // Update customer ledger
-      final customerId = invoice['customerId']?.toString() ?? '';
-      final referenceNumber = invoice['referenceNumber']?.toString() ?? '';
-
-      await _updateCustomerLedger(
-        customerId,
-        creditAmount: 0.0,
-        debitAmount: paymentAmount,
-        remainingBalance: _parseToDouble(invoice['grandTotal']) - updatedDebit,
-        invoiceNumber: invoiceNumber,
-        referenceNumber: referenceNumber,
-        transactionDate: paymentDate.toIso8601String(),
-        paymentMethod: paymentMethod,
-        bankName: paymentMethod == 'Bank'
-            ? bankName
-            : paymentMethod == 'Check'
-            ? chequeBankName
-            : null,
-      );
-
-      // For bank payments, update bank balance
-      if (paymentMethod == 'Bank' && bankId != null) {
-        final bankBalanceRef = _db.child('banks/$bankId/balance');
-        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
-        await bankBalanceRef.set(currentBalance + paymentAmount);
-      }
-
-      // For cheque payments, log cheque in bank
-      if (paymentMethod == 'Check' && chequeBankId != null) {
-        final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
-        final chequeData = {
-          'invoiceId': invoiceId,
-          'invoiceNumber': invoiceNumber,
-          'customerId': customerId,
-          'customerName': invoice['customerName'],
-          'amount': paymentAmount,
-          'chequeNumber': chequeNumber,
-          'chequeDate': chequeDate?.toIso8601String(),
-          'status': 'pending',
-          'createdAt': DateTime.now().toIso8601String(),
-        };
-        await bankChequesRef.push().set(chequeData);
-      }
-
-      // Refresh invoice list
-      await fetchInvoices();
-
+      return 0.0;
     } catch (e) {
-      print('Error updating invoice payment from cashbook: $e');
-      throw Exception('Failed to update invoice payment: $e');
-    }
-  }
-
-// In your InvoiceProvider class
-  Future<void> removePaymentFromCashbook({
-    required String invoiceNumber,
-    required double paymentAmount,
-  })
-  async {
-    try {
-      final invoiceRef = FirebaseDatabase.instance.ref().child('invoices/$invoiceNumber');
-      final invoiceSnapshot = await invoiceRef.get();
-
-      if (invoiceSnapshot.exists) {
-        final invoiceData = Map<String, dynamic>.from(invoiceSnapshot.value as Map<dynamic, dynamic>);
-
-        // Update the paid amount
-        final currentPaidAmount = (invoiceData['paidAmount'] as num?)?.toDouble() ?? 0.0;
-        final newPaidAmount = currentPaidAmount - paymentAmount;
-
-        // Update the invoice status
-        String newStatus = 'unpaid';
-        final totalAmount = (invoiceData['totalAmount'] as num?)?.toDouble() ?? 0.0;
-
-        if (newPaidAmount > 0) {
-          newStatus = 'partially_paid';
-        }
-
-        if (newPaidAmount >= totalAmount) {
-          newStatus = 'paid';
-        }
-
-        // Update the invoice
-        await invoiceRef.update({
-          'paidAmount': newPaidAmount,
-          'status': newStatus,
-        });
-
-        // Also update the filled invoice if it exists
-        final filledInvoiceRef = FirebaseDatabase.instance.ref().child('filledinvoices/$invoiceNumber');
-        final filledInvoiceSnapshot = await filledInvoiceRef.get();
-
-        if (filledInvoiceSnapshot.exists) {
-          await filledInvoiceRef.update({
-            'paidAmount': newPaidAmount,
-            'status': newStatus,
-          });
-        }
-      }
-    } catch (e) {
-      print('Error removing payment from invoice: $e');
-      rethrow;
+      print("Error fetching remaining balance: $e");
+      return 0.0;
     }
   }
 

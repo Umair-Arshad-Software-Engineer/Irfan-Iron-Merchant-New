@@ -36,7 +36,6 @@ class CashbookListPage extends StatefulWidget {
 
 class _CashbookListPageState extends State<CashbookListPage> {
 
-
   Future<List<CashbookEntry>> _getFilteredEntries() async {
     DataSnapshot snapshot = await widget.databaseRef.get();
     List<CashbookEntry> entries = [];
@@ -126,10 +125,13 @@ class _CashbookListPageState extends State<CashbookListPage> {
   }
 
   Future<void> _printPdf() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final entries = await _getFilteredEntries();
     if (entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No entries to print')));
+          SnackBar(content: Text(languageProvider.isEnglish
+              ? 'No entries to print'
+              : 'پرنٹ کرنے کے لیے کوئی انٹری نہیں')));
       return;
     }
 
@@ -140,10 +142,13 @@ class _CashbookListPageState extends State<CashbookListPage> {
   }
 
   Future<void> _sharePdf() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final entries = await _getFilteredEntries();
     if (entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No entries to share')));
+          SnackBar(content: Text(languageProvider.isEnglish
+              ? 'No entries to share'
+              : 'شیئر کرنے کے لیے کوئی انٹری نہیں')));
       return;
     }
 
@@ -154,18 +159,25 @@ class _CashbookListPageState extends State<CashbookListPage> {
 
     await Share.shareXFiles(
       [XFile(file.path)],
-      text: 'Cashbook Report',
+      text: languageProvider.isEnglish ? 'Cashbook Report' : 'کیش بک رپورٹ',
     );
   }
 
   Future<Uint8List> _generatePdfBytes(List<CashbookEntry> entries) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final pdf = pw.Document();
     final totals = _calculateTotals(entries);
 
     // Pre-generate all description images
     List<Uint8List> descriptionImages = [];
     for (var entry in entries) {
-      final imageData = await _createTextImage(entry.description);
+      // final imageData = await _createTextImage(entry.description);
+      // In the _generatePdfBytes method, update the description processing:
+      final imageData = await _createTextImage(
+          entry.source == "expense_page"
+              ? entry.description.replaceFirst("Expense: ", "").replaceFirst("اخراجات: ", "")
+              : entry.description
+      );
       descriptionImages.add(imageData);
     }
 
@@ -175,8 +187,10 @@ class _CashbookListPageState extends State<CashbookListPage> {
           return [
             pw.Header(
               level: 0,
-              child: pw.Text('Cashbook Report',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              child: pw.Text(
+                  languageProvider.isEnglish ? 'Cashbook Report' : 'کیش بک رپورٹ',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)
+              ),
             ),
             pw.SizedBox(height: 20),
             pw.Table(
@@ -193,19 +207,31 @@ class _CashbookListPageState extends State<CashbookListPage> {
                   children: [
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      child: pw.Text(
+                          languageProvider.isEnglish ? 'Date' : 'تاریخ',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
+                      ),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      child: pw.Text(
+                          languageProvider.isEnglish ? 'Description' : 'تفصیلات',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
+                      ),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      child: pw.Text(
+                          languageProvider.isEnglish ? 'Type' : 'قسم',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
+                      ),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      child: pw.Text(
+                          languageProvider.isEnglish ? 'Amount' : 'رقم',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
+                      ),
                     ),
                   ],
                 ),
@@ -241,10 +267,22 @@ class _CashbookListPageState extends State<CashbookListPage> {
               ],
             ),
             pw.SizedBox(height: 20),
-            _buildPdfTotalRow('Total Cash In', totals['cashIn']!),
-            _buildPdfTotalRow('Total Cash Out', totals['cashOut']!),
-            _buildPdfTotalRow('Remaining Cash', totals['remaining']!,
-                isHighlighted: true),
+            _buildPdfTotalRow(
+                languageProvider.isEnglish ? 'Total Cash In' : 'ٹوٹل کیش ان',
+                totals['cashIn']!,
+                languageProvider
+            ),
+            _buildPdfTotalRow(
+                languageProvider.isEnglish ? 'Total Cash Out' : 'ٹوٹل کیش آؤٹ',
+                totals['cashOut']!,
+                languageProvider
+            ),
+            _buildPdfTotalRow(
+                languageProvider.isEnglish ? 'Remaining Cash' : 'بقایا رقم',
+                totals['remaining']!,
+                languageProvider,
+                isHighlighted: true
+            ),
           ];
         },
       ),
@@ -253,7 +291,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
     return pdf.save();
   }
 
-  pw.Widget _buildPdfTotalRow(String label, double value,
+  pw.Widget _buildPdfTotalRow(String label, double value, LanguageProvider languageProvider,
       {bool isHighlighted = false})
   {
     return pw.Padding(
@@ -269,7 +307,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
             ),
           ),
           pw.Text(
-            '${value.toStringAsFixed(2)}Pkr',
+            '${value.toStringAsFixed(2)}${languageProvider.isEnglish ? 'Pkr' : 'روپے'}',
             style: pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
               color: isHighlighted ? PdfColors.green : PdfColors.black,
@@ -299,7 +337,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
-
   Future<void> _deleteEntry(String id, String? expenseKey) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
@@ -308,7 +345,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
       // First get the entry data before deleting
       final entrySnapshot = await widget.databaseRef.child(id).get();
       if (!entrySnapshot.exists) {
-        throw Exception('Entry not found');
+        throw Exception(languageProvider.isEnglish ? 'Entry not found' : 'انٹری نہیں ملی');
       }
 
       final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
@@ -359,7 +396,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
-
   Future<void> _showDeleteConfirmation(String entryId,String? expenseKey) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final confirmed = await showDialog<bool>(
@@ -393,6 +429,17 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
+  String _getTypeDisplayText(String type, LanguageProvider languageProvider) {
+    switch (type) {
+      case 'cash_in':
+        return languageProvider.isEnglish ? 'Cash In' : 'کیش ان';
+      case 'cash_out':
+        return languageProvider.isEnglish ? 'Cash Out' : 'کیش آؤٹ';
+      default:
+        return type;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -406,18 +453,30 @@ class _CashbookListPageState extends State<CashbookListPage> {
         ),
         Row(
           children: [
-            IconButton(
-                onPressed: () => _selectDateRange(context),
-                icon: const Icon(Icons.date_range)),
-            IconButton(
-                onPressed: _printPdf,
-                icon: const Icon(Icons.print)),
-            IconButton(
-                onPressed: _sharePdf,
-                icon: const Icon(Icons.share)),
-            IconButton(
-                onPressed: widget.onClearDateFilter,
-                icon: const Icon(Icons.clear)),
+            Tooltip(
+              message: languageProvider.isEnglish ? 'Select Date Range' : 'تاریخ کی حد منتخب کریں',
+              child: IconButton(
+                  onPressed: () => _selectDateRange(context),
+                  icon: const Icon(Icons.date_range)),
+            ),
+            Tooltip(
+              message: languageProvider.isEnglish ? 'Print' : 'پرنٹ کریں',
+              child: IconButton(
+                  onPressed: _printPdf,
+                  icon: const Icon(Icons.print)),
+            ),
+            Tooltip(
+              message: languageProvider.isEnglish ? 'Share' : 'شیئر کریں',
+              child: IconButton(
+                  onPressed: _sharePdf,
+                  icon: const Icon(Icons.share)),
+            ),
+            Tooltip(
+              message: languageProvider.isEnglish ? 'Clear Filter' : 'فلٹر صاف کریں',
+              child: IconButton(
+                  onPressed: widget.onClearDateFilter,
+                  icon: const Icon(Icons.clear)),
+            ),
           ],
         ),
         const SizedBox(height: 10),
@@ -426,16 +485,40 @@ class _CashbookListPageState extends State<CashbookListPage> {
     );
   }
 
+  String _formatDescription(CashbookEntry entry, LanguageProvider languageProvider) {
+    if (entry.source == "expense_page") {
+      // Remove the "Expense: " or "اخراجات: " prefix for display
+      String cleanedDescription = entry.description
+          .replaceFirst("Expense: ", "")
+          .replaceFirst("اخراجات: ", "");
+
+      return languageProvider.isEnglish
+          ? 'Expense: $cleanedDescription'
+          : 'اخراجات: $cleanedDescription';
+    }
+    return entry.description;
+  }
+
   Widget _buildCashbookList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return FutureBuilder<List<CashbookEntry>>(
       future: _getFilteredEntries(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.active) {
           return const Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(child: Text(
+              languageProvider.isEnglish
+                  ? 'Error: ${snapshot.error}'
+                  : 'خرابی: ${snapshot.error}'
+          ));
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No entries found'));
+          return Center(child: Text(
+              languageProvider.isEnglish
+                  ? 'No entries found'
+                  : 'کوئی انٹری نہیں ملی'
+          ));
         } else {
           final entries = snapshot.data!;
           final totals = _calculateTotals(entries);
@@ -447,32 +530,47 @@ class _CashbookListPageState extends State<CashbookListPage> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: entries.length,
-                // In your _buildCashbookList() method, update the ListTile:
                 itemBuilder: (context, index) {
                   final entry = entries[index];
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     child: ListTile(
+                      // title: Text(
+                      //   entry.source == "expense_page"
+                      //       ? "${languageProvider.isEnglish ? 'Expense' : 'اخراجات'}: ${entry.description.replaceFirst("Expense: ", "").replaceFirst("اخراجات: ", "")}"
+                      //       : entry.description,
+                      // ),
+                      // Replace the title in your ListTile:
                       title: Text(
-                        entry.source == "expense_page"
-                            ? "Expense: ${entry.description.replaceFirst("Expense: ", "")}"
-                            : entry.description,
+                        _formatDescription(entry, languageProvider),
                       ),
+                      // subtitle: Text(
+                      //   '${_getTypeDisplayText(entry.type, languageProvider)} - ${entry.amount} ${languageProvider.isEnglish ? 'Pkr' : 'روپے'} - '
+                      //       '${DateFormat('yyyy-MM-dd HH:mm').format(entry.dateTime)}'
+                      //       '${entry.source == "expense_page" ? " (${languageProvider.isEnglish ? 'From Expenses' : 'اخراجات سے'})" : ""}',
+                      // ),
+                      // Replace the subtitle in your ListTile:
                       subtitle: Text(
-                        '${entry.type} - ${entry.amount} - '
+                        '${_getTypeDisplayText(entry.type, languageProvider)} - ${entry.amount} ${languageProvider.isEnglish ? 'Pkr' : 'روپے'} - '
                             '${DateFormat('yyyy-MM-dd HH:mm').format(entry.dateTime)}'
-                            '${entry.source == "expense_page" ? " (From Expenses)" : ""}',
+                            '${entry.source == "expense_page" ? " (${languageProvider.isEnglish ? 'From Expenses' : 'اخراجات سے'})" : ""}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _editEntry(entry),
+                          Tooltip(
+                            message: languageProvider.isEnglish ? 'Edit' : 'تدوین کریں',
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _editEntry(entry),
+                            ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _showDeleteConfirmation(entry.id!, entry.expenseKey),
+                          Tooltip(
+                            message: languageProvider.isEnglish ? 'Delete' : 'حذف کریں',
+                            child: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _showDeleteConfirmation(entry.id!, entry.expenseKey),
+                            ),
                           ),
                         ],
                       ),
@@ -513,6 +611,8 @@ class _CashbookListPageState extends State<CashbookListPage> {
   }
 
   Widget _buildTotalRow(String label, double value, {bool isHighlighted = false}) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
@@ -526,7 +626,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
             ),
           ),
           Text(
-            '${value.toStringAsFixed(2)}Pkr',
+            '${value.toStringAsFixed(2)}${languageProvider.isEnglish ? 'Pkr' : 'روپے'}',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: isHighlighted ? Colors.green : Colors.black,

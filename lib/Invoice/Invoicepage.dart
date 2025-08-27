@@ -66,6 +66,27 @@ import '../bankmanagement/banknames.dart';
     DateTime? _selectedChequeDate;
 
 
+    Future<void> _fetchRemainingBalance() async {
+      if (_selectedCustomerId != null) {
+        try {
+          final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+          final balance = await invoiceProvider.getCustomerRemainingBalance(_selectedCustomerId!);
+          setState(() {
+            _remainingBalance = balance;
+          });
+        } catch (e) {
+          print("Error fetching balance: $e");
+          setState(() {
+            _remainingBalance = 0.0;
+          });
+        }
+      } else {
+        setState(() {
+          _remainingBalance = 0.0;
+        });
+      }
+    }
+
     Future<void> _selectDate(BuildContext context) async {
       final DateTime? picked = await showDatePicker(
         context: context,
@@ -936,7 +957,6 @@ import '../bankmanagement/banknames.dart';
       }
     }
 
-
     Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
       final pdf = pw.Document();
 
@@ -1062,7 +1082,6 @@ import '../bankmanagement/banknames.dart';
       // Display or print the PDF
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
-
 
     Future<Uint8List?> _pickImage(BuildContext context) async {
       final ImagePicker _picker = ImagePicker();
@@ -1545,6 +1564,7 @@ import '../bankmanagement/banknames.dart';
       _showPaymentDetails(invoice);
     }
 
+
     @override
     void initState() {
       super.initState();
@@ -1847,6 +1867,7 @@ import '../bankmanagement/banknames.dart';
                               _selectedCustomerName = selectedCustomer.name;
                               _customerController.text = selectedCustomer.name;
                             });
+                            _fetchRemainingBalance();
                           },
                           optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Customer> onSelected,
                               Iterable<Customer> options) {
