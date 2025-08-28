@@ -16,7 +16,7 @@ class _CustomerListState extends State<CustomerList> {
   String _searchQuery = '';
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   Map<String, double> _customerBalances = {};
-  Map<String, Map<String, dynamic>> _ledgerCache = {}; // Cache for ledger data
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -25,92 +25,85 @@ class _CustomerListState extends State<CustomerList> {
   }
 
   Future<void> _loadCustomerBalances() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    final customers = customerProvider.customers;
+    await customerProvider.fetchCustomers();
 
     // Fetch all ledger data in parallel
-    List<Future<void>> fetchFutures = customers.map((customer) async {
+    List<Future<void>> fetchFutures = customerProvider.customers.map((customer) async {
       final invoiceBalance = await _getRemainingInvoiceBalance(customer.id);
       final filledBalance = await _getRemainingFillesBalance(customer.id);
-      _customerBalances[customer.id] = invoiceBalance + filledBalance; // Combined balance
+      _customerBalances[customer.id] = invoiceBalance + filledBalance;
     }).toList();
 
     await Future.wait(fetchFutures);
-    setState(() {}); // Update the UI after fetching balances
+
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   Future<double> _getRemainingInvoiceBalance(String customerId) async {
-    if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('invoiceBalance')) {
-      return _ledgerCache[customerId]!['invoiceBalance'] ?? 0.0;
-    }
-
     try {
       final customerLedgerRef = _db.child('ledger').child(customerId);
-      final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      final DatabaseEvent snapshot = await customerLedgerRef
+          .orderByChild('createdAt')
+          .limitToLast(1)
+          .once();
 
-      double remainingBalance = 0.0;
       if (snapshot.snapshot.exists) {
-        final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-        final lastEntryKey = ledgerEntries.keys.first;
-        final lastEntry = ledgerEntries[lastEntryKey];
+        final Map<dynamic, dynamic> ledgerEntries =
+        snapshot.snapshot.value as Map<dynamic, dynamic>;
+
+        // Get the last entry (highest timestamp)
+        final lastEntry = ledgerEntries.values.last;
 
         if (lastEntry != null && lastEntry is Map) {
           final remainingBalanceValue = lastEntry['remainingBalance'];
           if (remainingBalanceValue is int) {
-            remainingBalance = remainingBalanceValue.toDouble();
+            return remainingBalanceValue.toDouble();
           } else if (remainingBalanceValue is double) {
-            remainingBalance = remainingBalanceValue;
+            return remainingBalanceValue;
           }
         }
       }
-
-      // Update the cache with the invoice balance
-      if (_ledgerCache.containsKey(customerId)) {
-        _ledgerCache[customerId]!['invoiceBalance'] = remainingBalance;
-      } else {
-        _ledgerCache[customerId] = {'invoiceBalance': remainingBalance};
-      }
-
-      return remainingBalance;
+      return 0.0;
     } catch (e) {
+      print("Error getting invoice balance: $e");
       return 0.0;
     }
   }
 
   Future<double> _getRemainingFillesBalance(String customerId) async {
-    if (_ledgerCache.containsKey(customerId) && _ledgerCache[customerId]!.containsKey('filledBalance')) {
-      return _ledgerCache[customerId]!['filledBalance'] ?? 0.0;
-    }
-
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
-      final DatabaseEvent snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).once();
+      final DatabaseEvent snapshot = await customerLedgerRef
+          .orderByChild('createdAt')
+          .limitToLast(1)
+          .once();
 
-      double remainingBalance = 0.0;
       if (snapshot.snapshot.exists) {
-        final Map<dynamic, dynamic> ledgerEntries = snapshot.snapshot.value as Map<dynamic, dynamic>;
-        final lastEntryKey = ledgerEntries.keys.first;
-        final lastEntry = ledgerEntries[lastEntryKey];
+        final Map<dynamic, dynamic> ledgerEntries =
+        snapshot.snapshot.value as Map<dynamic, dynamic>;
+
+        // Get the last entry (highest timestamp)
+        final lastEntry = ledgerEntries.values.last;
 
         if (lastEntry != null && lastEntry is Map) {
           final remainingBalanceValue = lastEntry['remainingBalance'];
           if (remainingBalanceValue is int) {
-            remainingBalance = remainingBalanceValue.toDouble();
+            return remainingBalanceValue.toDouble();
           } else if (remainingBalanceValue is double) {
-            remainingBalance = remainingBalanceValue;
+            return remainingBalanceValue;
           }
         }
       }
-
-      // Update the cache with the filled balance
-      if (_ledgerCache.containsKey(customerId)) {
-        _ledgerCache[customerId]!['filledBalance'] = remainingBalance;
-      } else {
-        _ledgerCache[customerId] = {'filledBalance': remainingBalance};
-      }
-
-      return remainingBalance;
+      return 0.0;
     } catch (e) {
+      print("Error getting filled balance: $e");
       return 0.0;
     }
   }
@@ -132,8 +125,12 @@ class _CustomerListState extends State<CustomerList> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => AddCustomer()),
-              );
+              ).then((_) => _loadCustomerBalances());
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _loadCustomerBalances,
           ),
         ],
       ),
@@ -153,166 +150,172 @@ class _CustomerListState extends State<CustomerList> {
               ),
               onChanged: (value) {
                 setState(() {
-                  _searchQuery = value.toLowerCase(); // Update the search query
+                  _searchQuery = value.toLowerCase();
                 });
               },
             ),
           ),
-          Expanded(
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Expanded(
             child: Consumer<CustomerProvider>(
               builder: (context, customerProvider, child) {
-                return FutureBuilder(
-                  future: customerProvider.fetchCustomers(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.active ||
-                        snapshot.connectionState == ConnectionState.active) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                // Filter customers based on the search query
+                final filteredCustomers = customerProvider.customers.where((customer) {
+                  final name = customer.name.toLowerCase();
+                  final phone = customer.phone.toLowerCase();
+                  final address = customer.address.toLowerCase();
+                  return name.contains(_searchQuery) ||
+                      phone.contains(_searchQuery) ||
+                      address.contains(_searchQuery);
+                }).toList();
 
-                    // Filter customers based on the search query
-                    final filteredCustomers = customerProvider.customers.where((customer) {
-                      final name = customer.name.toLowerCase();
-                      final phone = customer.phone.toLowerCase();
-                      final address = customer.address.toLowerCase();
-                      return name.contains(_searchQuery) ||
-                          phone.contains(_searchQuery) ||
-                          address.contains(_searchQuery);
-                    }).toList();
+                if (filteredCustomers.isEmpty) {
+                  return Center(
+                    child: Text(
+                      languageProvider.isEnglish
+                          ? 'No customers found.'
+                          : 'کوئی کسٹمر موجود نہیں',
+                      style: TextStyle(color: Colors.teal.shade600),
+                    ),
+                  );
+                }
 
-                    if (filteredCustomers.isEmpty) {
-                      return Center(
-                        child: Text(
-                          languageProvider.isEnglish
-                              ? 'No customers found.'
-                              : 'کوئی کسٹمر موجود نہیں',
-                          style: TextStyle(color: Colors.teal.shade600),
+                // Responsive layout
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth > 600) {
+                      // Web layout (with remaining balance in the table)
+                      return Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: SingleChildScrollView(
+                          child: DataTable(
+                            columns: [
+                              const DataColumn(label: Text('#')),
+                              DataColumn(
+                                  label: Text(
+                                    languageProvider.isEnglish ? 'Name' : 'نام',
+                                    style: const TextStyle(fontSize: 20),
+                                  )),
+                              DataColumn(
+                                  label: Text(
+                                    languageProvider.isEnglish ? 'Address' : 'پتہ',
+                                    style: const TextStyle(fontSize: 20),
+                                  )),
+                              DataColumn(
+                                  label: Text(
+                                    languageProvider.isEnglish ? 'Phone' : 'فون',
+                                    style: const TextStyle(fontSize: 20),
+                                  )),
+                              DataColumn(
+                                  label: Text(
+                                    languageProvider.isEnglish ? 'Balance' : 'بیلنس',
+                                    style: const TextStyle(fontSize: 20),
+                                  )),
+                              DataColumn(
+                                  label: Text(
+                                    languageProvider.isEnglish ? 'Actions' : 'عمل',
+                                    style: const TextStyle(fontSize: 20),
+                                  )),
+                            ],
+                            rows: filteredCustomers
+                                .asMap()
+                                .entries
+                                .map((entry) {
+                              final index = entry.key + 1;
+                              final customer = entry.value;
+                              final balance = _customerBalances[customer.id] ?? 0.0;
+
+                              return DataRow(cells: [
+                                DataCell(Text('$index')),
+                                DataCell(Text(customer.name)),
+                                DataCell(Text(customer.address)),
+                                DataCell(Text(customer.phone)),
+                                DataCell(
+                                  Text(
+                                    balance.toStringAsFixed(2),
+                                    style: TextStyle(
+                                      color: balance < 0
+                                          ? Colors.red
+                                          : Colors.teal,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.teal),
+                                      onPressed: () {
+                                        _showEditDialog(context, customer, customerProvider);
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: () => _showDeleteConfirmationDialog(
+                                          context, customer, customerProvider),
+                                    ),
+                                  ],
+                                )),
+                              ]);
+                            }).toList(),
+                          ),
                         ),
                       );
-                    }
+                    } else {
+                      // Mobile layout (with remaining balance in the card)
+                      return ListView.builder(
+                        itemCount: filteredCustomers.length,
+                        itemBuilder: (context, index) {
+                          final customer = filteredCustomers[index];
+                          final balance = _customerBalances[customer.id] ?? 0.0;
 
-                    // Responsive layout
-                    return LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (constraints.maxWidth > 600) {
-                          // Web layout (with remaining balance in the table)
-                          return Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: SingleChildScrollView(
-                              child: DataTable(
-                                columns: [
-                                  const DataColumn(label: Text('#')),
-                                  DataColumn(
-                                      label: Text(
-                                        languageProvider.isEnglish ? 'Name' : 'نام',
-                                        style: const TextStyle(fontSize: 20),
-                                      )),
-                                  DataColumn(
-                                      label: Text(
-                                        languageProvider.isEnglish ? 'Address' : 'پتہ',
-                                        style: const TextStyle(fontSize: 20),
-                                      )),
-                                  DataColumn(
-                                      label: Text(
-                                        languageProvider.isEnglish ? 'Phone' : 'فون',
-                                        style: const TextStyle(fontSize: 20),
-                                      )),
-                                  DataColumn(
-                                      label: Text(
-                                        languageProvider.isEnglish ? 'Balance' : 'بیلنس',
-                                        style: const TextStyle(fontSize: 20),
-                                      )),
-                                  DataColumn(
-                                      label: Text(
-                                        languageProvider.isEnglish ? 'Actions' : 'عمل',
-                                        style: const TextStyle(fontSize: 20),
-                                      )),
-                                ],
-                                rows: filteredCustomers
-                                    .asMap()
-                                    .entries
-                                    .map((entry) {
-                                  final index = entry.key + 1;
-                                  final customer = entry.value;
-                                  return DataRow(cells: [
-                                    DataCell(Text('$index')),
-                                    DataCell(Text(customer.name)),
-                                    DataCell(Text(customer.address)),
-                                    DataCell(Text(customer.phone)),
-                                    DataCell(
-                                      Text(
-                                        'Balance: ${_customerBalances[customer.id]?.toStringAsFixed(2) ?? "0.00"}',
-                                        style: const TextStyle(color: Colors.teal),
-                                      ),
+                          return Card(
+                            elevation: 4,
+                            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                            color: Colors.teal.shade50,
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.teal.shade400,
+                                child: Text('${index + 1}', style: const TextStyle(color: Colors.white)),
+                              ),
+                              title: Text(customer.name, style: TextStyle(color: Colors.teal.shade800)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(customer.address, style: TextStyle(color: Colors.teal.shade600)),
+                                  const SizedBox(height: 4),
+                                  Text(customer.phone, style: TextStyle(color: Colors.teal.shade600)),
+                                  Text(
+                                    'Balance: ${balance.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      color: balance < 0 ? Colors.red : Colors.teal,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                    DataCell(Row(
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit, color: Colors.teal),
-                                          onPressed: () {
-                                            _showEditDialog(context, customer, customerProvider);
-                                          },
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
-                                          onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
-                                        ),
-                                      ],
-                                    )),
-                                  ]);
-                                }).toList(),
+                                  ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.teal),
+                                    onPressed: () {
+                                      _showEditDialog(context, customer, customerProvider);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _showDeleteConfirmationDialog(
+                                        context, customer, customerProvider),
+                                  ),
+                                ],
                               ),
                             ),
                           );
-                        } else {
-                          // Mobile layout (with remaining balance in the card)
-                          return ListView.builder(
-                            itemCount: filteredCustomers.length,
-                            itemBuilder: (context, index) {
-                              final customer = filteredCustomers[index];
-                              return Card(
-                                elevation: 4,
-                                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                                color: Colors.teal.shade50,
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Colors.teal.shade400,
-                                    child: Text('${index + 1}', style: const TextStyle(color: Colors.white)),
-                                  ),
-                                  title: Text(customer.name, style: TextStyle(color: Colors.teal.shade800)),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(customer.address, style: TextStyle(color: Colors.teal.shade600)),
-                                      const SizedBox(height: 4),
-                                      Text(customer.phone, style: TextStyle(color: Colors.teal.shade600)),
-                                      Text(
-                                        'Balance: ${_customerBalances[customer.id]?.toStringAsFixed(2) ?? "0.00"}',
-                                        style: const TextStyle(color: Colors.teal),
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.teal),
-                                        onPressed: () {
-                                          _showEditDialog(context, customer, customerProvider);
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _showDeleteConfirmationDialog(context, customer, customerProvider),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        }
-                      },
-                    );
+                        },
+                      );
+                    }
                   },
                 );
               },
@@ -349,6 +352,9 @@ class _CustomerListState extends State<CustomerList> {
             onPressed: () async {
               try {
                 await customerProvider.deleteCustomer(customer.id);
+                // Remove from local balances map
+                _customerBalances.remove(customer.id);
+                setState(() {});
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -359,6 +365,7 @@ class _CustomerListState extends State<CustomerList> {
                   ),
                 );
               } catch (e) {
+                Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(languageProvider.isEnglish
@@ -388,23 +395,37 @@ class _CustomerListState extends State<CustomerList> {
     showDialog(
       context: context,
       builder: (context) {
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
         return AlertDialog(
-          title: Text('Edit Customer', style: TextStyle(color: Colors.teal.shade800)),
+          title: Text(
+              languageProvider.isEnglish ? 'Edit Customer' : 'کسٹمر میں ترمیم کریں',
+              style: TextStyle(color: Colors.teal.shade800)
+          ),
           backgroundColor: Colors.teal.shade50,
           content: SingleChildScrollView(
             child: Column(
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: InputDecoration(labelText: 'Name', labelStyle: TextStyle(color: Colors.teal.shade600)),
+                  decoration: InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Name' : 'نام',
+                      labelStyle: TextStyle(color: Colors.teal.shade600)
+                  ),
                 ),
                 TextField(
                   controller: addressController,
-                  decoration: InputDecoration(labelText: 'Address', labelStyle: TextStyle(color: Colors.teal.shade600)),
+                  decoration: InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Address' : 'پتہ',
+                      labelStyle: TextStyle(color: Colors.teal.shade600)
+                  ),
                 ),
                 TextField(
                   controller: phoneController,
-                  decoration: InputDecoration(labelText: 'Phone', labelStyle: TextStyle(color: Colors.teal.shade600)),
+                  decoration: InputDecoration(
+                      labelText: languageProvider.isEnglish ? 'Phone' : 'فون',
+                      labelStyle: TextStyle(color: Colors.teal.shade600)
+                  ),
                   keyboardType: TextInputType.phone,
                 ),
               ],
@@ -413,19 +434,42 @@ class _CustomerListState extends State<CustomerList> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: Colors.teal.shade800)),
+              child: Text(
+                  languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں',
+                  style: TextStyle(color: Colors.teal.shade800)
+              ),
             ),
             ElevatedButton(
-              onPressed: () {
-                customerProvider.updateCustomer(
-                  customer.id,
-                  nameController.text,
-                  addressController.text,
-                  phoneController.text,
-                );
-                Navigator.pop(context);
+              onPressed: () async {
+                try {
+                  await customerProvider.updateCustomer(
+                    customer.id,
+                    nameController.text,
+                    addressController.text,
+                    phoneController.text,
+                  );
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(languageProvider.isEnglish
+                          ? 'Customer updated successfully'
+                          : 'کسٹمر کامیابی سے اپ ڈیٹ ہو گیا'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(languageProvider.isEnglish
+                          ? 'Error updating customer: $e'
+                          : 'کسٹمر کو اپ ڈیٹ کرنے میں خرابی: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
-              child: const Text('Save'),
+              child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade400),
             ),
           ],

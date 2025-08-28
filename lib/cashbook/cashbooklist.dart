@@ -168,31 +168,48 @@ class _CashbookListPageState extends State<CashbookListPage> {
     final pdf = pw.Document();
     final totals = _calculateTotals(entries);
 
-    // Pre-generate all description images
+    // Pre-generate description images
     List<Uint8List> descriptionImages = [];
     for (var entry in entries) {
-      // final imageData = await _createTextImage(entry.description);
-      // In the _generatePdfBytes method, update the description processing:
       final imageData = await _createTextImage(
-          entry.source == "expense_page"
-              ? entry.description.replaceFirst("Expense: ", "").replaceFirst("اخراجات: ", "")
-              : entry.description
+        entry.source == "expense_page"
+            ? entry.description.replaceFirst("Expense: ", "").replaceFirst("اخراجات: ", "")
+            : entry.description,
       );
       descriptionImages.add(imageData);
     }
+
+    // Pre-generate title
+    final titleImage = await _createTextImage(
+      languageProvider.isEnglish ? "Cashbook Report" : "کیش بک رپورٹ",
+    );
+
+    // Pre-generate headers
+    final headerDate = await _createTextImage(languageProvider.isEnglish ? "Date" : "تاریخ");
+    final headerDesc = await _createTextImage(languageProvider.isEnglish ? "Description" : "تفصیلات");
+    final headerType = await _createTextImage(languageProvider.isEnglish ? "Type" : "قسم");
+    final headerAmount = await _createTextImage(languageProvider.isEnglish ? "Amount" : "رقم");
+
+    // Pre-generate totals section labels
+    final totalInLabel = await _createTextImage(languageProvider.isEnglish ? "Total Cash In" : "ٹوٹل کیش ان");
+    final totalOutLabel = await _createTextImage(languageProvider.isEnglish ? "Total Cash Out" : "ٹوٹل کیش آؤٹ");
+    final remainingLabel = await _createTextImage(languageProvider.isEnglish ? "Remaining Cash" : "بقایا رقم");
 
     pdf.addPage(
       pw.MultiPage(
         build: (pw.Context context) {
           return [
-            pw.Header(
-              level: 0,
-              child: pw.Text(
-                  languageProvider.isEnglish ? 'Cashbook Report' : 'کیش بک رپورٹ',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)
+            // Title
+            pw.Center(
+              child: pw.Image(
+                pw.MemoryImage(titleImage),
+                height: 50,
+                fit: pw.BoxFit.contain,
               ),
             ),
             pw.SizedBox(height: 20),
+
+            // Table
             pw.Table(
               border: pw.TableBorder.all(),
               columnWidths: {
@@ -202,39 +219,29 @@ class _CashbookListPageState extends State<CashbookListPage> {
                 3: const pw.FlexColumnWidth(1.5),
               },
               children: [
+                // Header row
                 pw.TableRow(
                   decoration: pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                          languageProvider.isEnglish ? 'Date' : 'تاریخ',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
-                      ),
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Image(pw.MemoryImage(headerDate), height: 25),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                          languageProvider.isEnglish ? 'Description' : 'تفصیلات',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
-                      ),
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Image(pw.MemoryImage(headerDesc), height: 25),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                          languageProvider.isEnglish ? 'Type' : 'قسم',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
-                      ),
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Image(pw.MemoryImage(headerType), height: 25),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(8),
-                      child: pw.Text(
-                          languageProvider.isEnglish ? 'Amount' : 'رقم',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold)
-                      ),
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Image(pw.MemoryImage(headerAmount), height: 25),
                     ),
                   ],
                 ),
+                // Data rows
                 ...entries.asMap().entries.map((entry) {
                   final index = entry.key;
                   final cashEntry = entry.value;
@@ -247,11 +254,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
-                        child: pw.Image(
-                          pw.MemoryImage(descriptionImages[index]),
-                          height: 30,
-                          fit: pw.BoxFit.contain,
-                        ),
+                        child: pw.Image(pw.MemoryImage(descriptionImages[index]), height: 30, fit: pw.BoxFit.contain),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
@@ -266,23 +269,13 @@ class _CashbookListPageState extends State<CashbookListPage> {
                 }).toList(),
               ],
             ),
+
             pw.SizedBox(height: 20),
-            _buildPdfTotalRow(
-                languageProvider.isEnglish ? 'Total Cash In' : 'ٹوٹل کیش ان',
-                totals['cashIn']!,
-                languageProvider
-            ),
-            _buildPdfTotalRow(
-                languageProvider.isEnglish ? 'Total Cash Out' : 'ٹوٹل کیش آؤٹ',
-                totals['cashOut']!,
-                languageProvider
-            ),
-            _buildPdfTotalRow(
-                languageProvider.isEnglish ? 'Remaining Cash' : 'بقایا رقم',
-                totals['remaining']!,
-                languageProvider,
-                isHighlighted: true
-            ),
+
+            // Totals section
+            _buildPdfTotalRowWithImage(totalInLabel, totals['cashIn']!),
+            _buildPdfTotalRowWithImage(totalOutLabel, totals['cashOut']!),
+            _buildPdfTotalRowWithImage(remainingLabel, totals['remaining']!, isHighlighted: true),
           ];
         },
       ),
@@ -291,32 +284,21 @@ class _CashbookListPageState extends State<CashbookListPage> {
     return pdf.save();
   }
 
-  pw.Widget _buildPdfTotalRow(String label, double value, LanguageProvider languageProvider,
-      {bool isHighlighted = false})
-  {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
+  /// Helper for totals row with image label
+  pw.Widget _buildPdfTotalRowWithImage(Uint8List labelImage, double value, {bool isHighlighted = false}) {
+    return pw.Container(
+      color: isHighlighted ? PdfColors.grey300 : null,
+      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontWeight: isHighlighted ? pw.FontWeight.bold : pw.FontWeight.normal,
-              color: isHighlighted ? PdfColors.blue : PdfColors.black,
-            ),
-          ),
-          pw.Text(
-            '${value.toStringAsFixed(2)}${languageProvider.isEnglish ? 'Pkr' : 'روپے'}',
-            style: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: isHighlighted ? PdfColors.green : PdfColors.black,
-            ),
-          ),
+          pw.Image(pw.MemoryImage(labelImage), height: 30, fit: pw.BoxFit.contain),
+          pw.Text(value.toStringAsFixed(2)),
         ],
       ),
     );
   }
+
 
   Future<void> _selectDateRange(BuildContext context) async {
     final DateTimeRange? picked = await showDateRangePicker(

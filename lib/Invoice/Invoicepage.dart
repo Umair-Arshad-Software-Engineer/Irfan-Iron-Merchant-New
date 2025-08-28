@@ -156,7 +156,7 @@ import '../bankmanagement/banknames.dart';
       return subtotal - discountAmount + _mazdoori;
     }
 
-    Future<double> _getRemainingBalance(String customerId, {DateTime? asOfDate}) async {
+    Future<double> _getRemainingBalance(String customerId, {String? excludeInvoiceId, DateTime? asOfDate}) async {
       try {
         final customerLedgerRef = _db.child('ledger').child(customerId);
         final query = customerLedgerRef.orderByChild('transactionDate');
@@ -175,21 +175,31 @@ import '../bankmanagement/banknames.dart';
                 return dateA.compareTo(dateB);
               });
 
-            double lastBalance = 0.0;
+            double runningBalance = 0.0;
             final targetDate = asOfDate ?? DateTime.now();
 
             for (var entry in entries) {
               final entryData = entry.value as Map<dynamic, dynamic>;
               final entryDate = DateTime.parse(entryData['transactionDate'] as String);
 
-              if (entryDate.isBefore(targetDate) || entryDate.isAtSameMomentAs(targetDate)) {
-                lastBalance = (entryData['remainingBalance'] as num?)?.toDouble() ?? 0.0;
-              } else {
-                break; // We've passed the target date
+              // Skip entries after the target date
+              if (entryDate.isAfter(targetDate)) {
+                continue;
               }
+
+              // Skip the invoice we want to exclude
+              if (excludeInvoiceId != null && entryData['invoiceNumber'] == excludeInvoiceId) {
+                continue;
+              }
+
+              final creditAmount = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final debitAmount = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              // Update running balance
+              runningBalance += creditAmount - debitAmount;
             }
 
-            return lastBalance;
+            return runningBalance;
           }
         }
 
@@ -227,7 +237,8 @@ import '../bankmanagement/banknames.dart';
       final remainingAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Remaining Amount:' : 'بقیہ رقم:');
 
 
-      // Get payment details
+
+// Get payment details
       double paidAmount = 0.0;
       try {
         final payments = await invoiceProvider.getInvoicePayments(invoice['invoiceNumber']);
@@ -235,6 +246,7 @@ import '../bankmanagement/banknames.dart';
       } catch (e) {
         print("Error fetching payments: $e");
       }
+
 
       // double grandTotal = _calculateGrandTotal();
       // double remainingAmount = grandTotal - paidAmount;
@@ -277,15 +289,27 @@ import '../bankmanagement/banknames.dart';
       final String formattedDate = '${invoiceDate.day}/${invoiceDate.month}/${invoiceDate.year}';
       final String formattedTime = '${invoiceDate.hour}:${invoiceDate.minute.toString().padLeft(2, '0')}';
 
-      // Get the remaining balance from the ledger (excluding current invoice)
-      double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!);
-      double remainingBalance = remainingBalanceold;
+
+      // Get the balance EXCLUDING the current invoice amount
+      double previousBalance = await _getRemainingBalance(
+      _selectedCustomerId!,
+      excludeInvoiceId: invoice['invoiceNumber'], // Always exclude current invoice
+      );
 
       double grandTotal = _calculateGrandTotal();
-
-      // Calculate the new balance (previous balance + current invoice amount)
-      double newBalance = remainingBalance + grandTotal;
+      double newBalance = previousBalance + grandTotal;
       double remainingAmount = newBalance - paidAmount;
+      // // Get the remaining balance from the ledger (excluding current invoice)
+      // double remainingBalanceold = await _getRemainingBalance(_selectedCustomerId!);
+      // double remainingBalance = remainingBalanceold;
+      // double grandTotal = _calculateGrandTotal();
+      // double newBalance = remainingBalance + grandTotal;
+
+
+
+
+
+      // double remainingAmount = newBalance - paidAmount;
 
       // Load the image asset for the logo
       final ByteData bytes = await rootBundle.load('assets/images/logo.png');
@@ -296,6 +320,38 @@ import '../bankmanagement/banknames.dart';
       final ByteData namebytes = await rootBundle.load('assets/images/name.png');
       final namebuffer = namebytes.buffer.asUint8List();
       final nameimage = pw.MemoryImage(namebuffer);
+
+
+      final ByteData discountbytes = await rootBundle.load('assets/images/discount.png');
+      final discountbuffer = discountbytes.buffer.asUint8List();
+      final discountimage = pw.MemoryImage(discountbuffer);
+
+      final ByteData mazdooribytes = await rootBundle.load('assets/images/mazdoori.png');
+      final mazdooribuffer = mazdooribytes.buffer.asUint8List();
+      final mazdooriimage = pw.MemoryImage(mazdooribuffer);
+
+      final ByteData filledamountbytes = await rootBundle.load('assets/images/filledamount.png');
+      final filledamountbuffer = filledamountbytes.buffer.asUint8List();
+      final filledamountimage = pw.MemoryImage(filledamountbuffer);
+
+
+      final ByteData previousamountbytes = await rootBundle.load('assets/images/previousamount.png');
+      final previousamountbuffer = previousamountbytes.buffer.asUint8List();
+      final previousamountimage = pw.MemoryImage(previousamountbuffer);
+
+      final ByteData totalwithpreviousamountbytes = await rootBundle.load('assets/images/totalinvoicewithprevious.png');
+      final totalwithpreviousbuffer = totalwithpreviousamountbytes.buffer.asUint8List();
+      final totalwithpreviousimage = pw.MemoryImage(totalwithpreviousbuffer);
+
+      final ByteData paidamountbytes = await rootBundle.load('assets/images/paidamount.png');
+      final paidamountbuffer = paidamountbytes.buffer.asUint8List();
+      final paidamountimage = pw.MemoryImage(paidamountbuffer);
+
+
+      final ByteData remainingamountbytes = await rootBundle.load('assets/images/remainingamount.png');
+      final remainingamountbuffer = remainingamountbytes.buffer.asUint8List();
+      final remainingamountimage = pw.MemoryImage(remainingamountbuffer);
+
       // Load the image asset for the logo
       final ByteData addressbytes = await rootBundle.load('assets/images/address.png');
       final addressbuffer = addressbytes.buffer.asUint8List();
@@ -415,40 +471,99 @@ import '../bankmanagement/banknames.dart';
                 ),
                 pw.SizedBox(height: 10),
 
+                //
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+                //     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
+                //     pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Invoice Amount:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                //     pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                //   ],
+                // ),
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+                //     pw.Text(previousBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                //   ],
+                // ),
+                // // ✅ New Balance (Total of Invoice + Previous Balance)
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Total (Previous + Invoice):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                //   ],
+                // ),
+                // // Add paid amount row
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
+                //     pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                //   ],
+                // ),
+                //
+                // // Add remaining amount row
+                // pw.Row(
+                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
+                //     pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                //   ],
+                // ),
 
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                    // pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Image(discountimage, width: 50, height: 40),
+                    pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 15)),
                   ],
                 ),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                    // pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Image(mazdooriimage, width: 50, height: 40),
+                    pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 15)),
                   ],
                 ),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Invoice Amount:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Image(filledamountimage, width: 50, height: 30,dpi: 1000),
+                    // pw.Text('Filled Amount:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text(remainingBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
+                    pw.Image(previousamountimage, width: 50, height: 40,dpi: 1000),
+                    // pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text(previousBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 15)),
                   ],
                 ),
-                // ✅ New Balance (Total of Invoice + Previous Balance)
+                // ✅ New Balance (Total of filled + Previous Balance)
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Total (Invoice + Previous Balance):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    // pw.Text('Total (Previous + Filled):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Image(totalwithpreviousimage, width: 100, height: 40,dpi: 1000),
                     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
@@ -456,7 +571,8 @@ import '../bankmanagement/banknames.dart';
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
+                    // pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Image(paidamountimage, width: 50, height: 30,dpi: 1000),
                     pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                   ],
                 ),
@@ -465,67 +581,12 @@ import '../bankmanagement/banknames.dart';
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
+                    // pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
+                    pw.Image(remainingamountimage, width: 50, height: 40,dpi: 1000),
                     pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                   ],
                 ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(subTotalLabel, dpi: 1000),
-                //     pw.Text(_calculateSubtotal().toStringAsFixed(2)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(discountLabel, dpi: 1000),
-                //     pw.Text(_discount.toStringAsFixed(2)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(mazdooriLabel, dpi: 1000),
-                //     pw.Text(_mazdoori.toStringAsFixed(2)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(invoiceAmountLabel, dpi: 1000),
-                //     pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(previousBalanceLabel, dpi: 1000),
-                //     pw.Text(remainingBalance.toStringAsFixed(2)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(totalLabel, dpi: 1000),
-                //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(paidAmountLabel, dpi: 1000),
-                //     pw.Text(paidAmount.toStringAsFixed(2)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Image(remainingAmountLabel, dpi: 1000),
-                //     pw.Text(remainingAmount.toStringAsFixed(2)),
-                //   ],
-                // ),
-                pw.SizedBox(height: 60),
+                pw.SizedBox(height: 30),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.end,
                   children: [
