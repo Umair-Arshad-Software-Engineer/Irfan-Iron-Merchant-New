@@ -1278,7 +1278,6 @@ class InvoiceProvider with ChangeNotifier {
           break;
 
         case 'simplecashbook':
-        // Only save to external simplecashbook node, not to invoice payment node
           await _db.child('simplecashbook').child(timestampId).set({
             'id': timestampId,
             'invoiceId': invoiceId,
@@ -1561,8 +1560,6 @@ class InvoiceProvider with ChangeNotifier {
       notifyListeners();
     }
   }
-
-
 
   // Add this method to your InvoiceProvider class
   Future<double> getCustomerRemainingBalance(String customerId) async {

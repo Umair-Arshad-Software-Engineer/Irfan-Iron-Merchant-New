@@ -1894,9 +1894,17 @@ class FilledList extends StatelessWidget {
                               color: customerBalance >= 0 ? Colors.green : Colors.red,
                             ),
                           ),
-
+                          Row(
+                            children: [
+                              IconButton(onPressed: (){
+                                onFilledLongPress(filled);
+                              }, icon: Icon(Icons.delete,color: Colors.red,)),
+                              IconButton(onPressed: (){
+                                onFilledTap(filled);
+                              }, icon: Icon(Icons.edit)),
+                            ],
+                          ),
                           const Spacer(),
-
                           /// 🔹 Share button
                           Align(
                             alignment: Alignment.bottomRight,

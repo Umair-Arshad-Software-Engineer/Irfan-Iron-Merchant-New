@@ -1019,6 +1019,16 @@ class InvoiceList extends StatelessWidget {
                               color: customerBalance >= 0 ? Colors.green : Colors.red,
                             ),
                           ),
+                         Row(
+                           children: [
+                             IconButton(onPressed: (){
+                               onInvoiceLongPress(invoice);
+                             }, icon: Icon(Icons.delete,color: Colors.red,)),
+                             IconButton(onPressed: (){
+                               onInvoiceTap(invoice);
+                             }, icon: Icon(Icons.edit)),
+                           ],
+                         ),
                           const Spacer(),
                           Align(
                             alignment: Alignment.bottomRight,

@@ -1548,7 +1548,6 @@ import '../bankmanagement/banknames.dart';
                           return;
                         }
                       }
-
                       // Validate bank-specific fields
                       if (selectedPaymentMethod == 'Bank' && (_selectedBankId == null || _selectedBankName == null)) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1559,9 +1558,6 @@ import '../bankmanagement/banknames.dart';
                         setState(() => _isPaymentButtonPressed = false);
                         return;
                       }
-
-
-
                       try {
                         await invoiceProvider.payInvoiceWithSeparateMethod(
                           // createdAt: _dateController.text,
