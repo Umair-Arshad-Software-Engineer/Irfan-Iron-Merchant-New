@@ -903,7 +903,7 @@ class InvoiceList extends StatelessWidget {
             crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 2 : 1.3, // taller cards on smaller screens
+            childAspectRatio: isWideScreen ? 1.1 : 0.9, // taller cards on smaller screens
           ),
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {

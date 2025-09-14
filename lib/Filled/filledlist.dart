@@ -1772,7 +1772,7 @@ class FilledList extends StatelessWidget {
             crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 2 : 1.3, // same style as invoices
+            childAspectRatio: isWideScreen ? 1.1 : 0.9, // same style as invoices
           ),
           itemCount: filteredFilled.length,
           itemBuilder: (context, index) {
