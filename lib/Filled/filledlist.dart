@@ -1149,9 +1149,6 @@ async {
 }
 
 
-
-
-
 class FilledList extends StatelessWidget {
   final ScrollController scrollController;
   final List<Map<String, dynamic>> filteredFilled;
@@ -1797,15 +1794,33 @@ class FilledList extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          /// 🔹 Centered Logo
-                          Center(
-                            child: Image.asset(
-                              'assets/images/logo.png',
-                              height: 80,
-                              fit: BoxFit.contain,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: Colors.teal,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              // SizedBox(width: 120,),
+                              Center(
+                                child: Image.asset(
+                                  'assets/images/logo.png', // your logo path
+                                  height: 80,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              Text(
+                                '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(filled['createdAt'])}',
+                                style: TextStyle(
+                                  fontSize: isWideScreen ? 14 : 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-
                           /// 🔹 Title Row
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1836,32 +1851,32 @@ class FilledList extends StatelessWidget {
                             '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${filled['customerName']}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: isWideScreen ? 16 : 14,
+                              fontSize: isWideScreen ? 18 : 16,
                             ),
                           ),
 
                           const SizedBox(height: 4),
 
                           /// 🔹 Date + Filled Number
-                          Row(
-                            children: [
-                              Text(
-                                '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(filled['createdAt'])}',
-                                style: TextStyle(
-                                  fontSize: isWideScreen ? 14 : 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 20),
-                              Text(
-                                '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['filledNumber']}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                          // Row(
+                          //   children: [
+                          //     Text(
+                          //       '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(filled['createdAt'])}',
+                          //       style: TextStyle(
+                          //         fontSize: isWideScreen ? 18 : 16,
+                          //         fontWeight: FontWeight.bold,
+                          //       ),
+                          //     ),
+                          //     // const SizedBox(width: 20),
+                          //     // Text(
+                          //     //   '${languageProvider.isEnglish ? 'Filled #' : 'فلڈ نمبر'} ${filled['filledNumber']}',
+                          //     //   style: const TextStyle(
+                          //     //     fontSize: 12,
+                          //     //     fontWeight: FontWeight.bold,
+                          //     //   ),
+                          //     // ),
+                          //   ],
+                          // ),
 
                           const SizedBox(height: 4),
 
@@ -1869,7 +1884,7 @@ class FilledList extends StatelessWidget {
                           Text(
                             '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
                             style: TextStyle(
-                              fontSize: isWideScreen ? 16 : 14,
+                              fontSize: isWideScreen ? 18 : 16,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1904,7 +1919,6 @@ class FilledList extends StatelessWidget {
                               }, icon: Icon(Icons.edit)),
                             ],
                           ),
-                          const Spacer(),
                           /// 🔹 Share button
                           Align(
                             alignment: Alignment.bottomRight,
@@ -1916,6 +1930,13 @@ class FilledList extends StatelessWidget {
                               tooltip: languageProvider.isEnglish
                                   ? 'Share filled'
                                   : 'فلڈ شیئر کریں',
+                            ),
+                          ),
+                          Center(
+                            child: Image.asset(
+                              'assets/images/line.png', // your logo path
+                              height: 60,
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ],

@@ -929,13 +929,32 @@ class InvoiceList extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          /// 🔹 Centered Logo on top
-                          Center(
-                            child: Image.asset(
-                              'assets/images/logo.png', // your logo path
-                              height: 80,
-                              fit: BoxFit.contain,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: Colors.teal,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              // SizedBox(width: 120,),
+                              Center(
+                                child: Image.asset(
+                                  'assets/images/logo.png', // your logo path
+                                  height: 80,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              Text(
+                                '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(invoice['createdAt'])}',
+                                style: TextStyle(
+                                  fontSize: isWideScreen ? 14 : 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -963,41 +982,35 @@ class InvoiceList extends StatelessWidget {
                             '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: isWideScreen ? 16 : 14,
+                              fontSize: isWideScreen ? 18 : 16,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(invoice['createdAt'])}',
+                                '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
                                 style: TextStyle(
-                                  fontSize: isWideScreen ? 14 : 12,
+                                  fontSize: isWideScreen ? 18 : 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              SizedBox(width: 20),
                               Text(
                                 '${languageProvider.isEnglish ? 'Sarya Weight' : 'سریا وزن'}: ${_getTotalWeight(invoice['items'])}',
                                 style: TextStyle(
-                                  fontSize: isWideScreen ? 14 : 12,
+                                  fontSize: isWideScreen ? 18 : 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
-                            style: TextStyle(
-                              fontSize: isWideScreen ? 16 : 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          // Text(
+                          //   '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                          //   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          // ),
+
                           Text(
                             '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
                             style: TextStyle(
@@ -1029,7 +1042,6 @@ class InvoiceList extends StatelessWidget {
                              }, icon: Icon(Icons.edit)),
                            ],
                          ),
-                          const Spacer(),
                           Align(
                             alignment: Alignment.bottomRight,
                             child: IconButton(
@@ -1040,6 +1052,13 @@ class InvoiceList extends StatelessWidget {
                               tooltip: languageProvider.isEnglish
                                   ? 'Share invoice'
                                   : 'انوائس شیئر کریں',
+                            ),
+                          ),
+                          Center(
+                            child: Image.asset(
+                              'assets/images/line.png', // your logo path
+                              height: 60,
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ],
