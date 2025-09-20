@@ -136,7 +136,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             _buildDataColumn(isEnglish ? 'Name' : 'نام'),
             _buildDataColumn(isEnglish ? 'Address' : 'ایڈریس'),
             _buildDataColumn(isEnglish ? 'Phone No' : 'فون نمبر'),
-            _buildDataColumn(isEnglish ? 'Action' : 'ایکشن'),
+            _buildDataColumn(isEnglish ? 'Actions' : 'ایکشن'),
             _buildDataColumn(isEnglish ? 'Attendance' : 'حاضری'),
           ],
           rows: employees.map((entry) => _buildDataRow(entry, isEnglish)).toList(),
@@ -165,9 +165,9 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         DataCell(Text(employee['name'] ?? '', style: _textStyle())),
         DataCell(Text(employee['address'] ?? '', style: _textStyle())),
         DataCell(Text(employee['phone'] ?? '', style: _textStyle())),
-        DataCell(_buildEditButton(id)),
-        DataCell(_buildAttendanceButtons(id, isEnglish)),
-        DataCell(
+        DataCell(_buildEditButton(id)), // This is cell 4
+        DataCell(_buildAttendanceButtons(id, isEnglish)), // This is cell 5
+        DataCell( // This creates a 6th cell which causes the error
           Row(
             children: [
               _buildEditButton(id),
@@ -181,7 +181,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       ],
     );
   }
-
   TextStyle _textStyle() => TextStyle(fontSize: 15, color: Colors.grey[800]);
 
   Widget _buildEditButton(String id) {

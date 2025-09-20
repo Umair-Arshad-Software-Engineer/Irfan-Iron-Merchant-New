@@ -903,7 +903,7 @@ class InvoiceList extends StatelessWidget {
             crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 1.1 : 0.9, // taller cards on smaller screens
+            childAspectRatio: isWideScreen ? 1.1 : 0.85, // taller cards on smaller screens
           ),
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
@@ -1006,11 +1006,6 @@ class InvoiceList extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          // Text(
-                          //   '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                          //   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                          // ),
-
                           Text(
                             '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
                             style: TextStyle(
@@ -1040,24 +1035,35 @@ class InvoiceList extends StatelessWidget {
                              IconButton(onPressed: (){
                                onInvoiceTap(invoice);
                              }, icon: Icon(Icons.edit)),
+                             Spacer(),
+                             IconButton(
+                               icon: const Icon(Icons.share, size: 20),
+                               onPressed: () {
+                                 _captureAndShareInvoice(screenshotKey, context);
+                               },
+                               tooltip: languageProvider.isEnglish
+                                   ? 'Share invoice'
+                                   : 'انوائس شیئر کریں',
+                             ),
                            ],
                          ),
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: IconButton(
-                              icon: const Icon(Icons.share, size: 20),
-                              onPressed: () {
-                                _captureAndShareInvoice(screenshotKey, context);
-                              },
-                              tooltip: languageProvider.isEnglish
-                                  ? 'Share invoice'
-                                  : 'انوائس شیئر کریں',
-                            ),
-                          ),
+                          // Align(
+                          //   alignment: Alignment.bottomRight,
+                          //   child: IconButton(
+                          //     icon: const Icon(Icons.share, size: 20),
+                          //     onPressed: () {
+                          //       _captureAndShareInvoice(screenshotKey, context);
+                          //     },
+                          //     tooltip: languageProvider.isEnglish
+                          //         ? 'Share invoice'
+                          //         : 'انوائس شیئر کریں',
+                          //   ),
+                          // ),
                           Center(
                             child: Image.asset(
                               'assets/images/line.png', // your logo path
                               height: 60,
+                              width: 250,
                               fit: BoxFit.contain,
                             ),
                           ),

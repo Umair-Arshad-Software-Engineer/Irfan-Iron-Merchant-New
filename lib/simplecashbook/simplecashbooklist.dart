@@ -551,10 +551,10 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                             icon: const Icon(Icons.swap_horiz, color: Colors.orange),
                             onPressed: () => _showPaymentDialog(entry),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _editEntry(entry),
-                          ),
+                          // IconButton(
+                          //   icon: const Icon(Icons.edit, color: Colors.blue),
+                          //   onPressed: () => _editEntry(entry),
+                          // ),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _showDeleteConfirmation(entry.id!),

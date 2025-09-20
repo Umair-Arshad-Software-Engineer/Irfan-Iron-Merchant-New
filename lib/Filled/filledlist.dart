@@ -1769,7 +1769,7 @@ class FilledList extends StatelessWidget {
             crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 1.1 : 0.9, // same style as invoices
+            childAspectRatio: isWideScreen ? 1.1 : 0.85, // same style as invoices
           ),
           itemCount: filteredFilled.length,
           itemBuilder: (context, index) {
@@ -1917,25 +1917,36 @@ class FilledList extends StatelessWidget {
                               IconButton(onPressed: (){
                                 onFilledTap(filled);
                               }, icon: Icon(Icons.edit)),
+                              Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.share, size: 20),
+                                onPressed: () {
+                                  _captureAndShareFilled(screenshotKey, context);
+                                },
+                                tooltip: languageProvider.isEnglish
+                                    ? 'Share filled'
+                                    : 'فلڈ شیئر کریں',
+                              ),
                             ],
                           ),
                           /// 🔹 Share button
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: IconButton(
-                              icon: const Icon(Icons.share, size: 20),
-                              onPressed: () {
-                                _captureAndShareFilled(screenshotKey, context);
-                              },
-                              tooltip: languageProvider.isEnglish
-                                  ? 'Share filled'
-                                  : 'فلڈ شیئر کریں',
-                            ),
-                          ),
+                          // Align(
+                          //   alignment: Alignment.bottomRight,
+                          //   child: IconButton(
+                          //     icon: const Icon(Icons.share, size: 20),
+                          //     onPressed: () {
+                          //       _captureAndShareFilled(screenshotKey, context);
+                          //     },
+                          //     tooltip: languageProvider.isEnglish
+                          //         ? 'Share filled'
+                          //         : 'فلڈ شیئر کریں',
+                          //   ),
+                          // ),
                           Center(
                             child: Image.asset(
                               'assets/images/line.png', // your logo path
                               height: 60,
+                              width: 250,
                               fit: BoxFit.contain,
                             ),
                           ),

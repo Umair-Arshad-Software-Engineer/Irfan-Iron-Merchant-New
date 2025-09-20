@@ -284,7 +284,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
     return pdf.save();
   }
 
-  /// Helper for totals row with image label
   pw.Widget _buildPdfTotalRowWithImage(Uint8List labelImage, double value, {bool isHighlighted = false}) {
     return pw.Container(
       color: isHighlighted ? PdfColors.grey300 : null,

@@ -299,7 +299,7 @@ class Dashboard extends StatelessWidget {
           ),
           _buildDashboardCard(
             Icons.account_balance_wallet,
-            languageProvider.isEnglish ? 'View Ledger' : 'کھاتہ دیکھیں',
+            languageProvider.isEnglish ? 'Ledger' : 'کھاتہ دیکھیں',
             Colors.green,
                 () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerSelection())),
           ),
@@ -356,7 +356,6 @@ class Dashboard extends StatelessWidget {
                 ),
                 child: Icon(icon, size: 32, color: color),
               ),
-              const SizedBox(height: 16),
               Text(
                 title,
                 textAlign: TextAlign.center,
