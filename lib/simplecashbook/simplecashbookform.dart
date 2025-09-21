@@ -7,6 +7,7 @@ import '../Provider/lanprovider.dart';
 import '../Provider/customerprovider.dart';
 import '../Provider/invoice provider.dart';
 import '../Provider/filled provider.dart';
+import '../bankmanagement/banknames.dart';
 
 class SimpleCashbookFormPage extends StatefulWidget {
   final DatabaseReference databaseRef;
@@ -37,6 +38,12 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
   String? _selectedInvoiceOrFilled;
   String? _selectedInvoiceId;
   String? _selectedFilledId;
+  String? selectedPaymentMethod;
+  Map<String, dynamic>? _selectedBank;
+  Map<String, dynamic>? _selectedChequeBank;
+  List<Map<String, dynamic>> _cachedBanks = [];
+  TextEditingController _chequeNumberController = TextEditingController();
+  DateTime? _selectedChequeDate;
 
   @override
   void initState() {
@@ -58,6 +65,365 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     _descriptionController.dispose();
     _amountController.dispose();
     super.dispose();
+  }
+
+
+
+
+  void _saveEntry() async {
+    if (_formKey.currentState!.validate()) {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      final db = FirebaseDatabase.instance.ref();
+
+      try {
+        final amount = double.parse(_amountController.text);
+        final isPaid = selectedPaymentMethod != null;
+
+        // Create and save SimpleCashbook entry
+        final entry = CashbookEntry(
+          id: widget.editingEntry?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          description: _descriptionController.text,
+          amount: amount,
+          dateTime: _selectedDate,
+          type: _selectedType,
+          isPaid: isPaid,
+          paymentMethod: selectedPaymentMethod,
+          paidAmount: isPaid ? amount : null,
+          paymentDate: isPaid ? DateTime.now() : null,
+          customerId: _selectedCustomer?.id,
+          customerName: _selectedCustomer?.name,
+          invoiceId: _selectedInvoiceId,
+          invoiceNumber: _selectedInvoiceOrFilled,
+          filledId: _selectedFilledId,
+          filledNumber: _selectedInvoiceOrFilled,
+          bankId: _selectedBank?['id'] ?? _selectedChequeBank?['id'],
+          bankName: _selectedBank?['name'] ?? _selectedChequeBank?['name'],
+          chequeNumber: selectedPaymentMethod == 'Cheque' ? _chequeNumberController.text : null,
+          chequeDate: selectedPaymentMethod == 'Cheque' ? _selectedChequeDate : null,
+        );
+
+        // Save to SimpleCashbook
+        await widget.databaseRef.child(entry.id!).set(entry.toJson());
+
+        // If payment method is selected, create transaction in appropriate node
+        if (selectedPaymentMethod != null) {
+          await _createPaymentTransaction(entry, db);
+
+          // Update invoice or filled if applicable
+          if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+            await _updateFilledPayment(entry, db);
+          } else if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) {
+            await _updateInvoicePayment(entry, db);
+          }
+        }
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                widget.editingEntry == null
+                    ? (languageProvider.isEnglish
+                    ? 'Entry added successfully'
+                    : 'انٹری کامیابی سے شامل ہو گئی')
+                    : (languageProvider.isEnglish
+                    ? 'Entry updated successfully'
+                    : 'انٹری کامیابی سے اپ ڈیٹ ہو گئی'),
+              ),
+            ),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                languageProvider.isEnglish
+                    ? 'Error saving entry: $error'
+                    : 'انٹری محفوظ کرنے میں خرابی: $error',
+              ),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _createPaymentTransaction(CashbookEntry entry, DatabaseReference db) async {
+    final timestampId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    switch (selectedPaymentMethod!.toLowerCase()) {
+      case 'cash':
+        await db.child('cashbook').child(timestampId).set({
+          'id': timestampId,
+          'customerId': entry.customerId,
+          'customerName': entry.customerName,
+          'amount': entry.amount,
+          'description': entry.description,
+          'dateTime': entry.dateTime.toIso8601String(),
+          'paymentKey': timestampId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'type': 'cash_in',
+          'transferredFrom': 'simplecashbook',
+          'originalEntryId': entry.id,
+          'invoiceId': entry.invoiceId,
+          'invoiceNumber': entry.invoiceNumber,
+          'filledId': entry.filledId,
+          'filledNumber': entry.filledNumber,
+        });
+        break;
+
+      case 'online':
+        await db.child('onlinePayments').child(timestampId).set({
+          'id': timestampId,
+          'customerId': entry.customerId,
+          'customerName': entry.customerName,
+          'amount': entry.amount,
+          'description': entry.description,
+          'dateTime': entry.dateTime.toIso8601String(),
+          'paymentKey': timestampId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'transferredFrom': 'simplecashbook',
+          'originalEntryId': entry.id,
+          'invoiceId': entry.invoiceId,
+          'invoiceNumber': entry.invoiceNumber,
+          'filledId': entry.filledId,
+          'filledNumber': entry.filledNumber,
+        });
+        break;
+
+      case 'bank':
+        await db.child('bankTransactions').child(timestampId).set({
+          'id': timestampId,
+          'customerId': entry.customerId,
+          'customerName': entry.customerName,
+          'amount': entry.amount,
+          'description': entry.description,
+          'dateTime': entry.dateTime.toIso8601String(),
+          'paymentKey': timestampId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'bankId': entry.bankId,
+          'bankName': entry.bankName,
+          'type': 'cash_in',
+          'transferredFrom': 'simplecashbook',
+          'originalEntryId': entry.id,
+          'invoiceId': entry.invoiceId,
+          'invoiceNumber': entry.invoiceNumber,
+          'filledId': entry.filledId,
+          'filledNumber': entry.filledNumber,
+        });
+
+        if (entry.bankId != null) {
+          final bankTransactionsRef = db.child('banks/${entry.bankId}/transactions');
+          await bankTransactionsRef.push().set({
+            'amount': entry.amount,
+            'description': entry.description,
+            'type': 'cash_in',
+            'timestamp': entry.dateTime.millisecondsSinceEpoch,
+            'customerId': entry.customerId,
+            'customerName': entry.customerName,
+            'bankName': entry.bankName,
+            'transferredFrom': 'simplecashbook',
+            'originalEntryId': entry.id,
+            'invoiceId': entry.invoiceId,
+            'invoiceNumber': entry.invoiceNumber,
+            'filledId': entry.filledId,
+            'filledNumber': entry.filledNumber,
+          });
+
+          final bankBalanceRef = db.child('banks/${entry.bankId}/balance');
+          final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+          await bankBalanceRef.set(currentBalance + entry.amount);
+        }
+        break;
+
+      case 'cheque':
+        await db.child('cheques').child(timestampId).set({
+          'id': timestampId,
+          'customerId': entry.customerId,
+          'customerName': entry.customerName,
+          'amount': entry.amount,
+          'description': entry.description,
+          'dateTime': entry.dateTime.toIso8601String(),
+          'paymentKey': timestampId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'chequeNumber': entry.chequeNumber,
+          'chequeDate': entry.chequeDate?.toIso8601String(),
+          'bankId': entry.bankId,
+          'bankName': entry.bankName,
+          'status': 'pending',
+          'transferredFrom': 'simplecashbook',
+          'originalEntryId': entry.id,
+          'invoiceId': entry.invoiceId,
+          'invoiceNumber': entry.invoiceNumber,
+          'filledId': entry.filledId,
+          'filledNumber': entry.filledNumber,
+        });
+
+        if (entry.bankId != null) {
+          await db.child('banks/${entry.bankId}/cheques').child(timestampId).set({
+            'amount': entry.amount,
+            'chequeNumber': entry.chequeNumber,
+            'chequeDate': entry.chequeDate?.toIso8601String(),
+            'status': 'pending',
+            'customerName': entry.customerName,
+            'createdAt': DateTime.now().toIso8601String(),
+            'filledNumber': entry.filledNumber,
+            'invoiceNumber': entry.invoiceNumber,
+          });
+        }
+        break;
+
+      case 'slip':
+        await db.child('slipPayments').child(timestampId).set({
+          'id': timestampId,
+          'customerId': entry.customerId,
+          'customerName': entry.customerName,
+          'amount': entry.amount,
+          'description': entry.description,
+          'dateTime': entry.dateTime.toIso8601String(),
+          'paymentKey': timestampId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'transferredFrom': 'simplecashbook',
+          'originalEntryId': entry.id,
+          'invoiceId': entry.invoiceId,
+          'invoiceNumber': entry.invoiceNumber,
+          'filledId': entry.filledId,
+          'filledNumber': entry.filledNumber,
+        });
+        break;
+    }
+  }
+
+  Future<void> _updateFilledPayment(CashbookEntry entry, DatabaseReference db) async {
+    final filledRef = db.child('filled').child(entry.filledId!);
+
+    final filledSnapshot = await filledRef.get();
+    if (filledSnapshot.exists) {
+      final filled = Map<String, dynamic>.from(filledSnapshot.value as Map<dynamic, dynamic>);
+      final currentPaidAmount = _parseToDouble(filled['debitAmount'] ?? 0.0);
+      final grandTotal = _parseToDouble(filled['grandTotal'] ?? 0.0);
+
+      await filledRef.update({
+        'debitAmount': currentPaidAmount + entry.amount,
+        'paymentStatus': (currentPaidAmount + entry.amount) >= grandTotal ? 'paid' : 'partial'
+      });
+    }
+  }
+
+  Future<void> _updateInvoicePayment(CashbookEntry entry, DatabaseReference db) async {
+    final invoiceRef = db.child('invoices').child(entry.invoiceId!);
+
+    final invoiceSnapshot = await invoiceRef.get();
+    if (invoiceSnapshot.exists) {
+      final invoice = Map<String, dynamic>.from(invoiceSnapshot.value as Map<dynamic, dynamic>);
+      final currentPaidAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
+      final grandTotal = _parseToDouble(invoice['grandTotal'] ?? 0.0);
+
+      await invoiceRef.update({
+        'debitAmount': currentPaidAmount + entry.amount,
+        'paymentStatus': (currentPaidAmount + entry.amount) >= grandTotal ? 'paid' : 'partial'
+      });
+    }
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    return 0.0;
+  }
+
+
+
+
+
+
+
+  Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
+    if (_cachedBanks.isEmpty) {
+      final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
+      if (bankSnapshot.snapshot.value == null) return null;
+
+      final banks = bankSnapshot.snapshot.value as Map<dynamic, dynamic>;
+      _cachedBanks = banks.entries.map((e) => {
+        'id': e.key,
+        'name': e.value['name'],
+        'balance': e.value['balance']
+      }).toList();
+    }
+
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    Map<String, dynamic>? selectedBank;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _cachedBanks.length,
+            itemBuilder: (context, index) {
+              final bankData = _cachedBanks[index];
+              final bankName = bankData['name'];
+
+              // Find matching bank from pakistaniBanks list
+              Bank? matchedBank = pakistaniBanks.firstWhere(
+                    (b) => b.name.toLowerCase() == bankName.toLowerCase(),
+                orElse: () => Bank(
+                    name: bankName,
+                    iconPath: 'assets/default_bank.png'
+                ),
+              );
+
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: Image.asset(
+                    matchedBank.iconPath,
+                    width: 40,
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.account_balance, size: 40);
+                    },
+                  ),
+                  title: Text(
+                    bankName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () {
+                    selectedBank = {
+                      'id': bankData['id'],
+                      'name': bankName,
+                      'balance': bankData['balance']
+                    };
+                    Navigator.pop(context);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ کریں'),
+          ),
+        ],
+      ),
+    );
+
+    return selectedBank;
   }
 
   Future<List<Invoice>> _fetchInvoicesByCustomer(String customerId) async {
@@ -212,7 +578,6 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     );
   }
 
-  // Update the _selectInvoice and _selectFilled methods
   Future<void> _selectInvoice(BuildContext context) async {
     if (_selectedCustomer == null) return;
 
@@ -321,155 +686,63 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     }
   }
 
-  void _saveEntry() async {
-    if (_formKey.currentState!.validate()) {
-      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-
-      try {
-        final amount = double.parse(_amountController.text);
-
-        // Create and save SimpleCashbook entry
-        final entry = CashbookEntry(
-          id: widget.editingEntry?.id ??
-              DateTime.now().millisecondsSinceEpoch.toString(),
-          description: _descriptionController.text,
-          amount: amount,
-          dateTime: _selectedDate,
-          type: _selectedType,
-          customerId: _selectedCustomer?.id,
-          customerName: _selectedCustomer?.name,
-          invoiceId: _selectedInvoiceId,
-          invoiceNumber: _selectedInvoiceOrFilled,
-          filledId: _selectedFilledId,
-          filledNumber: _selectedInvoiceOrFilled,
-        );
-
-        // Save to SimpleCashbook only (remove payment processing)
-        await widget.databaseRef.child(entry.id!).set(entry.toJson());
-
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.editingEntry == null
-                    ? (languageProvider.isEnglish
-                    ? 'Entry added successfully'
-                    : 'انٹری کامیابی سے شامل ہو گئی')
-                    : (languageProvider.isEnglish
-                    ? 'Entry updated successfully'
-                    : 'انٹری کامیابی سے اپ ڈیٹ ہو گئی'),
-              ),
-            ),
-          );
-        }
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                languageProvider.isEnglish
-                    ? 'Error saving entry: $error'
-                    : 'انٹری محفوظ کرنے میں خرابی: $error',
-              ),
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _processFilledOrderPayment(double amount, LanguageProvider languageProvider) async {
-    try {
-      // Since FilledProvider doesn't have a payment method like InvoiceProvider,
-      // we need to manually handle the payment logic for filled orders
-
-      final filledRef = FirebaseDatabase.instance.ref().child('filled').child(_selectedFilledId!);
-      final filledSnapshot = await filledRef.get();
-
-      if (filledSnapshot.exists) {
-        final filledData = Map<String, dynamic>.from(filledSnapshot.value as Map);
-        final customerId = filledData['customerId']?.toString() ?? '';
-        final customerName = filledData['customerName']?.toString() ?? '';
-        final filledNumber = filledData['filledNumber']?.toString() ?? '';
-        final grandTotal = _parseToDouble(filledData['grandTotal']);
-
-        // Update filled order with payment information
-        final currentPaidAmount = _parseToDouble(filledData['paidAmount'] ?? 0.0);
-        final newPaidAmount = currentPaidAmount + amount;
-
-        await filledRef.update({
-          'paidAmount': newPaidAmount,
-          'remainingAmount': grandTotal - newPaidAmount,
-          'lastPaymentDate': DateTime.now().toIso8601String(),
-        });
-
-        // Update customer ledger for filled order
-        await _updateCustomerLedgerForFilled(
-          customerId,
-          amount,
-          filledNumber,
-          grandTotal - newPaidAmount,
-        );
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              languageProvider.isEnglish
-                  ? 'Payment of Rs. $amount processed for filled order $filledNumber'
-                  : 'فل آرڈر $filledNumber کے لیے Rs. $amount کی ادائیگی پر کارروائی ہو گئی',
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      print('Error processing filled order payment: $error');
-      rethrow;
-    }
-  }
-
-  Future<void> _updateCustomerLedgerForFilled(
-      String customerId,
-      double paymentAmount,
-      String filledNumber,
-      double remainingBalance,
-      )
-  async {
-    try {
-      final customerLedgerRef = FirebaseDatabase.instance.ref().child('ledger').child(customerId);
-
-      final ledgerData = {
-        'referenceNumber': filledNumber,
-        'filledNumber': filledNumber,
-        'creditAmount': 0.0,
-        'debitAmount': paymentAmount,
-        'remainingBalance': remainingBalance,
-        'createdAt': DateTime.now().toIso8601String(),
-        'transactionDate': DateTime.now().toIso8601String(),
-        'paymentMethod': 'SimpleCashbook',
-        'description': 'Payment for filled order $filledNumber',
-      };
-
-      await customerLedgerRef.push().set(ledgerData);
-    } catch (error) {
-      print('Error updating ledger for filled order: $error');
-      rethrow;
-    }
-  }
-
-  double _parseToDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is int) return value.toDouble();
-    if (value is double) return value;
-    if (value is String) {
-      try {
-        return double.parse(value);
-      } catch (e) {
-        return 0.0;
-      }
-    }
-    return 0.0;
-  }
+  // void _saveEntry() async {
+  //   if (_formKey.currentState!.validate()) {
+  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //
+  //     try {
+  //       final amount = double.parse(_amountController.text);
+  //
+  //       // Create and save SimpleCashbook entry
+  //       final entry = CashbookEntry(
+  //         id: widget.editingEntry?.id ??
+  //             DateTime.now().millisecondsSinceEpoch.toString(),
+  //         description: _descriptionController.text,
+  //         amount: amount,
+  //         dateTime: _selectedDate,
+  //         type: _selectedType,
+  //         customerId: _selectedCustomer?.id,
+  //         customerName: _selectedCustomer?.name,
+  //         invoiceId: _selectedInvoiceId,
+  //         invoiceNumber: _selectedInvoiceOrFilled,
+  //         filledId: _selectedFilledId,
+  //         filledNumber: _selectedInvoiceOrFilled,
+  //       );
+  //
+  //       // Save to SimpleCashbook only (remove payment processing)
+  //       await widget.databaseRef.child(entry.id!).set(entry.toJson());
+  //
+  //       if (mounted) {
+  //         Navigator.pop(context);
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(
+  //             content: Text(
+  //               widget.editingEntry == null
+  //                   ? (languageProvider.isEnglish
+  //                   ? 'Entry added successfully'
+  //                   : 'انٹری کامیابی سے شامل ہو گئی')
+  //                   : (languageProvider.isEnglish
+  //                   ? 'Entry updated successfully'
+  //                   : 'انٹری کامیابی سے اپ ڈیٹ ہو گئی'),
+  //             ),
+  //           ),
+  //         );
+  //       }
+  //     } catch (error) {
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(
+  //             content: Text(
+  //               languageProvider.isEnglish
+  //                   ? 'Error saving entry: $error'
+  //                   : 'انٹری محفوظ کرنے میں خرابی: $error',
+  //             ),
+  //           ),
+  //         );
+  //       }
+  //     }
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -499,47 +772,101 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // --- Option Selection (Invoice/Filled) ---
-                    Text(
-                      languageProvider.isEnglish ? 'Select Option:' : 'آپشن منتخب کریں:',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: RadioListTile<String>(
-                            title: Text(languageProvider.isEnglish ? 'Invoice' : 'انوائس'),
-                            value: 'Invoice',
-                            groupValue: _selectedOption,
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedOption = value;
-                                _selectedCustomer = null;
-                                _selectedInvoiceOrFilled = null;
-                                _selectedInvoiceId = null;
-                                _selectedFilledId = null;
-                              });
-                            },
-                          ),
+                    // Text(
+                    //   languageProvider.isEnglish ? 'Select Option:' : 'آپشن منتخب کریں:',
+                    //   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    // ),
+                    // Row(
+                    //   children: [
+                    //     Expanded(
+                    //       child: RadioListTile<String>(
+                    //         title: Text(languageProvider.isEnglish ? 'Invoice' : 'انوائس'),
+                    //         value: 'Invoice',
+                    //         groupValue: _selectedOption,
+                    //         onChanged: (value) {
+                    //           setState(() {
+                    //             _selectedOption = value;
+                    //             _selectedCustomer = null;
+                    //             _selectedInvoiceOrFilled = null;
+                    //             _selectedInvoiceId = null;
+                    //             _selectedFilledId = null;
+                    //           });
+                    //         },
+                    //       ),
+                    //     ),
+                    //     Expanded(
+                    //       child: RadioListTile<String>(
+                    //         title: Text(languageProvider.isEnglish ? 'Filled' : 'فل'),
+                    //         value: 'Filled',
+                    //         groupValue: _selectedOption,
+                    //         onChanged: (value) {
+                    //           setState(() {
+                    //             _selectedOption = value;
+                    //             _selectedCustomer = null;
+                    //             _selectedInvoiceOrFilled = null;
+                    //             _selectedInvoiceId = null;
+                    //             _selectedFilledId = null;
+                    //           });
+                    //         },
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
+                    // const SizedBox(height: 16),
+                    // In your build method, wrap the radio button section with this:
+                    IgnorePointer(
+                      ignoring: selectedPaymentMethod != null,
+                      child: Opacity(
+                        opacity: selectedPaymentMethod != null ? 0.5 : 1.0,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // --- Option Selection (Invoice/Filled) ---
+                            Text(
+                              languageProvider.isEnglish ? 'Select Option:' : 'آپشن منتخب کریں:',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: RadioListTile<String>(
+                                    title: Text(languageProvider.isEnglish ? 'Invoice' : 'انوائس'),
+                                    value: 'Invoice',
+                                    groupValue: _selectedOption,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selectedOption = value;
+                                        _selectedCustomer = null;
+                                        _selectedInvoiceOrFilled = null;
+                                        _selectedInvoiceId = null;
+                                        _selectedFilledId = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                Expanded(
+                                  child: RadioListTile<String>(
+                                    title: Text(languageProvider.isEnglish ? 'Filled' : 'فل'),
+                                    value: 'Filled',
+                                    groupValue: _selectedOption,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selectedOption = value;
+                                        _selectedCustomer = null;
+                                        _selectedInvoiceOrFilled = null;
+                                        _selectedInvoiceId = null;
+                                        _selectedFilledId = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                         ),
-                        Expanded(
-                          child: RadioListTile<String>(
-                            title: Text(languageProvider.isEnglish ? 'Filled' : 'فل'),
-                            value: 'Filled',
-                            groupValue: _selectedOption,
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedOption = value;
-                                _selectedCustomer = null;
-                                _selectedInvoiceOrFilled = null;
-                                _selectedInvoiceId = null;
-                                _selectedFilledId = null;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
 
                     // --- Customer Selection Button ---
                     if (_selectedOption != null)
@@ -694,6 +1021,125 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
+                    if (selectedPaymentMethod != null)
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            selectedPaymentMethod = null;
+                            _selectedBank = null;
+                            _selectedChequeBank = null;
+                            _chequeNumberController.clear();
+                            _selectedChequeDate = null;
+                          });
+                        },
+                        child: Text(languageProvider.isEnglish ? 'Clear Payment Method' : 'ادائیگی کا طریقہ صاف کریں'),
+                      ),
+                    DropdownButtonFormField<String>(
+                      value: selectedPaymentMethod,
+                      items: [
+                        DropdownMenuItem(
+                          value: 'Cash',
+                          child: Text(languageProvider.isEnglish ? 'Cash' : 'نقد'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Online',
+                          child: Text(languageProvider.isEnglish ? 'Online Transfer' : 'آن لائن ٹرانسفر'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Bank',
+                          child: Text(languageProvider.isEnglish ? 'Bank Transfer' : 'بینک ٹرانسفر'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Cheque',
+                          child: Text(languageProvider.isEnglish ? 'Cheque' : 'چیک'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Slip',
+                          child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        // setState(() => selectedPaymentMethod = value);
+                        setState(() {
+                          selectedPaymentMethod = value;
+                          // Clear radio button selection and related fields
+                          _selectedOption = null;
+                          _selectedCustomer = null;
+                          _selectedInvoiceOrFilled = null;
+                          _selectedInvoiceId = null;
+                          _selectedFilledId = null;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: languageProvider.isEnglish
+                            ? 'Transfer to Payment Method'
+                            : 'ادائیگی کا طریقہ منتکل کریں',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    if (selectedPaymentMethod != null &&
+                        (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque')) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        child: ListTile(
+                          title: Text(
+                            (selectedPaymentMethod == 'Bank' && _selectedBank?['name'] != null)
+                                ? _selectedBank!['name']
+                                : (selectedPaymentMethod == 'Cheque' && _selectedChequeBank?['name'] != null)
+                                ? _selectedChequeBank!['name']
+                                : (languageProvider.isEnglish ? 'Select Bank' : 'بینک منتخب کریں'),
+                          ),
+                          trailing: const Icon(Icons.arrow_drop_down),
+                          onTap: () async {
+                            final selectedBank = await _selectBank(context);
+                            if (selectedBank != null) {
+                              setState(() {
+                                if (selectedPaymentMethod == 'Bank') {
+                                  _selectedBank = selectedBank;
+                                } else {
+                                  _selectedChequeBank = selectedBank;
+                                }
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+
+                    if (selectedPaymentMethod == 'Cheque') ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _chequeNumberController,
+                        decoration: InputDecoration(
+                          labelText: languageProvider.isEnglish
+                              ? 'Cheque Number'
+                              : 'چیک نمبر',
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        title: Text(
+                          _selectedChequeDate == null
+                              ? (languageProvider.isEnglish
+                              ? 'Select Cheque Date'
+                              : 'چیک کی تاریخ منتخب کریں')
+                              : DateFormat('yyyy-MM-dd').format(_selectedChequeDate!),
+                        ),
+                        trailing: const Icon(Icons.calendar_today),
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (pickedDate != null) {
+                            setState(() => _selectedChequeDate = pickedDate);
+                          }
+                        },
+                      ),
+                    ],
 
                     const SizedBox(height: 20),
                     ElevatedButton(

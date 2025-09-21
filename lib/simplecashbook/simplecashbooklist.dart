@@ -640,7 +640,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
-
                     if (selectedPaymentMethod != null &&
                         (selectedPaymentMethod == 'Bank' || selectedPaymentMethod == 'Cheque')) ...[
                       const SizedBox(height: 16),
@@ -706,6 +705,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                     ],
 
                     const SizedBox(height: 16),
+
+                    //amount field
                     TextField(
                       controller: _amountController,
                       keyboardType: TextInputType.number,
@@ -716,7 +717,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
-
                     const SizedBox(height: 16),
                     TextField(
                       controller: _descriptionController,
