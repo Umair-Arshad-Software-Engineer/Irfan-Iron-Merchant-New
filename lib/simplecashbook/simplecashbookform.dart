@@ -321,70 +321,6 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     }
   }
 
-  // void _saveEntry() async {
-  //   if (_formKey.currentState!.validate()) {
-  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  //     final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
-  //
-  //     try {
-  //       final amount = double.parse(_amountController.text);
-  //
-  //       // Create and save SimpleCashbook entry
-  //       final entry = CashbookEntry(
-  //         id: widget.editingEntry?.id ??
-  //             DateTime.now().millisecondsSinceEpoch.toString(),
-  //         description: _descriptionController.text,
-  //         amount: amount,
-  //         dateTime: _selectedDate,
-  //         type: _selectedType,
-  //         customerId: _selectedCustomer?.id,
-  //         customerName: _selectedCustomer?.name,
-  //         invoiceId: _selectedInvoiceId,
-  //         invoiceNumber: _selectedInvoiceOrFilled,
-  //         filledId: _selectedFilledId,
-  //         filledNumber: _selectedInvoiceOrFilled,
-  //       );
-  //
-  //       // Save to SimpleCashbook only
-  //       await widget.databaseRef.child(entry.id!).set(entry.toJson());
-  //
-  //       // If an invoice or filled order is selected, process the payment
-  //       if (_selectedInvoiceId != null || _selectedFilledId != null) {
-  //         await _processPayment(invoiceProvider, amount, languageProvider);
-  //       }
-  //
-  //       if (mounted) {
-  //         Navigator.pop(context);
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(
-  //             content: Text(
-  //               widget.editingEntry == null
-  //                   ? (languageProvider.isEnglish
-  //                   ? 'Entry added successfully'
-  //                   : 'انٹری کامیابی سے شامل ہو گئی')
-  //                   : (languageProvider.isEnglish
-  //                   ? 'Entry updated successfully'
-  //                   : 'انٹری کامیابی سے اپ ڈیٹ ہو گئی'),
-  //             ),
-  //           ),
-  //         );
-  //       }
-  //     } catch (error) {
-  //       if (mounted) {
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(
-  //             content: Text(
-  //               languageProvider.isEnglish
-  //                   ? 'Error saving entry: $error'
-  //                   : 'انٹری محفوظ کرنے میں خرابی: $error',
-  //             ),
-  //           ),
-  //         );
-  //       }
-  //     }
-  //   }
-  // }
-
   void _saveEntry() async {
     if (_formKey.currentState!.validate()) {
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -440,40 +376,6 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
           );
         }
       }
-    }
-  }
-
-  Future<void> _processPayment(InvoiceProvider invoiceProvider, double amount, LanguageProvider languageProvider) async {
-    try {
-      if (_selectedInvoiceId != null) {
-        // Process invoice payment
-        await invoiceProvider.payInvoiceWithSeparateMethod(
-          context,
-          _selectedInvoiceId!,
-          amount,
-          'SimpleCashbook', // Use SimpleCashbook as payment method
-          description: _descriptionController.text.isEmpty
-              ? 'Payment for invoice ${_selectedInvoiceOrFilled}'
-              : _descriptionController.text,
-          paymentDate: _selectedDate,
-          createdAt: DateTime.now().toIso8601String(),
-        );
-      } else if (_selectedFilledId != null) {
-        // Process filled order payment (you'll need to implement similar logic for filled orders)
-        await _processFilledOrderPayment(amount, languageProvider);
-      }
-    } catch (error) {
-      print('Error processing payment: $error');
-      // Don't throw error here - the cashbook entry was already saved successfully
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            languageProvider.isEnglish
-                ? 'Cashbook entry saved but payment processing failed: $error'
-                : 'کیش بک انٹری محفوظ ہو گئی لیکن ادائیگی کی کارروائی ناکام ہو گئی: $error',
-          ),
-        ),
-      );
     }
   }
 
