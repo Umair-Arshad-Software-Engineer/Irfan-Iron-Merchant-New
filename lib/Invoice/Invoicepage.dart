@@ -210,7 +210,6 @@ import '../bankmanagement/banknames.dart';
       }
     }
 
-
     Future<Uint8List> _generatePDFBytes(String invoiceNumber) async {
       final pdf = pw.Document();
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -1620,7 +1619,6 @@ import '../bankmanagement/banknames.dart';
       }
       _showPaymentDetails(invoice);
     }
-
 
     @override
     void initState() {
