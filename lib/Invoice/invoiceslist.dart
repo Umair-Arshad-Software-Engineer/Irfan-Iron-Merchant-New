@@ -737,12 +737,23 @@ class InvoiceList extends StatelessWidget {
       }
       return totalWeight.toStringAsFixed(2);
     }
-    String _getTotalLength(List<dynamic> items) {
-      double totalLength = 0.0;
-      for (var item in items) {
-        totalLength += (item['length'] ?? 0.0).toDouble();
+    String _getFirstItemLength(List<dynamic> items) {
+      if (items.isEmpty) return 'N/A';
+
+      final firstItem = items.first;
+      final lengthValue = firstItem['length'];
+
+      if (lengthValue == null || lengthValue.toString().isEmpty) return 'N/A';
+
+      // Since it's a string, try to parse it
+      final parsedLength = double.tryParse(lengthValue.toString());
+
+      if (parsedLength != null) {
+        return parsedLength.toStringAsFixed(2);
       }
-      return totalLength.toStringAsFixed(2);
+
+      // If parsing fails, return the raw string value
+      return lengthValue.toString();
     }
     String _getTotalqty(List<dynamic> items) {
       double totalQty = 0.0;
@@ -865,7 +876,7 @@ class InvoiceList extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    '${languageProvider.isEnglish ? 'Sarya Length' : 'سریا لمبائی'}: ${_getTotalLength(invoice['items'] ?? [])}',
+                                    '${languageProvider.isEnglish ? 'Sarya Length' : 'سریا لمبائی'}: ${_getFirstItemLength(invoice['items'] ?? [])}',
                                     style: TextStyle(
                                       fontSize: isWideScreen ? 16 : 14,
                                       fontWeight: FontWeight.bold,

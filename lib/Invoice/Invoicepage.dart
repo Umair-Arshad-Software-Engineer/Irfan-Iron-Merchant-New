@@ -466,7 +466,7 @@ import '../bankmanagement/banknames.dart';
                         pw.Image(descriptionImages[index], dpi: 1000),
                         pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                         pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
-                        pw.Text((row['length'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)), // Add this line
+                        pw.Text((row['length'] ?? '').toString(), style: const pw.TextStyle(fontSize: 10)), // Changed from toStringAsFixed(2)
                         pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                         pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       ],
@@ -1671,7 +1671,7 @@ import '../bankmanagement/banknames.dart';
           double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
           double weight = (row['weight'] as num?)?.toDouble() ?? 0.0;
           double qty = (row['qty'] as num?)?.toDouble() ?? 0.0;
-          double length = (row['length'] as num?)?.toDouble() ?? 0.0; // FIXED: Ensure proper parsing
+          String length = row['length']?.toString() ?? ''; // NEW
           double total = rate * weight;
 
           // Print debug information
@@ -1688,7 +1688,7 @@ import '../bankmanagement/banknames.dart';
             'weight': weight,
             'initialWeight': weight,
             'qty': qty,
-            'length': length, // FIXED: Include length in initialization
+            'length': row['length']?.toString() ?? '', // Always store as string
             'description': row['description'],
             'total': total,
             'itemNameController': TextEditingController(text: row['itemName']),
@@ -1696,8 +1696,7 @@ import '../bankmanagement/banknames.dart';
             'rateController': TextEditingController(text: rate.toStringAsFixed(2)),
             'qtyController': TextEditingController(text: qty.toStringAsFixed(0)),
             'descriptionController': TextEditingController(text: row['description']),
-            'lengthController': TextEditingController(text: length.toStringAsFixed(2)), // FIXED: Proper initialization
-
+            'lengthController': TextEditingController(text: row['length']?.toString() ?? ''), // Fixed
           };
         }).toList();
       } else {
@@ -1706,7 +1705,7 @@ import '../bankmanagement/banknames.dart';
             'total': 0.0,
             'rate': 0.0,
             'qty': 0.0,
-            'length':0.0,
+            'length':'',
             'weight': 0.0,
             'description': '',
             'itemNameController': TextEditingController(),
@@ -2096,19 +2095,42 @@ import '../bankmanagement/banknames.dart';
                                           ),
                                         ),
                                         const SizedBox(height: 5,),
+                                        // TextField(
+                                        //   controller: _invoiceRows[i]['lengthController'],
+                                        //   keyboardType: TextInputType.text,
+                                        //   onChanged: (value) {
+                                        //     // Try to parse as number first, if fails store as text
+                                        //     double? numericValue = double.tryParse(value);
+                                        //     if (numericValue != null) {
+                                        //       _updateRow(i, 'length', numericValue);
+                                        //     } else {
+                                        //       _updateRow(i, 'length', value); // Store as text
+                                        //     }
+                                        //   },
+                                        //   decoration: InputDecoration(
+                                        //     labelText: languageProvider.isEnglish ? 'Sarya Length' : 'سرئے لمبائی',
+                                        //     hintText: languageProvider.isEnglish ? 'Enter number or text' : 'نمبر یا متن درج کریں',
+                                        //     hintStyle: TextStyle(color: Colors.teal.shade600),
+                                        //     border: const OutlineInputBorder(
+                                        //       borderRadius: BorderRadius.all(Radius.circular(10)),
+                                        //       borderSide: BorderSide(color: Colors.grey),
+                                        //     ),
+                                        //   ),
+                                        // ),
+                                        // FIXED VERSION:
                                         TextField(
                                           controller: _invoiceRows[i]['lengthController'],
-                                          // keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          // keyboardType: TextInputType.numberWithOptions(decimal: true),
                                           // inputFormatters: [
                                           //   FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
                                           // ],
                                           onChanged: (value) {
-                                            // FIXED: Parse the string value to double before updating
-                                            double lengthValue = double.tryParse(value) ?? 0.0;
-                                            _updateRow(i, 'length', lengthValue);
+                                            // Always store as string to preserve formatting
+                                            _updateRow(i, 'length', value);
                                           },
                                           decoration: InputDecoration(
                                             labelText: languageProvider.isEnglish ? 'Sarya Length' : 'سرئے لمبائی',
+                                            hintText: languageProvider.isEnglish ? 'Enter length' : 'لمبائی درج کریں',
                                             hintStyle: TextStyle(color: Colors.teal.shade600),
                                             border: const OutlineInputBorder(
                                               borderRadius: BorderRadius.all(Radius.circular(10)),
