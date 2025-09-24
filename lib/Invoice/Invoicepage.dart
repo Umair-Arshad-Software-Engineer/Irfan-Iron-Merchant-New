@@ -2098,10 +2098,10 @@ import '../bankmanagement/banknames.dart';
                                         const SizedBox(height: 5,),
                                         TextField(
                                           controller: _invoiceRows[i]['lengthController'],
-                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
-                                          ],
+                                          // keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          // inputFormatters: [
+                                          //   FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
+                                          // ],
                                           onChanged: (value) {
                                             // FIXED: Parse the string value to double before updating
                                             double lengthValue = double.tryParse(value) ?? 0.0;
