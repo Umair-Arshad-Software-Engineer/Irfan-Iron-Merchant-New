@@ -737,173 +737,32 @@ class InvoiceList extends StatelessWidget {
       }
       return totalWeight.toStringAsFixed(2);
     }
+    String _getTotalLength(List<dynamic> items) {
+      double totalLength = 0.0;
+      for (var item in items) {
+        totalLength += (item['length'] ?? 0.0).toDouble();
+      }
+      return totalLength.toStringAsFixed(2);
+    }
+    String _getTotalqty(List<dynamic> items) {
+      double totalQty = 0.0;
+      for (var item in items) {
+        totalQty += (item['qty'] ?? 0.0).toDouble();
+      }
+      return totalQty.toStringAsFixed(2);
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isWideScreen = constraints.maxWidth > 600;
 
-        // return ListView.builder(
-        //   controller: scrollController, // Use the scroll controller for pagination
-        //   itemCount: filteredInvoice.length,
-        //   itemBuilder: (context, index) {
-        //     final invoice = Map<String, dynamic>.from(filteredInvoice[index]);
-        //     final screenshotKey = GlobalKey();
-        //
-        //     // Instead of casting directly, use:
-        //     double grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
-        //     double debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
-        //     final remainingAmount = (grandTotal - debitAmount).toDouble();
-        //
-        //     return FutureBuilder(
-        //       future: _getCustomerRemainingBalance(invoice['customerId']),
-        //       builder: (context,snapshot){
-        //         double customerBalance = snapshot.hasData ? snapshot.data! : 0.0;
-        //
-        //         return RepaintBoundary(
-        //           key: screenshotKey,
-        //           child: ConstrainedBox(
-        //             constraints: BoxConstraints(
-        //               minWidth: constraints.maxWidth,
-        //               minHeight: 100, // Adjust as needed
-        //             ),
-        //             child: Card(
-        //               margin: EdgeInsets.symmetric(
-        //                 horizontal: isWideScreen ? 16.0 : 8.0,
-        //                 vertical: 2.0,
-        //               ),
-        //               elevation: 2,
-        //               child: IntrinsicHeight(
-        //                 child: ListTile(
-        //                   leading: CircleAvatar(
-        //                     backgroundColor: Colors.teal,
-        //                     child: Text(
-        //                       '${index + 1}',
-        //                       style: const TextStyle(color: Colors.white),
-        //                     ),
-        //                   ),
-        //                   contentPadding: const EdgeInsets.all(8),
-        //                   title: Row(
-        //                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        //                     children: [
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-        //                         style: TextStyle(
-        //                           fontSize: isWideScreen ? 18 : 16,
-        //                           fontWeight: FontWeight.bold,
-        //                         ),
-        //                       ),
-        //                       Container(
-        //                         width: 150,
-        //                         height: 20,
-        //                         decoration:BoxDecoration(
-        //                           image: DecorationImage(image: AssetImage('assets/images/name.png'))
-        //                         ),
-        //                       )
-        //                     ],
-        //                   ),
-        //                   subtitle: Column(
-        //                     crossAxisAlignment: CrossAxisAlignment.start,
-        //                     children: [
-        //                       const SizedBox(height: 4),
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
-        //                         style: TextStyle(
-        //                           fontWeight: FontWeight.bold,
-        //                           fontSize: isWideScreen ? 18 : 16,
-        //                         ),
-        //                       ),
-        //                       Row(
-        //                         children: [
-        //                           Text(
-        //                             '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(invoice['createdAt'])}',
-        //                             style: TextStyle(
-        //                               fontWeight: FontWeight.bold,
-        //                               fontSize: isWideScreen ? 16 : 13,
-        //                               color: Colors.black,
-        //                             ),
-        //                           ),SizedBox(width: 20,),
-        //                           Text(
-        //                             '${languageProvider.isEnglish ? 'Sarya Weight' : 'سریا وزن'}: ${_getTotalWeight(invoice['items'])}',
-        //                             style: TextStyle(
-        //                                 fontSize: isWideScreen ? 14 : 12,
-        //                                 fontWeight: FontWeight.bold
-        //                             ),
-        //                           ),
-        //                         ],
-        //                       ),
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['invoiceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-        //                         style: const TextStyle(
-        //                           fontSize:12,
-        //                           fontWeight: FontWeight.bold,
-        //                         ),
-        //                       ),
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
-        //                         style: TextStyle(
-        //                           fontSize: isWideScreen ? 16 : 14,
-        //                           fontWeight: FontWeight.bold,
-        //                         ),
-        //                       ),
-        //
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
-        //                         style: TextStyle(
-        //                           fontSize: isWideScreen ? 14 : 12,
-        //                           color: remainingAmount > 0 ? Colors.red : Colors.green,
-        //                         ),
-        //                       ),
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Paid: ' : 'وصول شدہ: '}${debitAmount.toStringAsFixed(2)}',
-        //                         style: TextStyle(
-        //                           fontSize: isWideScreen ? 14 : 12,
-        //                           color: Colors.green,
-        //                         ),
-        //                       ),
-        //                       Text(
-        //                         '${languageProvider.isEnglish ? 'Balance: ' : 'بیلنس: '}${customerBalance.toStringAsFixed(2)}',
-        //                         style: TextStyle(
-        //                           fontSize: isWideScreen ? 14 : 12,
-        //                           color: customerBalance >= 0 ? Colors.green : Colors.red,
-        //                         ),
-        //                       ),
-        //                     ],
-        //                   ),
-        //                   trailing: Column(
-        //                     mainAxisSize: MainAxisSize.min,
-        //                     crossAxisAlignment: CrossAxisAlignment.end,
-        //                     children: [
-        //
-        //                       IconButton(
-        //                         icon: const Icon(Icons.share, size: 20),
-        //                         onPressed: (){
-        //                           _captureAndShareInvoice(screenshotKey,context);
-        //                         },
-        //                         tooltip: languageProvider.isEnglish
-        //                             ? 'Share invoice'
-        //                             : 'انوائس شیئر کریں',
-        //                       ),
-        //                     ],
-        //                   ),
-        //
-        //                   onTap: () => onInvoiceTap(invoice),
-        //                   onLongPress: () => onInvoiceLongPress(invoice),
-        //                 ),
-        //               ),
-        //             ),
-        //         ),
-        //         );
-        //       },
-        //     );
-        //   },
-        // );
         return GridView.builder(
           controller: scrollController, // still works with GridView
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 1.1 : 0.85, // taller cards on smaller screens
+            childAspectRatio: isWideScreen ? 1.1 : 0.78, // taller cards on smaller screens
           ),
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
@@ -996,13 +855,31 @@ class InvoiceList extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Text(
-                                '${languageProvider.isEnglish ? 'Sarya Weight' : 'سریا وزن'}: ${_getTotalWeight(invoice['items'])}',
-                                style: TextStyle(
-                                  fontSize: isWideScreen ? 18 : 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              Column(
+                                children: [
+                                  Text(
+                                    '${languageProvider.isEnglish ? 'Sarya Weight' : 'سریا وزن'}: ${_getTotalWeight(invoice['items'])}',
+                                    style: TextStyle(
+                                      fontSize: isWideScreen ? 18 : 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${languageProvider.isEnglish ? 'Sarya Length' : 'سریا لمبائی'}: ${_getTotalLength(invoice['items'] ?? [])}',
+                                    style: TextStyle(
+                                      fontSize: isWideScreen ? 16 : 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${languageProvider.isEnglish ? 'Sarya Qty' : 'سریا مقدار'}: ${_getTotalqty(invoice['items'] ?? [])}',
+                                    style: TextStyle(
+                                      fontSize: isWideScreen ? 16 : 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              )
                             ],
                           ),
                           const SizedBox(height: 4),

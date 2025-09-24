@@ -107,12 +107,15 @@ import '../bankmanagement/banknames.dart';
           'total': 0.0,
           'rate': 0.0,
           'qty': 0.0,
+          'length': 0.0, // Add this line
           'weight': 0.0,
           'description': '',
           'itemName': '', // Add this field to store the item name
           'itemNameController': TextEditingController(), // Add this line
           'weightController': TextEditingController(),
           'rateController': TextEditingController(),
+          // 'lengthController': TextEditingController(), // Add this line
+          'lengthController': TextEditingController(text: '0.00'), // Initialize with default
           'qtyController': TextEditingController(),
           'descriptionController': TextEditingController(),
         });
@@ -128,7 +131,6 @@ import '../bankmanagement/banknames.dart';
           double weight = _invoiceRows[index]['weight'] ?? 0.0;
           _invoiceRows[index]['total'] = rate * weight;
         }
-
       });
     }
 
@@ -140,6 +142,7 @@ import '../bankmanagement/banknames.dart';
         deletedRow['weightController']?.dispose();
         deletedRow['rateController']?.dispose();
         deletedRow['qtyController']?.dispose();
+        deletedRow['lengthController']?.dispose(); // Add this line
         deletedRow['descriptionController']?.dispose();
         _invoiceRows.removeAt(index);
       });
@@ -451,6 +454,7 @@ import '../bankmanagement/banknames.dart';
                     pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
                     pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
                     pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text('Length', style: const pw.TextStyle(fontSize: 10)), // Add this line
                     pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
                     pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
                   ],
@@ -462,6 +466,7 @@ import '../bankmanagement/banknames.dart';
                         pw.Image(descriptionImages[index], dpi: 1000),
                         pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                         pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
+                        pw.Text((row['length'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)), // Add this line
                         pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                         pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       ],
@@ -1666,6 +1671,7 @@ import '../bankmanagement/banknames.dart';
           double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
           double weight = (row['weight'] as num?)?.toDouble() ?? 0.0;
           double qty = (row['qty'] as num?)?.toDouble() ?? 0.0;
+          double length = (row['length'] as num?)?.toDouble() ?? 0.0; // FIXED: Ensure proper parsing
           double total = rate * weight;
 
           // Print debug information
@@ -1682,6 +1688,7 @@ import '../bankmanagement/banknames.dart';
             'weight': weight,
             'initialWeight': weight,
             'qty': qty,
+            'length': length, // FIXED: Include length in initialization
             'description': row['description'],
             'total': total,
             'itemNameController': TextEditingController(text: row['itemName']),
@@ -1689,6 +1696,8 @@ import '../bankmanagement/banknames.dart';
             'rateController': TextEditingController(text: rate.toStringAsFixed(2)),
             'qtyController': TextEditingController(text: qty.toStringAsFixed(0)),
             'descriptionController': TextEditingController(text: row['description']),
+            'lengthController': TextEditingController(text: length.toStringAsFixed(2)), // FIXED: Proper initialization
+
           };
         }).toList();
       } else {
@@ -1697,11 +1706,13 @@ import '../bankmanagement/banknames.dart';
             'total': 0.0,
             'rate': 0.0,
             'qty': 0.0,
+            'length':0.0,
             'weight': 0.0,
             'description': '',
             'itemNameController': TextEditingController(),
             'weightController': TextEditingController(),
             'rateController': TextEditingController(),
+            'lengthController':TextEditingController(),
             'qtyController': TextEditingController(),
             'descriptionController': TextEditingController(),
           },
@@ -1716,6 +1727,7 @@ import '../bankmanagement/banknames.dart';
         row['weightController']?.dispose();
         row['rateController']?.dispose();
         row['qtyController']?.dispose();
+        row['lengthController']?.dispose(); // Add this line
         row['descriptionController']?.dispose();
         row['rateController']?.dispose();
       }
@@ -2076,6 +2088,27 @@ import '../bankmanagement/banknames.dart';
                                           },
                                           decoration: InputDecoration(
                                             labelText: languageProvider.isEnglish ? 'Sarya Weight (Kg)' : 'سرئے کا وزن (کلوگرام)',
+                                            hintStyle: TextStyle(color: Colors.teal.shade600),
+                                            border: const OutlineInputBorder(
+                                              borderRadius: BorderRadius.all(Radius.circular(10)),
+                                              borderSide: BorderSide(color: Colors.grey),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5,),
+                                        TextField(
+                                          controller: _invoiceRows[i]['lengthController'],
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
+                                          ],
+                                          onChanged: (value) {
+                                            // FIXED: Parse the string value to double before updating
+                                            double lengthValue = double.tryParse(value) ?? 0.0;
+                                            _updateRow(i, 'length', lengthValue);
+                                          },
+                                          decoration: InputDecoration(
+                                            labelText: languageProvider.isEnglish ? 'Sarya Length' : 'سرئے لمبائی',
                                             hintStyle: TextStyle(color: Colors.teal.shade600),
                                             border: const OutlineInputBorder(
                                               borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -2577,6 +2610,7 @@ import '../bankmanagement/banknames.dart';
                                             'rate': row['rate'],
                                             'weight': row['weight'],
                                             'qty': row['qty'],
+                                            'length': row['length'], // FIXED: Add length field to saved data
                                             'description': row['description'],
                                             'total': row['total'],
                                           };

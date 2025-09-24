@@ -24,6 +24,13 @@ class CashbookEntry {
   final String? chequeNumber;
   final DateTime? chequeDate;
   final String? imageBase64;
+// Add the missing properties
+  bool isTransferred; // Add this line
+  String? transferredTo;
+  DateTime? transferredDate;
+  double? transferredAmount;
+  String? transferId;
+
 
   CashbookEntry({
     this.id,
@@ -50,6 +57,12 @@ class CashbookEntry {
     this.chequeNumber,
     this.chequeDate,
     this.imageBase64,
+    // Add the new properties with default values
+    this.isTransferred = false, // Add this line
+    this.transferredTo,
+    this.transferredDate,
+    this.transferredAmount,
+    this.transferId,
   });
 
   factory CashbookEntry.fromJson(Map<String, dynamic> json) {
@@ -86,6 +99,14 @@ class CashbookEntry {
           ? DateTime.parse(json['chequeDate'])
           : null,
       imageBase64: json['imageBase64'],
+      // Add the new properties to fromJson
+      isTransferred: json['isTransferred'] ?? false, // Add this line
+      transferredTo: json['transferredTo'],
+      transferredDate: json['transferredDate'] != null
+          ? DateTime.parse(json['transferredDate'])
+          : null,
+      transferredAmount: json['transferredAmount']?.toDouble(),
+      transferId: json['transferId'],
     );
   }
 
@@ -115,6 +136,12 @@ class CashbookEntry {
       if (chequeNumber != null) 'chequeNumber': chequeNumber,
       if (chequeDate != null) 'chequeDate': chequeDate!.toIso8601String(),
       if (imageBase64 != null) 'imageBase64': imageBase64,
+      // Add the new properties to toJson
+      'isTransferred': isTransferred, // Add this line
+      if (transferredTo != null) 'transferredTo': transferredTo,
+      if (transferredDate != null) 'transferredDate': transferredDate!.toIso8601String(),
+      if (transferredAmount != null) 'transferredAmount': transferredAmount,
+      if (transferId != null) 'transferId': transferId,
     };
   }
 
@@ -143,6 +170,12 @@ class CashbookEntry {
     String? chequeNumber,
     DateTime? chequeDate,
     String? imageBase64,
+    // Add the new properties to copyWith
+    bool? isTransferred, // Add this line
+    String? transferredTo,
+    DateTime? transferredDate,
+    double? transferredAmount,
+    String? transferId,
   }) {
     return CashbookEntry(
       id: id ?? this.id,
@@ -168,12 +201,18 @@ class CashbookEntry {
       chequeNumber: chequeNumber ?? this.chequeNumber,
       chequeDate: chequeDate ?? this.chequeDate,
       imageBase64: imageBase64 ?? this.imageBase64,
+      // Add the new properties to copyWith
+      isTransferred: isTransferred ?? this.isTransferred, // Add this line
+      transferredTo: transferredTo ?? this.transferredTo,
+      transferredDate: transferredDate ?? this.transferredDate,
+      transferredAmount: transferredAmount ?? this.transferredAmount,
+      transferId: transferId ?? this.transferId,
     );
   }
 
   @override
   String toString() {
-    return 'CashbookEntry{id: $id, description: $description, amount: $amount, type: $type, customerId: $customerId, customerName: $customerName}';
+    return 'CashbookEntry{id: $id, description: $description, amount: $amount, type: $type, customerId: $customerId, customerName: $customerName, isTransferred: $isTransferred}';
   }
 
   @override

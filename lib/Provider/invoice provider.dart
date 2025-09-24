@@ -279,6 +279,7 @@ class InvoiceProvider with ChangeNotifier {
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           'weight': item['weight'] ?? 0.0,
+          'length': item['length'] ?? 0.0, // Add this line
           'description': item['description'] ?? '',
           'total': item['total'],
         };
@@ -367,6 +368,7 @@ class InvoiceProvider with ChangeNotifier {
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
           'weight': item['weight'] ?? 0.0,
+          'length': item['length'] ?? 0.0, // Add this line
           'description': item['description'] ?? '',
           'total': item['total'],
         };
@@ -494,6 +496,7 @@ class InvoiceProvider with ChangeNotifier {
               'rate': parseDouble(item['rate']),
               'qty': parseDouble(item['qty']),
               'weight': parseDouble(item['weight']),
+              'length': parseDouble(item['length']), // Add this line'
               'description': item['description']?.toString() ?? '',
               'total': parseDouble(item['total']),
             };

@@ -497,7 +497,8 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                         itemBuilder: (context, index) {
                           final inv = filteredInvoices[index];
                           return ListTile(
-                            title: Text(inv.invoiceNumber),
+                            // title: Text(inv.invoiceNumber),
+                            title: Text(inv.referenceNumber),
                             subtitle: Text("Amount: ${inv.amount}"),
                             onTap: () => Navigator.pop(context, {
                               'id': inv.id,
@@ -557,7 +558,8 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                         itemBuilder: (context, index) {
                           final f = filteredFilled[index];
                           return ListTile(
-                            title: Text(f.filledNumber),
+                            // title: Text(f.filledNumber),
+                             title: Text(f.referenceNumber),
                             subtitle: Text("Amount: ${f.amount}"),
                             onTap: () => Navigator.pop(context, {
                               'id': f.id,
@@ -686,63 +688,6 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     }
   }
 
-  // void _saveEntry() async {
-  //   if (_formKey.currentState!.validate()) {
-  //     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  //
-  //     try {
-  //       final amount = double.parse(_amountController.text);
-  //
-  //       // Create and save SimpleCashbook entry
-  //       final entry = CashbookEntry(
-  //         id: widget.editingEntry?.id ??
-  //             DateTime.now().millisecondsSinceEpoch.toString(),
-  //         description: _descriptionController.text,
-  //         amount: amount,
-  //         dateTime: _selectedDate,
-  //         type: _selectedType,
-  //         customerId: _selectedCustomer?.id,
-  //         customerName: _selectedCustomer?.name,
-  //         invoiceId: _selectedInvoiceId,
-  //         invoiceNumber: _selectedInvoiceOrFilled,
-  //         filledId: _selectedFilledId,
-  //         filledNumber: _selectedInvoiceOrFilled,
-  //       );
-  //
-  //       // Save to SimpleCashbook only (remove payment processing)
-  //       await widget.databaseRef.child(entry.id!).set(entry.toJson());
-  //
-  //       if (mounted) {
-  //         Navigator.pop(context);
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(
-  //             content: Text(
-  //               widget.editingEntry == null
-  //                   ? (languageProvider.isEnglish
-  //                   ? 'Entry added successfully'
-  //                   : 'انٹری کامیابی سے شامل ہو گئی')
-  //                   : (languageProvider.isEnglish
-  //                   ? 'Entry updated successfully'
-  //                   : 'انٹری کامیابی سے اپ ڈیٹ ہو گئی'),
-  //             ),
-  //           ),
-  //         );
-  //       }
-  //     } catch (error) {
-  //       if (mounted) {
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(
-  //             content: Text(
-  //               languageProvider.isEnglish
-  //                   ? 'Error saving entry: $error'
-  //                   : 'انٹری محفوظ کرنے میں خرابی: $error',
-  //             ),
-  //           ),
-  //         );
-  //       }
-  //     }
-  //   }
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -1168,12 +1113,14 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
 class Invoice {
   final String id;
   final String invoiceNumber;
+  final String referenceNumber;
   final double amount;
   final String customerId;
 
   Invoice({
     required this.id,
     required this.invoiceNumber,
+    required this.referenceNumber,
     required this.amount,
     required this.customerId,
   });
@@ -1182,6 +1129,7 @@ class Invoice {
     return Invoice(
       id: id,
       invoiceNumber: data['invoiceNumber'] ?? '',
+      referenceNumber: data['referenceNumber'] ?? '',
       amount: (data['grandTotal'] ?? 0).toDouble(),
       customerId: data['customerId'] ?? '',
     );
@@ -1191,12 +1139,14 @@ class Invoice {
 class Filled {
   final String id;
   final String filledNumber;
+  final String referenceNumber;
   final double amount;
   final String customerId;
 
   Filled({
     required this.id,
     required this.filledNumber,
+    required this.referenceNumber,
     required this.amount,
     required this.customerId,
   });
@@ -1205,6 +1155,7 @@ class Filled {
     return Filled(
       id: id,
       filledNumber: data['filledNumber'] ?? '',
+      referenceNumber: data['referenceNumber'] ?? '',
       amount: (data['grandTotal'] ?? 0).toDouble(),
       customerId: data['customerId'] ?? '',
     );
