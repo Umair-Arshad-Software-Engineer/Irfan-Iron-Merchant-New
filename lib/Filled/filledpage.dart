@@ -37,9 +37,9 @@ class _FilledPageState extends State<FilledPage> {
   String? _selectedItemName;
   String? _selectedItemId;
   double _selectedItemRate = 0.0;
-  String? _selectedCustomerName; // This should hold the name of the selected customer
+  String? _selectedCustomerName;
   String? _selectedCustomerId;
-  double _discount = 0.0; // Discount amount or percentage
+  double _discount = 0.0;
   String _paymentType = 'instant';
   String? _instantPaymentMethod;
   TextEditingController _discountController = TextEditingController();
@@ -84,8 +84,6 @@ class _FilledPageState extends State<FilledPage> {
     }
   }
 
-
-  // Method to show the date picker
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -938,7 +936,6 @@ class _FilledPageState extends State<FilledPage> {
     }
   }
 
-
   Future<void> _printPaymentHistoryPDF(List<Map<String, dynamic>> payments, BuildContext context) async {
     final pdf = pw.Document();
 
@@ -1029,9 +1026,9 @@ class _FilledPageState extends State<FilledPage> {
             children: tableRows,
           ),
 
-          pw.SizedBox(height: 20),
+          // pw.SizedBox(height: 20),
           pw.Divider(),
-          pw.Spacer(),
+          // pw.Spacer(),
 
           // Footer
           pw.Row(
@@ -1064,7 +1061,6 @@ class _FilledPageState extends State<FilledPage> {
     // Display or print the PDF
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
-
 
   Future<Uint8List?> _pickImage(BuildContext context) async {
     final ImagePicker _picker = ImagePicker();
@@ -1545,7 +1541,6 @@ class _FilledPageState extends State<FilledPage> {
     }
     _showPaymentDetails(filled);
   }
-
 
   @override
   void initState() {
@@ -2645,3 +2640,4 @@ class _CustomAutocompleteState extends State<CustomAutocomplete> {
     );
   }
 }
+

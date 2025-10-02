@@ -26,6 +26,8 @@ final List<Bank> pakistaniBanks = [
   Bank(name: 'JS Bank', iconPath: 'assets/bank_icons/js.png'),
   Bank(name: 'Habib MetroPolitan', iconPath: 'assets/bank_icons/hbmp.png'),
   Bank(name: 'Silk Bank', iconPath: 'assets/bank_icons/silk.jpeg'),
+  Bank(name: 'Soneri Bank', iconPath: 'assets/bank_icons/soneri.jpg'),
+  Bank(name: 'Bank Islami', iconPath: 'assets/bank_icons/bank_islamic.jpg'),
 
   // Add more banks as needed
 ];

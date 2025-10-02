@@ -813,7 +813,7 @@ class InvoiceList extends StatelessWidget {
                               Center(
                                 child: Image.asset(
                                   'assets/images/logo.png', // your logo path
-                                  height: 80,
+                                  height: 100,
                                   fit: BoxFit.contain,
                                 ),
                               ),

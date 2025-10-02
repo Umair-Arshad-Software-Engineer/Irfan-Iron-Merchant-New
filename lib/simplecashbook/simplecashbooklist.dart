@@ -457,8 +457,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
@@ -516,8 +514,9 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                 itemBuilder: (context, index) {
                   final entry = entries[index];
                   // Check if this entry is from Invoice or Filled
-                  bool isTransferable = (entry.invoiceNumber != null && entry.invoiceNumber!.isNotEmpty) ||
-                      (entry.filledNumber != null && entry.filledNumber!.isNotEmpty);
+                  bool isInvoice = entry.invoiceNumber != null && entry.invoiceNumber!.isNotEmpty;
+                  bool isFilled = entry.filledNumber != null && entry.filledNumber!.isNotEmpty;
+                  bool isTransferable = isInvoice || isFilled;
 
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
@@ -527,7 +526,24 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                           if (entry.type == 'cash_out' && entry.isPaid)
                             const Icon(Icons.check_circle, color: Colors.green, size: 16),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(entry.description)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(entry.description),
+                                if (isInvoice)
+                                  Text(
+                                    'Invoice: ${entry.invoiceNumber}',
+                                    style: TextStyle(fontSize: 12, color: Colors.blue),
+                                  ),
+                                if (isFilled)
+                                  Text(
+                                    'Filled: ${entry.filledNumber}',
+                                    style: TextStyle(fontSize: 12, color: Colors.green),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                       subtitle: Column(
@@ -543,12 +559,18 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                                   '${DateFormat('yyyy-MM-dd').format(entry.paymentDate!)}',
                               style: TextStyle(color: Colors.green[700]),
                             ),
+                          if (entry.isTransferred)
+                            Text(
+                              'Transferred to ${entry.transferredTo}',
+                              style: TextStyle(color: Colors.blue[700], fontSize: 12),
+                            ),
                         ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (isTransferable)
+                          // if (isTransferable)
+                          if (isTransferable && !entry.isTransferred)
                             IconButton(
                               icon: const Icon(Icons.swap_horiz, color: Colors.orange),
                               onPressed: () => _showPaymentDialog(entry),
@@ -641,7 +663,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       }
     }
 
-// Function to show time picker
+    // Function to show time picker
     Future<void> _selectTime(BuildContext context, StateSetter setState) async {
       final TimeOfDay? picked = await showTimePicker(
         context: context,
@@ -660,7 +682,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         });
       }
     }
-
 
     await showDialog(
       context: context,
@@ -706,7 +727,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                                       languageProvider.isEnglish ? 'Date' : 'تاریخ',
                                       style: const TextStyle(fontSize: 12),
                                     ),
-                                    onTap: () => _selectDate(context,setState),
+                                    onTap: () => _selectDate(context, setState),
                                   ),
                                 ),
                                 Expanded(
@@ -720,7 +741,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
                                       languageProvider.isEnglish ? 'Time' : 'وقت',
                                       style: const TextStyle(fontSize: 12),
                                     ),
-                                    onTap: () => _selectTime(context,setState),
+                                    onTap: () => _selectTime(context, setState),
                                   ),
                                 ),
                               ],
@@ -959,7 +980,7 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     );
   }
 
-  Future<void>  _transferToPaymentMethod({
+  Future<void> _transferToPaymentMethod({
     required CashbookEntry entry,
     required String paymentMethod,
     required double amount,
@@ -970,91 +991,109 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     String? chequeNumber,
     DateTime? chequeDate,
     Uint8List? imageBytes,
-  }) async {
+  })
+  async {
     try {
       String? imageBase64;
       if (imageBytes != null) {
         imageBase64 = base64Encode(imageBytes);
       }
 
-      final String timestampId = DateTime.now().millisecondsSinceEpoch.toString();
-
       // Debug: Print entry details to see what we're working with
       print('🔍 Transferring entry:');
       print('   - Entry ID: ${entry.id}');
+      print('   - Filled ID: ${entry.filledId}');
       print('   - Filled Number: ${entry.filledNumber}');
+      print('   - Invoice ID: ${entry.invoiceId}');
       print('   - Invoice Number: ${entry.invoiceNumber}');
       print('   - Customer ID: ${entry.customerId}');
       print('   - Amount: $amount');
       print('   - Payment Method: $paymentMethod');
 
+      // Determine which data to include based on original selection
+      Map<String, dynamic> invoiceFilledData = {};
+
+      if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) {
+        // This was originally an invoice entry - only include invoice data
+        invoiceFilledData = {
+          'invoiceId': entry.invoiceId,
+          'invoiceNumber': entry.invoiceNumber,
+          // Explicitly set filled data to null
+          'filledId': null,
+          'filledNumber': null,
+        };
+        print('📄 Transferring INVOICE entry');
+      } else if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+        // This was originally a filled entry - only include filled data
+        invoiceFilledData = {
+          'filledId': entry.filledId,
+          'filledNumber': entry.filledNumber,
+          // Explicitly set invoice data to null
+          'invoiceId': null,
+          'invoiceNumber': null,
+        };
+        print('📦 Transferring FILLED entry');
+      } else {
+        // This is a general cashbook entry without specific invoice/filled link
+        invoiceFilledData = {
+          'invoiceId': null,
+          'invoiceNumber': null,
+          'filledId': null,
+          'filledNumber': null,
+        };
+        print('💰 Transferring GENERAL cashbook entry');
+      }
+
+      // Common data for all payment methods
+      final Map<String, dynamic> commonData = {
+        'customerId': entry.customerId,
+        'customerName': entry.customerName,
+        'amount': amount,
+        'description': description,
+        'dateTime': date.toIso8601String(),
+        'createdAt': DateTime.now().toIso8601String(),
+        'transferredFrom': 'simplecashbook',
+        'originalEntryId': entry.id,
+        // Add the determined invoice/filled data
+        ...invoiceFilledData,
+      };
+
       // *** STEP 2: Create the new entry in the selected payment method ***
       switch (paymentMethod.toLowerCase()) {
         case 'cash':
-          await _db.child('cashbook').child(timestampId).set({
-            'id': timestampId,
-            'customerId': entry.customerId,
-            'customerName': entry.customerName,
-            'amount': amount,
-            'description': description,
-            'dateTime': date.toIso8601String(),
-            'paymentKey': timestampId,
-            'createdAt': DateTime.now().toIso8601String(),
+        // Use timestamp key for cashbook instead of push key
+          final String timestampKey = DateTime.now().millisecondsSinceEpoch.toString();
+          await _db.child('cashbook').child(timestampKey).set({
+            ...commonData,
             'type': 'cash_in',
-            'transferredFrom': 'simplecashbook',
-            'originalEntryId': entry.id,
           });
           break;
 
         case 'online':
-          await _db.child('onlinePayments').child(timestampId).set({
-            'id': timestampId,
-            'customerId': entry.customerId,
-            'customerName': entry.customerName,
-            'amount': amount,
-            'description': description,
-            'dateTime': date.toIso8601String(),
-            'paymentKey': timestampId,
-            'createdAt': DateTime.now().toIso8601String(),
-            'transferredFrom': 'simplecashbook',
-            'originalEntryId': entry.id,
-          });
+          final onlineRef = _db.child('onlinePayments').push();
+          await onlineRef.set(commonData);
           break;
 
         case 'bank':
-          await _db.child('bankTransactions').child(timestampId).set({
-            'id': timestampId,
-            'customerId': entry.customerId,
-            'customerName': entry.customerName,
-            'amount': amount,
-            'description': description,
-            'dateTime': date.toIso8601String(),
-            'paymentKey': timestampId,
-            'createdAt': DateTime.now().toIso8601String(),
+          final String timestampKey = DateTime.now().millisecondsSinceEpoch.toString();
+          await _db.child('bankTransactions').child(timestampKey).set({
+            ...commonData,
             'bankId': bankId,
             'bankName': bankName,
             'type': 'cash_in',
-            'transferredFrom': 'simplecashbook',
-            'originalEntryId': entry.id,
-            'filledId': entry.filledId,
-            'filledNumber': entry.filledNumber,
-            'invoiceId': entry.invoiceId,
-            'invoiceNumber': entry.invoiceNumber,
           });
-
           if (bankId != null) {
             final bankTransactionsRef = _db.child('banks/$bankId/transactions');
-            await bankTransactionsRef.push().set({
+            final transactionRef = bankTransactionsRef.push();
+            await transactionRef.set({
               'amount': amount,
               'description': description.isNotEmpty
                   ? description
                   : 'Transfer from SimpleCashbook: ${entry.filledNumber ?? entry.invoiceNumber ?? entry.description}',
               'type': 'cash_in',
               'timestamp': date.millisecondsSinceEpoch,
-              'filledId': entry.filledId,
-              'filledNumber': entry.filledNumber,
-              'invoiceId': entry.invoiceId,
-              'invoiceNumber': entry.invoiceNumber,
+              // Add the determined invoice/filled data
+              ...invoiceFilledData,
               'customerId': entry.customerId,
               'customerName': entry.customerName,
               'bankName': bankName,
@@ -1069,72 +1108,50 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
           break;
 
         case 'cheque':
-          await _db.child('cheques').child(timestampId).set({
-            'id': timestampId,
-            'customerId': entry.customerId,
-            'customerName': entry.customerName,
-            'amount': amount,
-            'description': description,
-            'dateTime': date.toIso8601String(),
-            'paymentKey': timestampId,
-            'createdAt': DateTime.now().toIso8601String(),
+          final chequeRef = _db.child('cheques').push();
+          await chequeRef.set({
+            ...commonData,
             'chequeNumber': chequeNumber,
             'chequeDate': chequeDate?.toIso8601String(),
             'bankId': bankId,
             'bankName': bankName,
             'status': 'pending',
-            'transferredFrom': 'simplecashbook',
-            'originalEntryId': entry.id,
-            'filledId': entry.filledId,
-            'filledNumber': entry.filledNumber,
-            'invoiceId': entry.invoiceId,
-            'invoiceNumber': entry.invoiceNumber,
           });
 
           if (bankId != null) {
-            await _db.child('banks/$bankId/cheques').child(timestampId).set({
+            final bankChequesRef = _db.child('banks/$bankId/cheques');
+            final bankChequeRef = bankChequesRef.push();
+            await bankChequeRef.set({
               'amount': amount,
               'chequeNumber': chequeNumber,
               'chequeDate': chequeDate?.toIso8601String(),
               'status': 'pending',
               'customerName': entry.customerName,
               'createdAt': DateTime.now().toIso8601String(),
-              'filledNumber': entry.filledNumber,
-              'invoiceNumber': entry.invoiceNumber,
+              // Add the determined invoice/filled data
+              ...invoiceFilledData,
             });
           }
           break;
 
         case 'slip':
-          await _db.child('slipPayments').child(timestampId).set({
-            'id': timestampId,
-            'customerId': entry.customerId,
-            'customerName': entry.customerName,
-            'amount': amount,
-            'description': description,
-            'dateTime': date.toIso8601String(),
-            'paymentKey': timestampId,
-            'createdAt': DateTime.now().toIso8601String(),
+          final slipRef = _db.child('slipPayments').push();
+          await slipRef.set({
+            ...commonData,
             if (imageBase64 != null) 'image': imageBase64,
-            'transferredFrom': 'simplecashbook',
-            'originalEntryId': entry.id,
-            'filledId': entry.filledId,
-            'filledNumber': entry.filledNumber,
-            'invoiceId': entry.invoiceId,
-            'invoiceNumber': entry.invoiceNumber,
           });
           break;
       }
 
-      // *** STEP 3: Update the appropriate node (filled or invoices) ***
+      // *** STEP 3: Update the appropriate node (filled or invoices) based on original selection ***
       bool updatedFilled = false;
       bool updatedInvoice = false;
 
-      // Check if this entry has a filled number and it's not empty
-      if (entry.filledNumber != null && entry.filledNumber!.isNotEmpty && entry.filledNumber!.trim() != '') {
-        print('🔄 Attempting to update filled node for: ${entry.filledNumber}');
+      // Only update filled if this was originally a filled entry
+      if (entry.filledId != null && entry.filledId!.isNotEmpty && entry.filledId!.trim() != '') {
+        print('🔄 Attempting to update filled node for ID: ${entry.filledId}');
         updatedFilled = await _updateFilledNode(entry, paymentMethod, amount, description, date,
-            bankId, bankName, chequeNumber, chequeDate, imageBase64, timestampId);
+            bankId, bankName, chequeNumber, chequeDate, imageBase64);
         if (updatedFilled) {
           print('✅ Successfully updated filled node');
         } else {
@@ -1142,11 +1159,11 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         }
       }
 
-      // Check if this entry has an invoice number and it's not empty
-      if (!updatedFilled && entry.invoiceNumber != null && entry.invoiceNumber!.isNotEmpty && entry.invoiceNumber!.trim() != '') {
-        print('🔄 Attempting to update invoice node for: ${entry.invoiceNumber}');
+      // Only update invoice if this was originally an invoice entry
+      if (!updatedFilled && entry.invoiceId != null && entry.invoiceId!.isNotEmpty && entry.invoiceId!.trim() != '') {
+        print('🔄 Attempting to update invoice node for ID: ${entry.invoiceId}');
         updatedInvoice = await _updateInvoiceNode(entry, paymentMethod, amount, description, date,
-            bankId, bankName, chequeNumber, chequeDate, imageBase64, timestampId);
+            bankId, bankName, chequeNumber, chequeDate, imageBase64);
         if (updatedInvoice) {
           print('✅ Successfully updated invoice node');
         } else {
@@ -1154,11 +1171,31 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         }
       }
 
+      // Fallback: Try updating by document numbers if IDs are not available but we know the type
       if (!updatedFilled && !updatedInvoice) {
-        print('⚠️ No filled or invoice node was updated. Entry details:');
+        // Only try filled if we have filled number and no invoice data
+        if (entry.filledNumber != null && entry.filledNumber!.isNotEmpty && entry.filledNumber!.trim() != '' &&
+            (entry.invoiceId == null || entry.invoiceId!.isEmpty)) {
+          print('🔄 Attempting to update filled node by number: ${entry.filledNumber}');
+          updatedFilled = await _updateFilledNode(entry, paymentMethod, amount, description, date,
+              bankId, bankName, chequeNumber, chequeDate, imageBase64);
+        }
+
+        // Only try invoice if we have invoice number and no filled data
+        if (!updatedFilled && entry.invoiceNumber != null && entry.invoiceNumber!.isNotEmpty && entry.invoiceNumber!.trim() != '' &&
+            (entry.filledId == null || entry.filledId!.isEmpty)) {
+          print('🔄 Attempting to update invoice node by number: ${entry.invoiceNumber}');
+          updatedInvoice = await _updateInvoiceNode(entry, paymentMethod, amount, description, date,
+              bankId, bankName, chequeNumber, chequeDate, imageBase64);
+        }
+      }
+
+      if (!updatedFilled && !updatedInvoice) {
+        print('⚠️ No filled or invoice node was updated. This might be a general cashbook entry.');
+        print('   - Filled ID: ${entry.filledId}');
         print('   - Filled Number: ${entry.filledNumber}');
+        print('   - Invoice ID: ${entry.invoiceId}');
         print('   - Invoice Number: ${entry.invoiceNumber}');
-        print('   - Entry might not be linked to any invoice/filled document');
       }
 
       // *** STEP 4: Mark the original simplecashbook entry as transferred ***
@@ -1167,7 +1204,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         'transferredTo': paymentMethod,
         'transferredDate': DateTime.now().toIso8601String(),
         'transferredAmount': amount,
-        'transferId': timestampId,
       });
 
       print("✅ Entry marked as transferred");
@@ -1189,50 +1225,67 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       String? bankName,
       String? chequeNumber,
       DateTime? chequeDate,
-      String? imageBase64,
-      String timestampId) async {
+      String? imageBase64)
+  async {
     try {
-      print('🔍 Searching for filled document with number: ${entry.filledNumber}');
-
-      final filledSnapshot = await _db.child('filled')
-          .orderByChild('filledNumber')
-          .equalTo(entry.filledNumber!)
-          .once();
-
-      if (!filledSnapshot.snapshot.exists) {
-        print('❌ No filled document found with number: ${entry.filledNumber}');
+      // Only proceed if this is actually a filled entry
+      if (entry.filledId == null && entry.filledNumber == null) {
+        print('❌ Not a filled entry - skipping filled node update');
         return false;
       }
 
-      dynamic snapshotValue = filledSnapshot.snapshot.value;
+      DataSnapshot filledSnapshot;
+
+      // First try to find by filledId if available
+      if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+        print('🔍 Searching for filled document with ID: ${entry.filledId}');
+        filledSnapshot = await _db.child('filled').child(entry.filledId!).get();
+      } else {
+        // Fallback to searching by filled number
+        print('🔍 Searching for filled document with number: ${entry.filledNumber}');
+        filledSnapshot = await _db.child('filled')
+            .orderByChild('filledNumber')
+            .equalTo(entry.filledNumber!)
+            .once()
+            .then((snapshot) => snapshot.snapshot);
+      }
+
+      if (!filledSnapshot.exists) {
+        print('❌ No filled document found');
+        return false;
+      }
+
+      dynamic snapshotValue = filledSnapshot.value;
       Map<dynamic, dynamic> filledData;
+      String filledId;
 
       if (snapshotValue is Map<dynamic, dynamic>) {
-        filledData = snapshotValue;
-      } else if (snapshotValue is List<dynamic>) {
-        filledData = {};
-        for (int i = 0; i < snapshotValue.length; i++) {
-          if (snapshotValue[i] != null) {
-            filledData[i.toString()] = snapshotValue[i];
-          }
+        // If we searched by ID, we have direct data
+        if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+          filledData = {entry.filledId!: snapshotValue};
+          filledId = entry.filledId!;
+        } else {
+          // If we searched by number, we need to extract the first result
+          filledData = snapshotValue;
+          filledId = filledData.keys.first;
         }
       } else {
         print('❌ Unexpected data format from Firebase for filled');
         return false;
       }
 
-      if (filledData.isEmpty) {
+      if (filledData.isEmpty || !filledData.containsKey(filledId)) {
         print('❌ No filled data found');
         return false;
       }
 
-      final filledId = filledData.keys.first;
       final filled = Map<String, dynamic>.from(filledData[filledId]);
 
       print('✅ Found filled document: $filledId');
       print('   - Filled Data: ${filled['filledNumber']}');
       print('   - Customer: ${filled['customerName']}');
 
+      // Rest of your existing _updateFilledNode code remains the same...
       final currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
       final currentDebitAmount = _parseToDouble(filled['debitAmount'] ?? 0.0);
 
@@ -1302,13 +1355,13 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         }
       }
 
-      // Add to the new payment method node
-      await _db
+      // Add to the new payment method node using push()
+      final paymentRef = _db
           .child('filled')
           .child(filledId)
           .child(paymentNode)
-          .child(timestampId)
-          .set(newPaymentData);
+          .push();
+      await paymentRef.set(newPaymentData);
 
       final currentNewMethodAmount = _parseToDouble(filled[filledAmountField] ?? 0.0);
 
@@ -1348,9 +1401,15 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
       String? bankName,
       String? chequeNumber,
       DateTime? chequeDate,
-      String? imageBase64,
-      String timestampId) async {
+      String? imageBase64)
+  async {
     try {
+      // Only proceed if this is actually an invoice entry
+      if (entry.invoiceId == null && entry.invoiceNumber == null) {
+        print('❌ Not an invoice entry - skipping invoice node update');
+        return false;
+      }
+
       print('🔍 Searching for invoice document with number: ${entry.invoiceNumber}');
 
       final invoiceSnapshot = await _db.child('invoices')
@@ -1372,7 +1431,8 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         invoiceData = {};
         for (int i = 0; i < snapshotValue.length; i++) {
           if (snapshotValue[i] != null) {
-            invoiceData[i.toString()] = snapshotValue[i];
+            final item = Map<String, dynamic>.from(snapshotValue[i] as Map<dynamic, dynamic>);
+            invoiceData[i.toString()] = item;
           }
         }
       } else {
@@ -1461,13 +1521,13 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
         }
       }
 
-      // Add to the new payment method node
-      await _db
+      // Add to the new payment method node using push()
+      final paymentRef = _db
           .child('invoices')
           .child(invoiceId)
           .child(paymentNode)
-          .child(timestampId)
-          .set(newPaymentData);
+          .push();
+      await paymentRef.set(newPaymentData);
 
       final currentNewMethodAmount = _parseToDouble(invoice[invoiceAmountField] ?? 0.0);
 
@@ -1506,53 +1566,90 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
     required String? bankName,
     required DateTime transactionDate,
     required String referenceNumber,
-  }) async {
+  })
+  async {
     try {
-      final ledgerRef = _db.child(documentType == 'filled' ? 'filledledger' : 'ledger').child(customerId);
+      // Determine which ledger to use based on document type
+      final bool isFilled = documentType == 'filled';
+      final ledgerRef = _db.child(isFilled ? 'filledledger' : 'ledger').child(customerId);
 
-      double currentBalance = 0.0;
-      final snapshot = await ledgerRef.orderByChild('transactionDate').get();
-
-      if (snapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
-
-        if (ledgerData != null) {
-          final entries = ledgerData.entries.toList()
-            ..sort((a, b) {
-              final dateA = DateTime.parse(a.value['transactionDate'] as String);
-              final dateB = DateTime.parse(b.value['transactionDate'] as String);
-              return dateB.compareTo(dateA);
-            });
-
-          if (entries.isNotEmpty) {
-            final latestEntry = Map<String, dynamic>.from(entries.first.value as Map<dynamic, dynamic>);
-            currentBalance = _parseToDouble(latestEntry['remainingBalance']);
-          }
-        }
-      }
-
-      final newRemainingBalance = currentBalance - amount;
-
-      final ledgerData = {
-        'referenceNumber': referenceNumber,
-        'documentType': documentType,
-        'documentNumber': documentNumber,
-        'creditAmount': 0.0,
-        'debitAmount': amount,
-        'remainingBalance': newRemainingBalance,
+      // Create ledger entry with the correct structure based on document type
+      final Map<String, dynamic> ledgerData = {
         'createdAt': DateTime.now().toIso8601String(),
+        'creditAmount': 0.0, // Always 0 for transfers (debit entries)
+        'debitAmount': amount,
+        'remainingBalance': await _calculateNewBalance(customerId, documentType, amount),
         'transactionDate': transactionDate.toIso8601String(),
         'paymentMethod': paymentMethod,
+        'referenceNumber': referenceNumber,
         if (bankName != null) 'bankName': bankName,
       };
 
-      await ledgerRef.push().set(ledgerData);
+      // Add document-specific fields
+      if (isFilled) {
+        // For filled entries - use filledledger with filledNumber
+        ledgerData['filledNumber'] = documentNumber;
+        ledgerData['documentType'] = 'Filled'; // Set documentType as 'Filled'
+      } else {
+        // For invoice entries - use ledger with invoiceNumber
+        ledgerData['invoiceNumber'] = documentNumber;
+      }
 
-      print('✅ Created new ledger entry for transferred payment');
+      // Use push() to generate a unique key automatically
+      final DatabaseReference newEntryRef = ledgerRef.push();
+      await newEntryRef.set(ledgerData);
+
+      print('✅ Created new ${isFilled ? 'filledledger' : 'ledger'} entry for transferred payment');
+      print('   - Document Type: $documentType');
+      print('   - Document Number: $documentNumber');
+      print('   - Generated Key: ${newEntryRef.key}');
 
     } catch (e) {
       print('❌ Error creating ledger entry for transfer: $e');
       throw Exception('Failed to create ledger entry: $e');
+    }
+  }
+
+  Future<double> _calculateNewBalance(String customerId, String documentType, double debitAmount) async {
+    try {
+      final bool isFilled = documentType == 'filled';
+      final ledgerRef = _db.child(isFilled ? 'filledledger' : 'ledger').child(customerId);
+
+      final snapshot = await ledgerRef.orderByChild('transactionDate').get();
+
+      if (!snapshot.exists) {
+        // If no previous entries, start with 0 and subtract debit amount
+        return -debitAmount;
+      }
+
+      final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+      if (ledgerData == null || ledgerData.isEmpty) {
+        return -debitAmount;
+      }
+
+      // Convert to list and sort by transaction date (newest first)
+      final entries = ledgerData.entries.toList()
+        ..sort((a, b) {
+          final dateA = DateTime.parse(a.value['transactionDate'] as String);
+          final dateB = DateTime.parse(b.value['transactionDate'] as String);
+          return dateB.compareTo(dateA);
+        });
+
+      if (entries.isNotEmpty) {
+        // Get the latest entry's remaining balance
+        final latestEntry = Map<String, dynamic>.from(entries.first.value as Map<dynamic, dynamic>);
+        final currentBalance = _parseToDouble(latestEntry['remainingBalance']);
+
+        // For debit entries (payments), subtract from the balance
+        return currentBalance - debitAmount;
+      }
+
+      return -debitAmount;
+
+    } catch (e) {
+      print('❌ Error calculating new balance: $e');
+      return 0.0;
     }
   }
 
@@ -1616,18 +1713,6 @@ class _SimpleCashbookListPageState extends State<SimpleCashbookListPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _editEntry(CashbookEntry entry) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SimpleCashbookFormPage(
-          databaseRef: widget.databaseRef,
-          editingEntry: entry,
-        ),
       ),
     );
   }

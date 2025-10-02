@@ -332,7 +332,7 @@ import '../bankmanagement/banknames.dart';
       final mazdooribuffer = mazdooribytes.buffer.asUint8List();
       final mazdooriimage = pw.MemoryImage(mazdooribuffer);
 
-      final ByteData filledamountbytes = await rootBundle.load('assets/images/filledamount.png');
+      final ByteData filledamountbytes = await rootBundle.load('assets/images/saryaamount.png');
       final filledamountbuffer = filledamountbytes.buffer.asUint8List();
       final filledamountimage = pw.MemoryImage(filledamountbuffer);
 
@@ -387,9 +387,6 @@ import '../bankmanagement/banknames.dart';
         'Customer Name: ${selectedCustomer.name}\n'
             'Customer Address: ${selectedCustomer.address}',
       );
-
-
-
       // Add a page with A5 size
       pdf.addPage(
         pw.Page(
@@ -473,63 +470,6 @@ import '../bankmanagement/banknames.dart';
                     );
                   }).values.toList(),
                 ),
-                pw.SizedBox(height: 10),
-
-                //
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Discount:', style: const pw.TextStyle(fontSize: 12)),
-                //     pw.Text(_discount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Mazdoori:', style: const pw.TextStyle(fontSize: 12)),
-                //     pw.Text(_mazdoori.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Invoice Amount:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                //     pw.Text(grandTotal.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                //   ],
-                // ),
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Previous Balance:', style: const pw.TextStyle(fontSize: 12)),
-                //     pw.Text(previousBalance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                //   ],
-                // ),
-                // // ✅ New Balance (Total of Invoice + Previous Balance)
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Total (Previous + Invoice):', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                //     pw.Text(newBalance.toStringAsFixed(2), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                //   ],
-                // ),
-                // // Add paid amount row
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Paid Amount:', style: const pw.TextStyle(fontSize: 12)),
-                //     pw.Text(paidAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                //   ],
-                // ),
-                //
-                // // Add remaining amount row
-                // pw.Row(
-                //   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     pw.Text('Remaining Amount:', style: const pw.TextStyle(fontSize: 12)),
-                //     pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
-                //   ],
-                // ),
-
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
@@ -590,7 +530,7 @@ import '../bankmanagement/banknames.dart';
                     pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                   ],
                 ),
-                pw.SizedBox(height: 30),
+                // pw.SizedBox(height: 30),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.end,
                   children: [
@@ -599,7 +539,7 @@ import '../bankmanagement/banknames.dart';
                 ),
 
                 // Footer Section
-                pw.Spacer(), // Push footer to the bottom of the page
+                // pw.Spacer(), // Push footer to the bottom of the page
                 pw.Divider(),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -2095,35 +2035,8 @@ import '../bankmanagement/banknames.dart';
                                           ),
                                         ),
                                         const SizedBox(height: 5,),
-                                        // TextField(
-                                        //   controller: _invoiceRows[i]['lengthController'],
-                                        //   keyboardType: TextInputType.text,
-                                        //   onChanged: (value) {
-                                        //     // Try to parse as number first, if fails store as text
-                                        //     double? numericValue = double.tryParse(value);
-                                        //     if (numericValue != null) {
-                                        //       _updateRow(i, 'length', numericValue);
-                                        //     } else {
-                                        //       _updateRow(i, 'length', value); // Store as text
-                                        //     }
-                                        //   },
-                                        //   decoration: InputDecoration(
-                                        //     labelText: languageProvider.isEnglish ? 'Sarya Length' : 'سرئے لمبائی',
-                                        //     hintText: languageProvider.isEnglish ? 'Enter number or text' : 'نمبر یا متن درج کریں',
-                                        //     hintStyle: TextStyle(color: Colors.teal.shade600),
-                                        //     border: const OutlineInputBorder(
-                                        //       borderRadius: BorderRadius.all(Radius.circular(10)),
-                                        //       borderSide: BorderSide(color: Colors.grey),
-                                        //     ),
-                                        //   ),
-                                        // ),
-                                        // FIXED VERSION:
                                         TextField(
                                           controller: _invoiceRows[i]['lengthController'],
-                                          // keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                          // inputFormatters: [
-                                          //   FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
-                                          // ],
                                           onChanged: (value) {
                                             // Always store as string to preserve formatting
                                             _updateRow(i, 'length', value);

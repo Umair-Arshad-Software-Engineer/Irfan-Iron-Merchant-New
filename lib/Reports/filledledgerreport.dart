@@ -577,8 +577,7 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           DataColumn(label: Text(languageProvider.isEnglish ? 'Debit' : 'ڈیبٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Credit' : 'کریڈٹ')),
           DataColumn(label: Text(languageProvider.isEnglish ? 'Balance' : 'بیلنس')),
-          DataColumn(label: Text(languageProvider.isEnglish ? 'Actions' : 'اقدامات')), // Add actions column
-
+          // DataColumn(label: Text(languageProvider.isEnglish ? 'Actions' : 'اقدامات')),
         ],
         rows: transactions.map((transaction) {
           final bankName = _getBankName(transaction);
@@ -587,20 +586,20 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
           return DataRow(cells: [
             DataCell(Text(
                 DateFormat('dd MMM yyyy').format(DateTime.parse(transaction['date'])),
-                style: TextStyle(fontSize: isMobile ? 10 : 12)
+                style: TextStyle(fontSize: isMobile ? 14 : 16)
             )),
             DataCell(Text(
                 transaction['referenceNumber'] ?? transaction['filledNumber'] ?? '-',
-                style: TextStyle(fontSize: isMobile ? 10 : 12)
+                style: TextStyle(fontSize: isMobile ? 14 : 16)
             )),
             DataCell(Text(
                 transaction['credit'] < 0.0 ? 'Filled (Edited)' :
                 (transaction['credit'] != 0.0 ? 'Filled' : 'Bill'),
-                style: TextStyle(fontSize: isMobile ? 10 : 12)
+                style: TextStyle(fontSize: isMobile ? 14 : 16)
             )),
             DataCell(Text(
               _getPaymentMethodText(transaction['paymentMethod'], languageProvider),
-              style: TextStyle(fontSize: isMobile ? 10 : 12),
+              style: TextStyle(fontSize: isMobile ? 14 : 16),
             )),
             DataCell(
               Row(
@@ -616,30 +615,30 @@ class _FilledLedgerReportPageState extends State<FilledLedgerReportPage> {
             ),
             DataCell(Text(
                 'Rs ${transaction['debit']?.toStringAsFixed(2) ?? '0.00'}',
-                style: TextStyle(fontSize: isMobile ? 10 : 12)
+                style: TextStyle(fontSize: isMobile ? 14 : 16)
             )),
             DataCell(Text(
                 'Rs ${transaction['credit']?.toStringAsFixed(2) ?? '0.00'}',
-                style: TextStyle(fontSize: isMobile ? 10 : 12)
+                style: TextStyle(fontSize: isMobile ? 14 : 16)
             )),
             DataCell(Text(
                 'Rs ${transaction['balance']?.toStringAsFixed(2) ?? '0.00'}',
-                style: TextStyle(fontSize: isMobile ? 10 : 12)
+                style: TextStyle(fontSize: isMobile ? 14 : 16)
             )),
-            DataCell(
-              // Show delete button only for bill payments
-              transaction['credit'] != 0.0 ? const SizedBox.shrink() : IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => _showDeleteConfirmationDialog(
-                  context,
-                  transaction['id'],
-                  transaction['filledNumber'],
-                  transaction['paymentMethod'],
-                  transaction['debit'] ?? 0.0,
-                  reportProvider,
-                ),
-              ),
-            ),
+            // DataCell(
+            //   // Show delete button only for bill payments
+            //   transaction['credit'] != 0.0 ? const SizedBox.shrink() : IconButton(
+            //     icon: const Icon(Icons.delete, color: Colors.red),
+            //     onPressed: () => _showDeleteConfirmationDialog(
+            //       context,
+            //       transaction['id'],
+            //       transaction['filledNumber'],
+            //       transaction['paymentMethod'],
+            //       transaction['debit'] ?? 0.0,
+            //       reportProvider,
+            //     ),
+            //   ),
+            // ),
           ]);
         }).toList(),
       ),

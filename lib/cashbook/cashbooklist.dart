@@ -318,6 +318,65 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
+  // Future<void> _deleteEntry(String id, String? expenseKey) async {
+  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+  //   final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
+  //
+  //   try {
+  //     // First get the entry data before deleting
+  //     final entrySnapshot = await widget.databaseRef.child(id).get();
+  //     if (!entrySnapshot.exists) {
+  //       throw Exception(languageProvider.isEnglish ? 'Entry not found' : 'انٹری نہیں ملی');
+  //     }
+  //
+  //     final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
+  //     final entryAmount = entry.amount;
+  //     final entryDate = entry.dateTime;
+  //     final formattedDate = DateFormat('dd:MM:yyyy').format(entryDate);
+  //
+  //     // Delete from cashbook
+  //     await widget.databaseRef.child(id).remove();
+  //
+  //     // If this was an expense entry, delete from expenses too
+  //     if (expenseKey != null && entry.source == "expense_page") {
+  //       await dbRef.child(formattedDate).child("expenses").child(expenseKey).remove();
+  //
+  //       // Update the opening balance by adding back the deleted expense amount
+  //       final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
+  //       if (openingBalanceSnapshot.exists) {
+  //         double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
+  //         double newOpeningBalance = currentOpeningBalance + entryAmount;
+  //
+  //         await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
+  //       }
+  //     }
+  //
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text(
+  //             languageProvider.isEnglish
+  //                 ? 'Entry deleted successfully'
+  //                 : 'انٹری کامیابی سے حذف ہو گئی',
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //   } catch (error) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text(
+  //             languageProvider.isEnglish
+  //                 ? 'Failed to delete entry: $error'
+  //                 : 'انٹری حذف کرنے میں ناکام: $error',
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //   }
+  // }
+
   Future<void> _deleteEntry(String id, String? expenseKey) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
@@ -334,6 +393,10 @@ class _CashbookListPageState extends State<CashbookListPage> {
       final entryDate = entry.dateTime;
       final formattedDate = DateFormat('dd:MM:yyyy').format(entryDate);
 
+      // Check if this entry is from invoice or filled
+      bool isFromInvoice = entry.invoiceId != null && entry.invoiceId!.isNotEmpty;
+      bool isFromFilled = entry.filledId != null && entry.filledId!.isNotEmpty;
+
       // Delete from cashbook
       await widget.databaseRef.child(id).remove();
 
@@ -349,6 +412,13 @@ class _CashbookListPageState extends State<CashbookListPage> {
 
           await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
         }
+      }
+
+      // Handle invoice or filled entries
+      if (isFromInvoice) {
+        await _handleInvoiceEntryDeletion(entry);
+      } else if (isFromFilled) {
+        await _handleFilledEntryDeletion(entry);
       }
 
       if (mounted) {
@@ -377,17 +447,352 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
-  Future<void> _showDeleteConfirmation(String entryId,String? expenseKey) async {
+  Future<void> _handleInvoiceEntryDeletion(CashbookEntry entry) async {
+    try {
+      print('🔄 Deleting invoice-linked cashbook entry');
+      print('   - Invoice ID: ${entry.invoiceId}');
+      print('   - Invoice Number: ${entry.invoiceNumber}');
+      print('   - Amount: ${entry.amount}');
+
+      // Find the invoice by invoiceNumber
+      final invoiceSnapshot = await FirebaseDatabase.instance.ref('invoices')
+          .orderByChild('invoiceNumber')
+          .equalTo(entry.invoiceNumber!)
+          .once();
+
+      if (!invoiceSnapshot.snapshot.exists) {
+        print('❌ Invoice not found with number: ${entry.invoiceNumber}');
+        return;
+      }
+
+      dynamic snapshotValue = invoiceSnapshot.snapshot.value;
+      Map<dynamic, dynamic> invoiceData;
+
+      if (snapshotValue is Map<dynamic, dynamic>) {
+        invoiceData = snapshotValue;
+      } else {
+        print('❌ Unexpected data format for invoices');
+        return;
+      }
+
+      if (invoiceData.isEmpty) {
+        print('❌ No invoice data found');
+        return;
+      }
+
+      final invoiceId = invoiceData.keys.first;
+      final invoice = Map<String, dynamic>.from(invoiceData[invoiceId]);
+
+      print('✅ Found invoice: $invoiceId');
+
+      // Update invoice payment amounts
+      final currentSimpleCashbookPaid = _parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0);
+      final currentDebitAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
+
+      final newSimpleCashbookPaid = (currentSimpleCashbookPaid - entry.amount).clamp(0.0, double.infinity);
+      final newDebitAmount = (currentDebitAmount - entry.amount).clamp(0.0, double.infinity);
+
+      // Remove from simplecashbookPayments if exists
+      final simpleCashbookPaymentsSnapshot = await FirebaseDatabase.instance
+          .ref('invoices')
+          .child(invoiceId)
+          .child('simplecashbookPayments')
+          .get();
+
+      if (simpleCashbookPaymentsSnapshot.exists) {
+        final payments = simpleCashbookPaymentsSnapshot.value as Map<dynamic, dynamic>;
+        for (var paymentKey in payments.keys) {
+          final payment = payments[paymentKey] as Map<dynamic, dynamic>;
+          if (_parseToDouble(payment['amount']) == entry.amount &&
+              payment['customerName'] == entry.customerName) {
+            await FirebaseDatabase.instance
+                .ref('invoices')
+                .child(invoiceId)
+                .child('simplecashbookPayments')
+                .child(paymentKey)
+                .remove();
+            print('✅ Removed from simplecashbookPayments: $paymentKey');
+            break;
+          }
+        }
+      }
+
+      // Update invoice amounts
+      await FirebaseDatabase.instance.ref('invoices').child(invoiceId).update({
+        'simpleCashbookPaidAmount': newSimpleCashbookPaid,
+        'debitAmount': newDebitAmount,
+      });
+
+      // Update ledger entry
+      await _updateLedgerForDeletedEntry(
+        customerId: entry.customerId!,
+        documentType: 'invoice',
+        documentNumber: entry.invoiceNumber!,
+        amount: entry.amount,
+        transactionDate: entry.dateTime,
+      );
+
+      print('✅ Successfully updated invoice after cashbook entry deletion');
+
+    } catch (e) {
+      print('❌ Error handling invoice entry deletion: $e');
+      throw Exception('Failed to update invoice: $e');
+    }
+  }
+
+  Future<void> _handleFilledEntryDeletion(CashbookEntry entry) async {
+    try {
+      print('🔄 Deleting filled-linked cashbook entry');
+      print('   - Filled ID: ${entry.filledId}');
+      print('   - Filled Number: ${entry.filledNumber}');
+      print('   - Amount: ${entry.amount}');
+
+      DataSnapshot filledSnapshot;
+
+      // Try to find filled by ID first
+      if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+        filledSnapshot = await FirebaseDatabase.instance.ref('filled').child(entry.filledId!).get();
+      } else {
+        // Fallback to searching by filled number
+        filledSnapshot = await FirebaseDatabase.instance.ref('filled')
+            .orderByChild('filledNumber')
+            .equalTo(entry.filledNumber!)
+            .once()
+            .then((snapshot) => snapshot.snapshot);
+      }
+
+      if (!filledSnapshot.exists) {
+        print('❌ Filled document not found');
+        return;
+      }
+
+      dynamic snapshotValue = filledSnapshot.value;
+      Map<dynamic, dynamic> filledData;
+      String filledId;
+
+      if (snapshotValue is Map<dynamic, dynamic>) {
+        if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+          filledData = {entry.filledId!: snapshotValue};
+          filledId = entry.filledId!;
+        } else {
+          filledData = snapshotValue;
+          filledId = filledData.keys.first;
+        }
+      } else {
+        print('❌ Unexpected data format for filled');
+        return;
+      }
+
+      if (filledData.isEmpty || !filledData.containsKey(filledId)) {
+        print('❌ No filled data found');
+        return;
+      }
+
+      final filled = Map<String, dynamic>.from(filledData[filledId]);
+      print('✅ Found filled: $filledId');
+
+      // Update filled payment amounts
+      final currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
+      final currentDebitAmount = _parseToDouble(filled['debitAmount'] ?? 0.0);
+
+      final newSimpleCashbookPaid = (currentSimpleCashbookPaid - entry.amount).clamp(0.0, double.infinity);
+      final newDebitAmount = (currentDebitAmount - entry.amount).clamp(0.0, double.infinity);
+
+      // Remove from simplecashbookPayments if exists
+      final simpleCashbookPaymentsSnapshot = await FirebaseDatabase.instance
+          .ref('filled')
+          .child(filledId)
+          .child('simplecashbookPayments')
+          .get();
+
+      if (simpleCashbookPaymentsSnapshot.exists) {
+        final payments = simpleCashbookPaymentsSnapshot.value as Map<dynamic, dynamic>;
+        for (var paymentKey in payments.keys) {
+          final payment = payments[paymentKey] as Map<dynamic, dynamic>;
+          if (_parseToDouble(payment['amount']) == entry.amount &&
+              payment['customerName'] == entry.customerName) {
+            await FirebaseDatabase.instance
+                .ref('filled')
+                .child(filledId)
+                .child('simplecashbookPayments')
+                .child(paymentKey)
+                .remove();
+            print('✅ Removed from simplecashbookPayments: $paymentKey');
+            break;
+          }
+        }
+      }
+
+      // Update filled amounts
+      await FirebaseDatabase.instance.ref('filled').child(filledId).update({
+        'simpleCashbookPaidAmount': newSimpleCashbookPaid,
+        'debitAmount': newDebitAmount,
+      });
+
+      // Update ledger entry
+      await _updateLedgerForDeletedEntry(
+        customerId: entry.customerId!,
+        documentType: 'filled',
+        documentNumber: entry.filledNumber!,
+        amount: entry.amount,
+        transactionDate: entry.dateTime,
+      );
+
+      print('✅ Successfully updated filled after cashbook entry deletion');
+
+    } catch (e) {
+      print('❌ Error handling filled entry deletion: $e');
+      throw Exception('Failed to update filled: $e');
+    }
+  }
+
+  Future<void> _updateLedgerForDeletedEntry({
+    required String customerId,
+    required String documentType,
+    required String documentNumber,
+    required double amount,
+    required DateTime transactionDate,
+  })
+  async {
+    try {
+      final ledgerRef = FirebaseDatabase.instance.ref(documentType == 'filled' ? 'filledledger' : 'ledger').child(customerId);
+
+      // Find the ledger entry that matches this transaction
+      final snapshot = await ledgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          for (var entryKey in ledgerData.keys) {
+            final entry = Map<String, dynamic>.from(ledgerData[entryKey] as Map<dynamic, dynamic>);
+
+            // Check if this is the matching ledger entry
+            if (entry['documentNumber'] == documentNumber &&
+                entry['debitAmount'] == amount &&
+                DateTime.parse(entry['transactionDate'] as String).isAtSameMomentAs(transactionDate)) {
+
+              // Remove this ledger entry
+              await ledgerRef.child(entryKey).remove();
+              print('✅ Removed matching ledger entry: $entryKey');
+
+              // Recalculate remaining balances for subsequent entries
+              await _recalculateLedgerBalances(customerId, documentType, transactionDate);
+              return;
+            }
+          }
+        }
+      }
+
+      print('⚠️ No matching ledger entry found for deletion');
+
+    } catch (e) {
+      print('❌ Error updating ledger for deleted entry: $e');
+      throw Exception('Failed to update ledger: $e');
+    }
+  }
+
+  Future<void> _recalculateLedgerBalances(String customerId, String documentType, DateTime afterDate) async {
+    try {
+      final ledgerRef = FirebaseDatabase.instance.ref(documentType == 'filled' ? 'filledledger' : 'ledger').child(customerId);
+
+      final snapshot = await ledgerRef.orderByChild('transactionDate').get();
+
+      if (!snapshot.exists) return;
+
+      final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+      if (ledgerData == null) return;
+
+      // Sort entries by date
+      final entries = ledgerData.entries.toList()
+        ..sort((a, b) {
+          final dateA = DateTime.parse(a.value['transactionDate'] as String);
+          final dateB = DateTime.parse(b.value['transactionDate'] as String);
+          return dateA.compareTo(dateB);
+        });
+
+      double runningBalance = 0.0;
+      bool recalculate = false;
+
+      for (var entry in entries) {
+        final entryData = Map<String, dynamic>.from(entry.value as Map<dynamic, dynamic>);
+        final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+        // Start recalculating from the first entry after the deleted one
+        if (entryDate.isAfter(afterDate) || recalculate) {
+          recalculate = true;
+
+          final creditAmount = _parseToDouble(entryData['creditAmount']);
+          final debitAmount = _parseToDouble(entryData['debitAmount']);
+
+          runningBalance += creditAmount - debitAmount;
+
+          // Update the entry with new balance
+          await ledgerRef.child(entry.key).update({
+            'remainingBalance': runningBalance,
+          });
+        } else {
+          // For entries before deletion, just track the balance
+          final creditAmount = _parseToDouble(entryData['creditAmount']);
+          final debitAmount = _parseToDouble(entryData['debitAmount']);
+          runningBalance += creditAmount - debitAmount;
+        }
+      }
+
+      print('✅ Successfully recalculated ledger balances');
+
+    } catch (e) {
+      print('❌ Error recalculating ledger balances: $e');
+    }
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    return 0.0;
+  }
+
+  Future<void> _showDeleteConfirmation(String entryId, String? expenseKey) async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // Get entry details to show appropriate message
+    final entrySnapshot = await widget.databaseRef.child(entryId).get();
+    if (!entrySnapshot.exists) return;
+
+    final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
+    final isFromInvoice = entry.invoiceId != null && entry.invoiceId!.isNotEmpty;
+    final isFromFilled = entry.filledId != null && entry.filledId!.isNotEmpty;
+
+    String message;
+    if (isFromInvoice) {
+      message = languageProvider.isEnglish
+          ? 'This entry is linked to invoice ${entry.invoiceNumber}. Deleting it will also update the invoice payment records. Are you sure?'
+          : 'یہ انٹری انوائس ${entry.invoiceNumber} سے منسلک ہے۔ اسے حذف کرنا انوائس کی ادائیگی کی ریکارڈز کو بھی اپ ڈیٹ کرے گا۔ کیا آپ واقعی حذف کرنا چاہتے ہیں؟';
+    } else if (isFromFilled) {
+      message = languageProvider.isEnglish
+          ? 'This entry is linked to filled ${entry.filledNumber}. Deleting it will also update the filled payment records. Are you sure?'
+          : 'یہ انٹری فلڈ ${entry.filledNumber} سے منسلک ہے۔ اسے حذف کرنا فلڈ کی ادائیگی کی ریکارڈز کو بھی اپ ڈیٹ کرے گا۔ کیا آپ واقعی حذف کرنا چاہتے ہیں؟';
+    } else {
+      message = languageProvider.isEnglish
+          ? 'Are you sure you want to delete this entry?'
+          : 'کیا آپ واقعی اس انٹری کو حذف کرنا چاہتے ہیں؟';
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(languageProvider.isEnglish
             ? 'Delete Entry'
             : 'انٹری حذف کریں'),
-        content: Text(languageProvider.isEnglish
-            ? 'Are you sure you want to delete this entry?'
-            : 'کیا آپ واقعی اس انٹری کو حذف کرنا چاہتے ہیں؟'),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -405,7 +810,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
     );
 
     if (confirmed ?? false) {
-      await _deleteEntry(entryId,expenseKey);
+      await _deleteEntry(entryId, expenseKey);
       if (mounted) setState(() {});
     }
   }
@@ -513,24 +918,41 @@ class _CashbookListPageState extends State<CashbookListPage> {
                 itemCount: entries.length,
                 itemBuilder: (context, index) {
                   final entry = entries[index];
+                  final isFromInvoice = entry.invoiceId != null && entry.invoiceId!.isNotEmpty;
+                  final isFromFilled = entry.filledId != null && entry.filledId!.isNotEmpty;
+                  final isEditable = !isFromInvoice && !isFromFilled;
+
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     child: ListTile(
-                      // title: Text(
-                      //   entry.source == "expense_page"
-                      //       ? "${languageProvider.isEnglish ? 'Expense' : 'اخراجات'}: ${entry.description.replaceFirst("Expense: ", "").replaceFirst("اخراجات: ", "")}"
-                      //       : entry.description,
-                      // ),
-                      // Replace the title in your ListTile:
-                      title: Text(
-                        _formatDescription(entry, languageProvider),
+                      title: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_formatDescription(entry, languageProvider)),
+                          if (isFromInvoice)
+                            Text(
+                              languageProvider.isEnglish
+                                  ? 'From Invoice: ${entry.invoiceNumber}'
+                                  : 'انوائس سے: ${entry.invoiceNumber}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue[700],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          if (isFromFilled)
+                            Text(
+                              languageProvider.isEnglish
+                                  ? 'From Filled: ${entry.filledNumber}'
+                                  : 'فلڈ سے: ${entry.filledNumber}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green[700],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                        ],
                       ),
-                      // subtitle: Text(
-                      //   '${_getTypeDisplayText(entry.type, languageProvider)} - ${entry.amount} ${languageProvider.isEnglish ? 'Pkr' : 'روپے'} - '
-                      //       '${DateFormat('yyyy-MM-dd HH:mm').format(entry.dateTime)}'
-                      //       '${entry.source == "expense_page" ? " (${languageProvider.isEnglish ? 'From Expenses' : 'اخراجات سے'})" : ""}',
-                      // ),
-                      // Replace the subtitle in your ListTile:
                       subtitle: Text(
                         '${_getTypeDisplayText(entry.type, languageProvider)} - ${entry.amount} ${languageProvider.isEnglish ? 'Pkr' : 'روپے'} - '
                             '${DateFormat('yyyy-MM-dd HH:mm').format(entry.dateTime)}'
@@ -539,11 +961,19 @@ class _CashbookListPageState extends State<CashbookListPage> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Edit button - disabled for invoice/filled entries
                           Tooltip(
-                            message: languageProvider.isEnglish ? 'Edit' : 'تدوین کریں',
+                            message: isEditable
+                                ? (languageProvider.isEnglish ? 'Edit' : 'تدوین کریں')
+                                : (languageProvider.isEnglish
+                                ? 'Cannot edit invoice/filled entries'
+                                : 'انوائس/فلڈ انٹریز میں ترمیم نہیں کی جا سکتی'),
                             child: IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _editEntry(entry),
+                              icon: Icon(
+                                Icons.edit,
+                                color: isEditable ? Colors.blue : Colors.grey,
+                              ),
+                              onPressed: isEditable ? () => _editEntry(entry) : null,
                             ),
                           ),
                           Tooltip(
@@ -619,6 +1049,25 @@ class _CashbookListPageState extends State<CashbookListPage> {
   }
 
   void _editEntry(CashbookEntry entry) {
+    // Safety check - prevent editing of invoice/filled entries
+    final isFromInvoice = entry.invoiceId != null && entry.invoiceId!.isNotEmpty;
+    final isFromFilled = entry.filledId != null && entry.filledId!.isNotEmpty;
+
+    if (isFromInvoice || isFromFilled) {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            languageProvider.isEnglish
+                ? 'Cannot edit invoice/filled entries'
+                : 'انوائس/فلڈ انٹریز میں ترمیم نہیں کی جا سکتی',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Navigate to form page with entry data
     Navigator.push(
       context,

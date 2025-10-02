@@ -67,9 +67,6 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     super.dispose();
   }
 
-
-
-
   void _saveEntry() async {
     if (_formKey.currentState!.validate()) {
       final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
@@ -78,6 +75,26 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
       try {
         final amount = double.parse(_amountController.text);
         final isPaid = selectedPaymentMethod != null;
+
+        // Determine which data to save based on selected option
+        String? invoiceId;
+        String? invoiceNumber;
+        String? filledId;
+        String? filledNumber;
+
+        if (_selectedOption == 'Invoice') {
+          // Only save invoice data
+          invoiceId = _selectedInvoiceId;
+          invoiceNumber = _selectedInvoiceOrFilled;
+          filledId = null; // Explicitly set to null
+          filledNumber = null; // Explicitly set to null
+        } else if (_selectedOption == 'Filled') {
+          // Only save filled data
+          filledId = _selectedFilledId;
+          filledNumber = _selectedInvoiceOrFilled;
+          invoiceId = null; // Explicitly set to null
+          invoiceNumber = null; // Explicitly set to null
+        }
 
         // Create and save SimpleCashbook entry
         final entry = CashbookEntry(
@@ -92,10 +109,10 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
           paymentDate: isPaid ? DateTime.now() : null,
           customerId: _selectedCustomer?.id,
           customerName: _selectedCustomer?.name,
-          invoiceId: _selectedInvoiceId,
-          invoiceNumber: _selectedInvoiceOrFilled,
-          filledId: _selectedFilledId,
-          filledNumber: _selectedInvoiceOrFilled,
+          invoiceId: invoiceId,
+          invoiceNumber: invoiceNumber,
+          filledId: filledId,
+          filledNumber: filledNumber,
           bankId: _selectedBank?['id'] ?? _selectedChequeBank?['id'],
           bankName: _selectedBank?['name'] ?? _selectedChequeBank?['name'],
           chequeNumber: selectedPaymentMethod == 'Cheque' ? _chequeNumberController.text : null,
@@ -152,65 +169,47 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
   Future<void> _createPaymentTransaction(CashbookEntry entry, DatabaseReference db) async {
     final timestampId = DateTime.now().millisecondsSinceEpoch.toString();
 
+    // Determine which data to include based on selected option
+    Map<String, dynamic> baseData = {
+      'id': timestampId,
+      'customerId': entry.customerId,
+      'customerName': entry.customerName,
+      'amount': entry.amount,
+      'description': entry.description,
+      'dateTime': entry.dateTime.toIso8601String(),
+      'paymentKey': timestampId,
+      'createdAt': DateTime.now().toIso8601String(),
+      'transferredFrom': 'simplecashbook',
+      'originalEntryId': entry.id,
+    };
+
+    // Add invoice or filled data based on selection
+    if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) {
+      baseData['invoiceId'] = entry.invoiceId;
+      baseData['invoiceNumber'] = entry.invoiceNumber;
+    } else if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+      baseData['filledId'] = entry.filledId;
+      baseData['filledNumber'] = entry.filledNumber;
+    }
+
     switch (selectedPaymentMethod!.toLowerCase()) {
       case 'cash':
         await db.child('cashbook').child(timestampId).set({
-          'id': timestampId,
-          'customerId': entry.customerId,
-          'customerName': entry.customerName,
-          'amount': entry.amount,
-          'description': entry.description,
-          'dateTime': entry.dateTime.toIso8601String(),
-          'paymentKey': timestampId,
-          'createdAt': DateTime.now().toIso8601String(),
+          ...baseData,
           'type': 'cash_in',
-          'transferredFrom': 'simplecashbook',
-          'originalEntryId': entry.id,
-          'invoiceId': entry.invoiceId,
-          'invoiceNumber': entry.invoiceNumber,
-          'filledId': entry.filledId,
-          'filledNumber': entry.filledNumber,
         });
         break;
 
       case 'online':
-        await db.child('onlinePayments').child(timestampId).set({
-          'id': timestampId,
-          'customerId': entry.customerId,
-          'customerName': entry.customerName,
-          'amount': entry.amount,
-          'description': entry.description,
-          'dateTime': entry.dateTime.toIso8601String(),
-          'paymentKey': timestampId,
-          'createdAt': DateTime.now().toIso8601String(),
-          'transferredFrom': 'simplecashbook',
-          'originalEntryId': entry.id,
-          'invoiceId': entry.invoiceId,
-          'invoiceNumber': entry.invoiceNumber,
-          'filledId': entry.filledId,
-          'filledNumber': entry.filledNumber,
-        });
+        await db.child('onlinePayments').child(timestampId).set(baseData);
         break;
 
       case 'bank':
         await db.child('bankTransactions').child(timestampId).set({
-          'id': timestampId,
-          'customerId': entry.customerId,
-          'customerName': entry.customerName,
-          'amount': entry.amount,
-          'description': entry.description,
-          'dateTime': entry.dateTime.toIso8601String(),
-          'paymentKey': timestampId,
-          'createdAt': DateTime.now().toIso8601String(),
+          ...baseData,
           'bankId': entry.bankId,
           'bankName': entry.bankName,
           'type': 'cash_in',
-          'transferredFrom': 'simplecashbook',
-          'originalEntryId': entry.id,
-          'invoiceId': entry.invoiceId,
-          'invoiceNumber': entry.invoiceNumber,
-          'filledId': entry.filledId,
-          'filledNumber': entry.filledNumber,
         });
 
         if (entry.bankId != null) {
@@ -225,10 +224,14 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
             'bankName': entry.bankName,
             'transferredFrom': 'simplecashbook',
             'originalEntryId': entry.id,
-            'invoiceId': entry.invoiceId,
-            'invoiceNumber': entry.invoiceNumber,
-            'filledId': entry.filledId,
-            'filledNumber': entry.filledNumber,
+            // Add invoice or filled data
+            if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) ...{
+              'invoiceId': entry.invoiceId,
+              'invoiceNumber': entry.invoiceNumber,
+            } else if (entry.filledId != null && entry.filledId!.isNotEmpty) ...{
+              'filledId': entry.filledId,
+              'filledNumber': entry.filledNumber,
+            },
           });
 
           final bankBalanceRef = db.child('banks/${entry.bankId}/balance');
@@ -239,25 +242,12 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
 
       case 'cheque':
         await db.child('cheques').child(timestampId).set({
-          'id': timestampId,
-          'customerId': entry.customerId,
-          'customerName': entry.customerName,
-          'amount': entry.amount,
-          'description': entry.description,
-          'dateTime': entry.dateTime.toIso8601String(),
-          'paymentKey': timestampId,
-          'createdAt': DateTime.now().toIso8601String(),
+          ...baseData,
           'chequeNumber': entry.chequeNumber,
           'chequeDate': entry.chequeDate?.toIso8601String(),
           'bankId': entry.bankId,
           'bankName': entry.bankName,
           'status': 'pending',
-          'transferredFrom': 'simplecashbook',
-          'originalEntryId': entry.id,
-          'invoiceId': entry.invoiceId,
-          'invoiceNumber': entry.invoiceNumber,
-          'filledId': entry.filledId,
-          'filledNumber': entry.filledNumber,
         });
 
         if (entry.bankId != null) {
@@ -268,29 +258,18 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
             'status': 'pending',
             'customerName': entry.customerName,
             'createdAt': DateTime.now().toIso8601String(),
-            'filledNumber': entry.filledNumber,
-            'invoiceNumber': entry.invoiceNumber,
+            // Add invoice or filled data
+            if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) ...{
+              'invoiceNumber': entry.invoiceNumber,
+            } else if (entry.filledId != null && entry.filledId!.isNotEmpty) ...{
+              'filledNumber': entry.filledNumber,
+            },
           });
         }
         break;
 
       case 'slip':
-        await db.child('slipPayments').child(timestampId).set({
-          'id': timestampId,
-          'customerId': entry.customerId,
-          'customerName': entry.customerName,
-          'amount': entry.amount,
-          'description': entry.description,
-          'dateTime': entry.dateTime.toIso8601String(),
-          'paymentKey': timestampId,
-          'createdAt': DateTime.now().toIso8601String(),
-          'transferredFrom': 'simplecashbook',
-          'originalEntryId': entry.id,
-          'invoiceId': entry.invoiceId,
-          'invoiceNumber': entry.invoiceNumber,
-          'filledId': entry.filledId,
-          'filledNumber': entry.filledNumber,
-        });
+        await db.child('slipPayments').child(timestampId).set(baseData);
         break;
     }
   }
@@ -340,12 +319,6 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
     }
     return 0.0;
   }
-
-
-
-
-
-
 
   Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
     if (_cachedBanks.isEmpty) {
@@ -427,35 +400,79 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
   }
 
   Future<List<Invoice>> _fetchInvoicesByCustomer(String customerId) async {
-    final snapshot = await FirebaseDatabase.instance
-        .ref()
-        .child("invoices")
-        .orderByChild("customerId")
-        .equalTo(customerId)
-        .get();
+    try {
+      final snapshot = await FirebaseDatabase.instance
+          .ref()
+          .child("invoices")
+          .orderByChild("customerId")
+          .equalTo(customerId)
+          .get();
 
-    if (!snapshot.exists) return [];
+      if (!snapshot.exists) return [];
 
-    final data = Map<String, dynamic>.from(snapshot.value as Map);
-    return data.entries.map((e) {
-      return Invoice.fromMap(e.key, Map<String, dynamic>.from(e.value));
-    }).toList();
+      final data = snapshot.value;
+      List<Invoice> invoices = [];
+
+      if (data is Map) {
+        // Handle as Map
+        final dataMap = Map<String, dynamic>.from(data as Map<dynamic, dynamic>);
+        invoices = dataMap.entries.map((e) {
+          return Invoice.fromMap(e.key, Map<String, dynamic>.from(e.value));
+        }).toList();
+      } else if (data is List) {
+        // Handle as List
+        final dataList = data as List<dynamic>;
+        for (int i = 0; i < dataList.length; i++) {
+          if (dataList[i] != null) {
+            final item = Map<String, dynamic>.from(dataList[i] as Map<dynamic, dynamic>);
+            invoices.add(Invoice.fromMap(i.toString(), item));
+          }
+        }
+      }
+
+      return invoices;
+    } catch (e) {
+      print('Error fetching invoices: $e');
+      return [];
+    }
   }
 
   Future<List<Filled>> _fetchFilledByCustomer(String customerId) async {
-    final snapshot = await FirebaseDatabase.instance
-        .ref()
-        .child("filled")
-        .orderByChild("customerId")
-        .equalTo(customerId)
-        .get();
+    try {
+      final snapshot = await FirebaseDatabase.instance
+          .ref()
+          .child("filled")
+          .orderByChild("customerId")
+          .equalTo(customerId)
+          .get();
 
-    if (!snapshot.exists) return [];
+      if (!snapshot.exists) return [];
 
-    final data = Map<String, dynamic>.from(snapshot.value as Map);
-    return data.entries.map((e) {
-      return Filled.fromMap(e.key, Map<String, dynamic>.from(e.value));
-    }).toList();
+      final data = snapshot.value;
+      List<Filled> filledList = [];
+
+      if (data is Map) {
+        // Handle as Map
+        final dataMap = Map<String, dynamic>.from(data as Map<dynamic, dynamic>);
+        filledList = dataMap.entries.map((e) {
+          return Filled.fromMap(e.key, Map<String, dynamic>.from(e.value));
+        }).toList();
+      } else if (data is List) {
+        // Handle as List
+        final dataList = data as List<dynamic>;
+        for (int i = 0; i < dataList.length; i++) {
+          if (dataList[i] != null) {
+            final item = Map<String, dynamic>.from(dataList[i] as Map<dynamic, dynamic>);
+            filledList.add(Filled.fromMap(i.toString(), item));
+          }
+        }
+      }
+
+      return filledList;
+    } catch (e) {
+      print('Error fetching filled orders: $e');
+      return [];
+    }
   }
 
   Future<Map<String, dynamic>?> showInvoiceDialog(BuildContext context, List<Invoice> invoices) {
@@ -472,7 +489,8 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                 searchQuery = query;
                 filteredInvoices = invoices
                     .where((inv) =>
-                    inv.invoiceNumber.toLowerCase().contains(query.toLowerCase()))
+                inv.invoiceNumber.toLowerCase().contains(query.toLowerCase()) ||
+                    inv.referenceNumber.toLowerCase().contains(query.toLowerCase()))
                     .toList();
               });
             }
@@ -497,13 +515,26 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                         itemBuilder: (context, index) {
                           final inv = filteredInvoices[index];
                           return ListTile(
-                            // title: Text(inv.invoiceNumber),
                             title: Text(inv.referenceNumber),
-                            subtitle: Text("Amount: ${inv.amount}"),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("Invoice: ${inv.invoiceNumber}"),
+                                Text("Grand Total: ${inv.grandTotal.toStringAsFixed(2)}"),
+                                Text("Paid: ${inv.debitAmount.toStringAsFixed(2)}"),
+                                Text(
+                                  "Remaining: ${inv.remainingAmount.toStringAsFixed(2)}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: inv.remainingAmount > 0 ? Colors.green : Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
                             onTap: () => Navigator.pop(context, {
                               'id': inv.id,
                               'invoiceNumber': inv.invoiceNumber,
-                              'amount': inv.amount
+                              'amount': inv.remainingAmount // Use remaining amount instead of grand total
                             }),
                           );
                         },
@@ -533,7 +564,8 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                 searchQuery = query;
                 filteredFilled = filledList
                     .where((f) =>
-                    f.filledNumber.toLowerCase().contains(query.toLowerCase()))
+                f.filledNumber.toLowerCase().contains(query.toLowerCase()) ||
+                    f.referenceNumber.toLowerCase().contains(query.toLowerCase()))
                     .toList();
               });
             }
@@ -558,13 +590,26 @@ class _SimpleCashbookFormPageState extends State<SimpleCashbookFormPage> {
                         itemBuilder: (context, index) {
                           final f = filteredFilled[index];
                           return ListTile(
-                            // title: Text(f.filledNumber),
-                             title: Text(f.referenceNumber),
-                            subtitle: Text("Amount: ${f.amount}"),
+                            title: Text(f.referenceNumber),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("Filled: ${f.filledNumber}"),
+                                Text("Grand Total: ${f.grandTotal.toStringAsFixed(2)}"),
+                                Text("Paid: ${f.debitAmount.toStringAsFixed(2)}"),
+                                Text(
+                                  "Remaining: ${f.remainingAmount.toStringAsFixed(2)}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: f.remainingAmount > 0 ? Colors.green : Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
                             onTap: () => Navigator.pop(context, {
                               'id': f.id,
                               'filledNumber': f.filledNumber,
-                              'amount': f.amount
+                              'amount': f.remainingAmount // Use remaining amount instead of grand total
                             }),
                           );
                         },
@@ -1115,6 +1160,8 @@ class Invoice {
   final String invoiceNumber;
   final String referenceNumber;
   final double amount;
+  final double grandTotal;
+  final double debitAmount;
   final String customerId;
 
   Invoice({
@@ -1122,8 +1169,13 @@ class Invoice {
     required this.invoiceNumber,
     required this.referenceNumber,
     required this.amount,
+    required this.grandTotal,
+    required this.debitAmount,
     required this.customerId,
   });
+
+  // Calculate remaining amount
+  double get remainingAmount => (grandTotal - debitAmount).clamp(0.0, double.infinity);
 
   factory Invoice.fromMap(String id, Map<dynamic, dynamic> data) {
     return Invoice(
@@ -1131,6 +1183,8 @@ class Invoice {
       invoiceNumber: data['invoiceNumber'] ?? '',
       referenceNumber: data['referenceNumber'] ?? '',
       amount: (data['grandTotal'] ?? 0).toDouble(),
+      grandTotal: (data['grandTotal'] ?? 0).toDouble(),
+      debitAmount: (data['debitAmount'] ?? 0).toDouble(),
       customerId: data['customerId'] ?? '',
     );
   }
@@ -1141,6 +1195,8 @@ class Filled {
   final String filledNumber;
   final String referenceNumber;
   final double amount;
+  final double grandTotal;
+  final double debitAmount;
   final String customerId;
 
   Filled({
@@ -1148,8 +1204,13 @@ class Filled {
     required this.filledNumber,
     required this.referenceNumber,
     required this.amount,
+    required this.grandTotal,
+    required this.debitAmount,
     required this.customerId,
   });
+
+  // Calculate remaining amount
+  double get remainingAmount => (grandTotal - debitAmount).clamp(0.0, double.infinity);
 
   factory Filled.fromMap(String id, Map<dynamic, dynamic> data) {
     return Filled(
@@ -1157,6 +1218,8 @@ class Filled {
       filledNumber: data['filledNumber'] ?? '',
       referenceNumber: data['referenceNumber'] ?? '',
       amount: (data['grandTotal'] ?? 0).toDouble(),
+      grandTotal: (data['grandTotal'] ?? 0).toDouble(),
+      debitAmount: (data['debitAmount'] ?? 0).toDouble(),
       customerId: data['customerId'] ?? '',
     );
   }

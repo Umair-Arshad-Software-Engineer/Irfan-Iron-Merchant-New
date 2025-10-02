@@ -279,7 +279,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
     final cashbookEntry = {
       "id": entryId,
-      "description": "Expense: ${_descriptionController.text}",
+      "description": "خرچہ: ${_descriptionController.text}",
       "amount": expenseAmount,
       "dateTime": _selectedDate.toIso8601String(),
       "type": "cash_out",

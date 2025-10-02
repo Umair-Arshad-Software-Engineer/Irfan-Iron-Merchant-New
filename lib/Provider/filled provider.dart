@@ -628,6 +628,7 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+
   Future<void> _deleteFromExternalNode({
     required String method,
     required String paymentKey,
@@ -657,20 +658,40 @@ class FilledProvider with ChangeNotifier {
 
         case 'online':
         // Delete from onlinePayments node
-          await _db.child('onlinePayments').child(paymentKey).remove();
+          final onlineSnapshot = await _db.child('onlinePayments')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (onlineSnapshot.exists) {
+            final entries = onlineSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('onlinePayments').child(entryKey).remove();
+            }
+          }
           break;
 
         case 'check':
         // Delete from cheques node
-          await _db.child('cheques').child(paymentKey).remove();
+          final chequeSnapshot = await _db.child('cheques')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (chequeSnapshot.exists) {
+            final entries = chequeSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cheques').child(entryKey).remove();
+            }
+          }
 
           // Also delete from bank's cheques if bank info exists
           final chequeBankId = paymentData['chequeBankId'];
           if (chequeBankId != null) {
             final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
             final bankChequeSnapshot = await bankChequesRef
-                .orderByChild('filledId')
-                .equalTo(filledId)
+                .orderByChild('filledNumber')
+                .equalTo(filledNumber)
                 .get();
 
             if (bankChequeSnapshot.exists) {
@@ -689,7 +710,17 @@ class FilledProvider with ChangeNotifier {
 
         case 'bank':
         // Delete from bankTransactions node
-          await _db.child('bankTransactions').child(paymentKey).remove();
+          final bankTransactionSnapshot = await _db.child('bankTransactions')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (bankTransactionSnapshot.exists) {
+            final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('bankTransactions').child(entryKey).remove();
+            }
+          }
 
           // Delete from bank's transactions and update balance
           final bankId = paymentData['bankId'];
@@ -721,11 +752,21 @@ class FilledProvider with ChangeNotifier {
 
         case 'slip':
         // Delete from slipPayments node
-          await _db.child('slipPayments').child(paymentKey).remove();
+          final slipSnapshot = await _db.child('slipPayments')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (slipSnapshot.exists) {
+            final entries = slipSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('slipPayments').child(entryKey).remove();
+            }
+          }
           break;
 
         case 'simplecashbook':
-        // Delete from simplecashbook node (external node only)
+        // Delete from simplecashbook node
           final simpleCashbookSnapshot = await _db.child('simplecashbook')
               .orderByChild('paymentKey')
               .equalTo(paymentKey)
@@ -756,19 +797,8 @@ class FilledProvider with ChangeNotifier {
     try {
       final filledRef = _db.child('filled').child(filledId);
       print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
-      //
-      // // Step 1: Fetch payment data before deleting it
-      // final paymentSnapshot = await filledRef.child('${paymentMethod}Payments').child(paymentKey).get();
-      //
-      // if (!paymentSnapshot.exists) {
-      //   print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
-      //   throw Exception("Payment not found.");
-      // }
-      //
-      // final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
-      // print("✅ Payment data found: $paymentData");
 
-      // Step 2: Fetch filled data
+      // Step 1: Fetch payment data (only if not SimpleCashbook, since we don't delete its node)
       Map<String, dynamic> paymentData = {};
       if (paymentMethod.toLowerCase() != 'simplecashbook') {
         final paymentSnapshot = await filledRef.child('${paymentMethod}Payments').child(paymentKey).get();
@@ -782,13 +812,7 @@ class FilledProvider with ChangeNotifier {
         print("✅ Payment data found: $paymentData");
       }
 
-      // Step 4: Remove the payment entry from the filled (skip for SimpleCashbook)
-      if (paymentMethod.toLowerCase() != 'simplecashbook') {
-        print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
-        await filledRef.child('${paymentMethod}Payments').child(paymentKey).remove();
-      } else {
-        print("ℹ️ Skipped deleting node for SimpleCashbook payment.");
-      }
+      // Step 2: Fetch filled data
       final filledSnapshot = await filledRef.get();
       if (!filledSnapshot.exists) {
         throw Exception("Filled not found.");
@@ -797,9 +821,10 @@ class FilledProvider with ChangeNotifier {
       final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
       final customerId = filled['customerId']?.toString() ?? '';
       final filledNumber = filled['filledNumber']?.toString() ?? '';
+      final referenceNumber = filled['referenceNumber']?.toString() ?? '';
 
-      // Step 3: Delete from external nodes
-      await _deleteFromExternalNode(
+      // Step 3: Delete from ALL external nodes
+      await _deleteFromAllExternalNodes(
         method: paymentMethod,
         paymentKey: paymentKey,
         filledId: filledId,
@@ -809,9 +834,13 @@ class FilledProvider with ChangeNotifier {
         paymentData: paymentData,
       );
 
-      // Step 4: Remove the payment entry from the filled
-      print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
-      await filledRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+      // Step 4: Remove the payment entry from the filled (skip for SimpleCashbook)
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
+        await filledRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+      } else {
+        print("ℹ️ Skipped deleting node for SimpleCashbook payment.");
+      }
 
       // Step 5: Update filled amounts
       double currentCashPaid = _parseToDouble(filled['cashPaidAmount']);
@@ -822,7 +851,9 @@ class FilledProvider with ChangeNotifier {
       double currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
       double currentDebit = _parseToDouble(filled['debitAmount']);
 
-      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, Debit: $currentDebit");
+      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, "
+          "Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, "
+          "SimpleCashbook: $currentSimpleCashbookPaid, Debit: $currentDebit");
 
       // Deduct the payment amount from the respective payment method
       switch (paymentMethod.toLowerCase()) {
@@ -863,28 +894,10 @@ class FilledProvider with ChangeNotifier {
 
       print("✅ Filled updated successfully.");
 
-      // Step 6: Update customer ledger
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      // Step 6: Update customer ledger - remove the payment entry
+      await _removePaymentFromLedger(customerId, filledNumber, paymentAmount);
 
-      // Find and delete the specific ledger entry for this payment
-      final paymentLedgerSnapshot = await customerLedgerRef
-          .orderByChild('filledNumber')
-          .equalTo(filledNumber)
-          .get();
-
-      if (paymentLedgerSnapshot.exists) {
-        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
-        for (var entryKey in paymentLedgerData.keys) {
-          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
-          // Find the entry with matching debit amount (payment)
-          if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
-            await customerLedgerRef.child(entryKey).remove();
-            break;
-          }
-        }
-      }
-
-      // Recalculate ledger balances after deletion
+      // Step 7: Recalculate ledger balances after deletion
       await _recalculateAllLedgerBalances(customerId);
 
       print("🔄 Refreshing filled list...");
@@ -904,6 +917,206 @@ class FilledProvider with ChangeNotifier {
     }
   }
 
+  Future<void> _deleteFromAllExternalNodes({
+    required String method,
+    required String paymentKey,
+    required String filledId,
+    required String customerId,
+    required String filledNumber,
+    required double paymentAmount,
+    required Map<String, dynamic> paymentData,
+  })
+  async {
+    try {
+      switch (method.toLowerCase()) {
+        case 'cash':
+        // Delete from cashbook node
+          final cashbookSnapshot = await _db.child('cashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (cashbookSnapshot.exists) {
+            final entries = cashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cashbook').child(entryKey).remove();
+              print("✅ Deleted from cashbook: $entryKey");
+            }
+          }
+          break;
+
+        case 'online':
+        // Delete from onlinePayments node
+          final onlineSnapshot = await _db.child('onlinePayments')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (onlineSnapshot.exists) {
+            final entries = onlineSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('onlinePayments').child(entryKey).remove();
+              print("✅ Deleted from onlinePayments: $entryKey");
+            }
+          }
+          break;
+
+        case 'check':
+        // Delete from cheques node
+          final chequeSnapshot = await _db.child('cheques')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (chequeSnapshot.exists) {
+            final entries = chequeSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cheques').child(entryKey).remove();
+              print("✅ Deleted from cheques: $entryKey");
+            }
+          }
+
+          // Also delete from bank's cheques if bank info exists
+          final chequeBankId = paymentData['chequeBankId'];
+          if (chequeBankId != null) {
+            final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
+            final bankChequeSnapshot = await bankChequesRef
+                .orderByChild('filledNumber')
+                .equalTo(filledNumber)
+                .get();
+
+            if (bankChequeSnapshot.exists) {
+              final entries = bankChequeSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount &&
+                    entry['filledNumber'] == filledNumber) {
+                  await bankChequesRef.child(entryKey).remove();
+                  print("✅ Deleted from bank cheques: $entryKey");
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'bank':
+        // Delete from bankTransactions node
+          final bankTransactionSnapshot = await _db.child('bankTransactions')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (bankTransactionSnapshot.exists) {
+            final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('bankTransactions').child(entryKey).remove();
+              print("✅ Deleted from bankTransactions: $entryKey");
+            }
+          }
+
+          // Delete from bank's transactions and update balance
+          final bankId = paymentData['bankId'];
+          if (bankId != null) {
+            final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+            final bankTransactionSnapshot = await bankTransactionsRef
+                .orderByChild('filledId')
+                .equalTo(filledId)
+                .get();
+
+            if (bankTransactionSnapshot.exists) {
+              final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount) {
+                  await bankTransactionsRef.child(entryKey).remove();
+                  print("✅ Deleted from bank transactions: $entryKey");
+
+                  // Update bank balance (deduct the payment amount)
+                  final bankBalanceRef = _db.child('banks/$bankId/balance');
+                  final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+                  final updatedBalance = (currentBalance - paymentAmount).clamp(0.0, double.infinity);
+                  await bankBalanceRef.set(updatedBalance);
+                  print("✅ Updated bank balance: $currentBalance -> $updatedBalance");
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'slip':
+        // Delete from slipPayments node
+          final slipSnapshot = await _db.child('slipPayments')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (slipSnapshot.exists) {
+            final entries = slipSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('slipPayments').child(entryKey).remove();
+              print("✅ Deleted from slipPayments: $entryKey");
+            }
+          }
+          break;
+
+        case 'simplecashbook':
+        // Delete from simplecashbook node
+          final simpleCashbookSnapshot = await _db.child('simplecashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (simpleCashbookSnapshot.exists) {
+            final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('simplecashbook').child(entryKey).remove();
+              print("✅ Deleted from simplecashbook: $entryKey");
+            }
+          }
+          break;
+
+        default:
+          print("⚠️ Unknown payment method: $method");
+      }
+    } catch (e) {
+      print('❌ Error deleting from external nodes for method $method: $e');
+      // Re-throw to handle in the main function
+      throw Exception('Failed to delete from external nodes: $e');
+    }
+  }
+
+  Future<void> _removePaymentFromLedger(String customerId, String filledNumber, double paymentAmount) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+
+      // Find the ledger entry for this payment
+      final paymentLedgerSnapshot = await customerLedgerRef
+          .orderByChild('filledNumber')
+          .equalTo(filledNumber)
+          .get();
+
+      if (paymentLedgerSnapshot.exists) {
+        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
+
+        for (var entryKey in paymentLedgerData.keys) {
+          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
+
+          // Look for the debit entry that matches this payment amount
+          if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
+            await customerLedgerRef.child(entryKey).remove();
+            print("✅ Removed payment from ledger: $entryKey");
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Error removing payment from ledger: $e');
+      throw Exception('Failed to remove payment from ledger: $e');
+    }
+  }
+
   Future<void> _updateCustomerLedger(
       String customerId, {
         required double creditAmount,
@@ -914,7 +1127,8 @@ class FilledProvider with ChangeNotifier {
         required String transactionDate, // Use this for date-based calculations
         String? paymentMethod,
         String? bankName,
-      }) async {
+      })
+  async {
     try {
       final customerLedgerRef = _db.child('filledledger').child(customerId);
 
