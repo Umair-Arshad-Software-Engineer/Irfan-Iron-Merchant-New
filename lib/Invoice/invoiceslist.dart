@@ -773,7 +773,7 @@ class InvoiceList extends StatelessWidget {
             crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 1.1 : 0.78, // taller cards on smaller screens
+            childAspectRatio: isWideScreen ? 1.1 : 0.65, // taller cards on smaller screens
           ),
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
@@ -817,11 +817,24 @@ class InvoiceList extends StatelessWidget {
                                   fit: BoxFit.contain,
                                 ),
                               ),
+
                               Text(
                                 '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(invoice['createdAt'])}',
                                 style: TextStyle(
                                   fontSize: isWideScreen ? 14 : 12,
                                   fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Center(
+                                child: Image.asset(
+                                  'assets/images/everysarya.png', // your logo path
+                                  height: 75,
+                                  width: 200,
                                 ),
                               ),
                             ],
