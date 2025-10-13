@@ -13,6 +13,7 @@ import 'DailyExpensesPages/viewexpensepage.dart';
 import 'Employee/addemployee.dart';
 import 'Employee/employeelist.dart';
 import 'Filled/filledlist.dart';
+import 'NewEmployee/employeemainpage.dart';
 import 'Reports/bypaymentType.dart';
 import 'Reports/customerlistforreport.dart';
 import 'Invoice/invoiceslist.dart';
@@ -289,7 +290,7 @@ class Dashboard extends StatelessWidget {
             Icons.engineering,
             languageProvider.isEnglish ? 'Employee' : 'ورکر',
             Colors.teal,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => EmployeeListPage())),
+                () => Navigator.push(context, MaterialPageRoute(builder: (context) => HomeScreen())),
           ),
           _buildDashboardCard(
             Icons.group,
