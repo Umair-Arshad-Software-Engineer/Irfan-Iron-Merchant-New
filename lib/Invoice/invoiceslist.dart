@@ -686,27 +686,50 @@ class InvoiceList extends StatelessWidget {
   }
 
 
+  // Future<double> _getCustomerRemainingBalance(String customerId) async {
+  //   try {
+  //     double totalBalance = 0.0;
+  //     final filledLedgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
+  //     final filledSnapshot = await filledLedgerRef.orderByChild('transactionDate').limitToLast(1).once();
+  //
+  //     if (filledSnapshot.snapshot.exists) {
+  //       final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+  //       if (filledData != null) {
+  //         final lastEntryKey = filledData.keys.first;
+  //         final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
+  //         if (lastEntry != null) {
+  //           final dynamic balanceValue = lastEntry['remainingBalance'];
+  //           totalBalance += (balanceValue is int)
+  //               ? balanceValue.toDouble()
+  //               : (balanceValue as double? ?? 0.0);
+  //         }
+  //       }
+  //     }
+  //
+  //     return totalBalance;
+  //   } catch (e) {
+  //     print("Error fetching remaining balance: $e");
+  //     return 0.0;
+  //   }
+  // }
+
   Future<double> _getCustomerRemainingBalance(String customerId) async {
     try {
-      double totalBalance = 0.0;
-      final filledLedgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
-      final filledSnapshot = await filledLedgerRef.orderByChild('transactionDate').limitToLast(1).once();
+      final customerLedgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
 
-      if (filledSnapshot.snapshot.exists) {
-        final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-        if (filledData != null) {
-          final lastEntryKey = filledData.keys.first;
-          final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
-          if (lastEntry != null) {
-            final dynamic balanceValue = lastEntry['remainingBalance'];
-            totalBalance += (balanceValue is int)
-                ? balanceValue.toDouble()
-                : (balanceValue as double? ?? 0.0);
-          }
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null && ledgerData.isNotEmpty) {
+          // Get the last entry (Firebase returns in ascending order for limitToLast)
+          final lastEntryKey = ledgerData.keys.last;
+          final lastEntry = ledgerData[lastEntryKey] as Map<dynamic, dynamic>;
+
+          return (lastEntry['remainingBalance'] as num?)?.toDouble() ?? 0.0;
         }
       }
-
-      return totalBalance;
+      return 0.0;
     } catch (e) {
       print("Error fetching remaining balance: $e");
       return 0.0;
