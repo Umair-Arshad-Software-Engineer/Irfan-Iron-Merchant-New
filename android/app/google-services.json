@@ -1,14 +1,14 @@
 {
   "project_info": {
-    "project_number": "66699206284",
-    "firebase_url": "https://maryam-15bce-default-rtdb.firebaseio.com",
-    "project_id": "maryam-15bce",
-    "storage_bucket": "maryam-15bce.appspot.com"
+    "project_number": "910230325944",
+    "firebase_url": "https://etsfyp-default-rtdb.firebaseio.com",
+    "project_id": "etsfyp",
+    "storage_bucket": "etsfyp.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:66699206284:android:7a8d0554a5a9a90f1ae5a9",
+        "mobilesdk_app_id": "1:910230325944:android:69617722b723710c8c024d",
         "android_client_info": {
           "package_name": "com.example.iron_project_new"
         }
@@ -16,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCZRF48Av2CNhH0DqVtdCUPrW24Cqr5NNk"
+          "current_key": "AIzaSyA-pHAJmBxKey82MGy6BFXTxjEpfTOTnbE"
         }
       ],
       "services": {

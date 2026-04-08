@@ -19,12 +19,10 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'dart:html' as html;
-import 'package:universal_html/html.dart' as universal_html;
 import 'package:intl/intl.dart';
 
+import 'NewInvoicePage.dart';
 
 class InvoiceListPage extends StatefulWidget {
   @override
@@ -42,8 +40,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
   bool _isLoadingMore = false;
   final TextEditingController _dateController = TextEditingController();
   bool _isGeneratingReport = false;
-  List<Map<String, dynamic>> _invoiceRows = [];
-
 
   @override
   void initState() {
@@ -60,8 +56,9 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       invoiceProvider.resetPagination(); // Clear any previous data
       invoiceProvider.fetchInvoices(); // Fetch first page
     });
-    // print(_filteredInvoices);
   }
+
+
 
   // Scroll listener to detect when user reaches bottom
   void _scrollListener() {
@@ -160,9 +157,8 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
               final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
               invoiceProvider.resetPagination();
               invoiceProvider.fetchInvoices();
-
             },
-            onGenerateReport: _fetchFilteredDataFromDatabase, // Add this
+            onGenerateReport: _fetchFilteredDataFromDatabase,
             onClearDateFilter: () {
               setState(() {
                 _selectedDateRange = null;
@@ -227,9 +223,6 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
                               languageProvider,
                             );
                           },
-                          // onPaymentPressed: (invoice) {
-                          //   _showInvoicePaymentDialog(invoice, invoiceProvider, languageProvider);
-                          // },
                         ),
                       ),
 
@@ -276,21 +269,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
       ),
       centerTitle: true,
       backgroundColor: Colors.teal,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.add, color: Colors.white),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => InvoicePage()),
-            );
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.print, color: Colors.white),
-          onPressed: _printInvoices,
-        ),
-      ],
+
     );
   }
 
@@ -482,9 +461,7 @@ class _InvoiceListPageState extends State<InvoiceListPage> {
 
     return pw.MemoryImage(buffer);
   }
-
 }
-
 
 class InvoiceList extends StatelessWidget {
   final ScrollController scrollController;
@@ -501,9 +478,39 @@ class InvoiceList extends StatelessWidget {
     required this.invoiceProvider,
     required this.onInvoiceTap,
     required this.onInvoiceLongPress,
-
   });
 
+  // Add this method to get payment method totals
+  Map<String, double> _getPaymentMethodTotals(Map<String, dynamic> invoice) {
+    return {
+      'cash': (invoice['cashPaidAmount'] ?? 0.0).toDouble(),
+      'online': (invoice['onlinePaidAmount'] ?? 0.0).toDouble(),
+      'check': (invoice['checkPaidAmount'] ?? 0.0).toDouble(),
+      'bank': (invoice['bankPaidAmount'] ?? 0.0).toDouble(),
+      'slip': (invoice['slipPaidAmount'] ?? 0.0).toDouble(),
+      'simplecashbook': (invoice['simpleCashbookPaidAmount'] ?? 0.0).toDouble(),
+    };
+  }
+
+  // Helper method to get payment method name in appropriate language
+  String _getPaymentMethodName(String method, LanguageProvider languageProvider) {
+    switch (method.toLowerCase()) {
+      case 'cash':
+        return languageProvider.isEnglish ? 'Cash' : 'نقد';
+      case 'online':
+        return languageProvider.isEnglish ? 'Online' : 'آن لائن';
+      case 'check':
+        return languageProvider.isEnglish ? 'Cheque' : 'چیک';
+      case 'bank':
+        return languageProvider.isEnglish ? 'Bank' : 'بینک';
+      case 'slip':
+        return languageProvider.isEnglish ? 'Slip' : 'پرچی';
+      case 'simplecashbook':
+        return languageProvider.isEnglish ? 'Simple Cashbook' : 'سادہ کیش بک';
+      default:
+        return method;
+    }
+  }
 
   Future<void> _captureAndShareInvoice(GlobalKey key, BuildContext context) async {
     if (kIsWeb) {
@@ -686,49 +693,113 @@ class InvoiceList extends StatelessWidget {
   }
 
 
-  // Future<double> _getCustomerRemainingBalance(String customerId) async {
+  // Future<double> _getCustomerRemainingBalance(String customerId, {String? excludeInvoiceId, DateTime? asOfDate}) async {
   //   try {
-  //     double totalBalance = 0.0;
-  //     final filledLedgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
-  //     final filledSnapshot = await filledLedgerRef.orderByChild('transactionDate').limitToLast(1).once();
+  //     DatabaseReference _db = FirebaseDatabase.instance.ref();
+  //     final customerLedgerRef = _db.child('ledger').child(customerId);
+  //     final query = customerLedgerRef.orderByChild('transactionDate');
   //
-  //     if (filledSnapshot.snapshot.exists) {
-  //       final Map<dynamic, dynamic>? filledData = filledSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-  //       if (filledData != null) {
-  //         final lastEntryKey = filledData.keys.first;
-  //         final lastEntry = filledData[lastEntryKey] as Map<dynamic, dynamic>?;
-  //         if (lastEntry != null) {
-  //           final dynamic balanceValue = lastEntry['remainingBalance'];
-  //           totalBalance += (balanceValue is int)
-  //               ? balanceValue.toDouble()
-  //               : (balanceValue as double? ?? 0.0);
+  //     final snapshot = await query.get();
+  //
+  //     if (snapshot.exists) {
+  //       final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+  //
+  //       if (ledgerData != null) {
+  //         // Convert to list and sort by transactionDate
+  //         final entries = ledgerData.entries.toList()
+  //           ..sort((a, b) {
+  //             final dateA = DateTime.parse(a.value['transactionDate'] as String);
+  //             final dateB = DateTime.parse(b.value['transactionDate'] as String);
+  //             return dateA.compareTo(dateB);
+  //           });
+  //
+  //         double runningBalance = 0.0;
+  //         final targetDate = asOfDate ?? DateTime.now();
+  //
+  //         for (var entry in entries) {
+  //           final entryData = entry.value as Map<dynamic, dynamic>;
+  //           final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+  //
+  //           // Skip entries after the target date
+  //           if (entryDate.isAfter(targetDate)) {
+  //             continue;
+  //           }
+  //
+  //           // Skip the invoice we want to exclude
+  //           if (excludeInvoiceId != null && entryData['invoiceNumber'] == excludeInvoiceId) {
+  //             continue;
+  //           }
+  //
+  //           final creditAmount = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+  //           final debitAmount = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+  //
+  //           // Update running balance
+  //           runningBalance += creditAmount - debitAmount;
   //         }
+  //
+  //         return runningBalance;
   //       }
   //     }
   //
-  //     return totalBalance;
+  //     return 0.0;
   //   } catch (e) {
   //     print("Error fetching remaining balance: $e");
   //     return 0.0;
   //   }
   // }
 
-  Future<double> _getCustomerRemainingBalance(String customerId) async {
+
+  // Helper method to build lengths with quantities display
+
+  Future<double> _getCustomerRemainingBalance(String customerId, {String? excludeInvoiceId, DateTime? asOfDate}) async {
     try {
-      final customerLedgerRef = FirebaseDatabase.instance.ref('ledger').child(customerId);
-      final snapshot = await customerLedgerRef.orderByChild('createdAt').limitToLast(1).get();
+      DatabaseReference _db = FirebaseDatabase.instance.ref();
+      final customerLedgerRef = _db.child('ledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('transactionDate');
+
+      final snapshot = await query.get();
 
       if (snapshot.exists) {
         final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
 
-        if (ledgerData != null && ledgerData.isNotEmpty) {
-          // Get the last entry (Firebase returns in ascending order for limitToLast)
-          final lastEntryKey = ledgerData.keys.last;
-          final lastEntry = ledgerData[lastEntryKey] as Map<dynamic, dynamic>;
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
 
-          return (lastEntry['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+          double runningBalance = 0.0;
+          final targetDate = asOfDate ?? DateTime.now();
+
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Skip entries after the target date
+            if (entryDate.isAfter(targetDate)) {
+              continue;
+            }
+
+            // IMPORTANT: Skip the invoice we want to exclude entirely
+            // This excludes both the credit (invoice amount) and any debit (payments) for this invoice
+            if (excludeInvoiceId != null && entryData['invoiceNumber'] == excludeInvoiceId) {
+              continue; // Skip entire transaction related to this invoice
+            }
+
+            final creditAmount = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+            final debitAmount = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+            // Update running balance
+            runningBalance += creditAmount - debitAmount;
+          }
+
+          return runningBalance;
         }
       }
+
       return 0.0;
     } catch (e) {
       print("Error fetching remaining balance: $e");
@@ -736,6 +807,137 @@ class InvoiceList extends StatelessWidget {
     }
   }
 
+
+  Widget _buildLengthsWithQuantities(Map<String, dynamic> itemData, bool isWideScreen, LanguageProvider languageProvider) {
+    // Try to get lengths data
+    final lengthsString = itemData['length']?.toString() ?? '';
+    final selectedLengths = itemData['selectedLengths'] as List<String>? ?? [];
+    final lengthQuantities = itemData['lengthQuantities'] as Map<String, dynamic>? ?? {};
+
+    // Determine how to display the lengths
+    List<Map<String, dynamic>> lengthsWithQty = [];
+
+    if (lengthQuantities.isNotEmpty && selectedLengths.isNotEmpty) {
+      // Use the lengthQuantities map
+      for (var length in selectedLengths) {
+        final qty = (lengthQuantities[length] as num?)?.toDouble() ?? 1.0;
+        lengthsWithQty.add({'length': length, 'qty': qty});
+      }
+    } else if (selectedLengths.isNotEmpty) {
+      // Use selectedLengths with default quantity of 1
+      for (var length in selectedLengths) {
+        lengthsWithQty.add({'length': length, 'qty': 1.0});
+      }
+    } else if (lengthsString.isNotEmpty && lengthsString.contains(',')) {
+      // Parse from comma-separated string
+      final lengths = lengthsString.split(',').map((l) => l.trim()).toList();
+      for (var length in lengths) {
+        // Try to parse quantity from the string (e.g., "10ft (2)")
+        double qty = 1.0;
+        if (length.contains('(') && length.contains(')')) {
+          final qtyMatch = RegExp(r'\((\d+(\.\d+)?)\)').firstMatch(length);
+          if (qtyMatch != null) {
+            qty = double.tryParse(qtyMatch.group(1) ?? '1') ?? 1.0;
+            // Clean the length string
+            length = length.substring(0, length.indexOf('(')).trim();
+          }
+        }
+        lengthsWithQty.add({'length': length, 'qty': qty});
+      }
+    } else if (lengthsString.isNotEmpty) {
+      // Single length
+      double qty = 1.0;
+      String length = lengthsString;
+      if (lengthsString.contains('(') && lengthsString.contains(')')) {
+        final qtyMatch = RegExp(r'\((\d+(\.\d+)?)\)').firstMatch(lengthsString);
+        if (qtyMatch != null) {
+          qty = double.tryParse(qtyMatch.group(1) ?? '1') ?? 1.0;
+          length = lengthsString.substring(0, lengthsString.indexOf('(')).trim();
+        }
+      }
+      lengthsWithQty.add({'length': length, 'qty': qty});
+    }
+
+    if (lengthsWithQty.isEmpty) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          '${languageProvider.isEnglish ? 'Length' : 'لمبائی'}: N/A',
+          style: TextStyle(
+            fontSize: isWideScreen ? 18 : 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${languageProvider.isEnglish ? 'Lengths' : 'لمبائیاں'}:',
+            style: TextStyle(
+              fontSize: isWideScreen ? 14 : 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue.shade800,
+            ),
+          ),
+          SizedBox(height: 4),
+          // Display each length with its quantity
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: lengthsWithQty.map((lengthData) {
+              final length = lengthData['length'] as String;
+              final qty = lengthData['qty'] as double;
+
+              return Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.blue.shade200, width: 1),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('انچ سوتر شافٹ'),
+                        Text(
+                          length,
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 15 : 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '${languageProvider.isEnglish ? 'Qty' : 'مقدار' }:${qty.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: isWideScreen ? 15 : 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
 
   String _formatDate(dynamic dateValue) {
     try {
@@ -748,55 +950,150 @@ class InvoiceList extends StatelessWidget {
   }
 
 
+  // Add this method to InvoiceList class
+
+// Add this method to build image widget
+  Widget _buildImageThumbnail(Map<String, dynamic> imageData, BuildContext context) {
+    final base64Image = imageData['image'];
+    if (base64Image == null) return const SizedBox.shrink();
+
+    try {
+      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+      final imageBytes = invoiceProvider.base64ToImage(base64Image.toString());
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
+          imageBytes,
+          fit: BoxFit.cover,
+          width: 80,
+          height: 80,
+        ),
+      );
+    } catch (e) {
+      return Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.error, color: Colors.red),
+      );
+    }
+  }
+
+// Add method to show full image
+  void _showFullImage(BuildContext context, Map<String, dynamic> imageData) {
+    final base64Image = imageData['image'];
+    if (base64Image == null) return;
+
+    try {
+      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+      final imageBytes = invoiceProvider.base64ToImage(base64Image.toString());
+
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.black,
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  child: Image.memory(
+                    imageBytes,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              Positioned(
+                bottom: 20,
+                left: 20,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        imageData['imageType']?.toString().toUpperCase() ?? 'IMAGE',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (imageData['description'] != null &&
+                          imageData['description'].toString().isNotEmpty)
+                        Text(
+                          imageData['description'].toString(),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                      if (imageData['uploadedAt'] != null)
+                        Text(
+                          'Uploaded: ${DateTime.parse(imageData['uploadedAt'].toString()).toString().split(' ')[0]}',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error displaying image: $e')),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
 
-    // Add this helper method to calculate total weight
-    String _getTotalWeight(List<dynamic> items) {
-      double totalWeight = 0.0;
-      for (var item in items) {
-        totalWeight += (item['weight'] ?? 0.0).toDouble();
+    Future<List<Map<String, dynamic>>> _getInvoiceImages( String invoiceId) async {
+      try {
+        final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+        return await invoiceProvider.getAllInvoiceImages(invoiceId);
+      } catch (e) {
+        print('Error loading invoice images: $e');
+        return [];
       }
-      return totalWeight.toStringAsFixed(2);
     }
-    String _getFirstItemLength(List<dynamic> items) {
-      if (items.isEmpty) return 'N/A';
 
-      final firstItem = items.first;
-      final lengthValue = firstItem['length'];
-
-      if (lengthValue == null || lengthValue.toString().isEmpty) return 'N/A';
-
-      // Since it's a string, try to parse it
-      final parsedLength = double.tryParse(lengthValue.toString());
-
-      if (parsedLength != null) {
-        return parsedLength.toStringAsFixed(2);
-      }
-
-      // If parsing fails, return the raw string value
-      return lengthValue.toString();
-    }
-    String _getTotalqty(List<dynamic> items) {
-      double totalQty = 0.0;
-      for (var item in items) {
-        totalQty += (item['qty'] ?? 0.0).toDouble();
-      }
-      return totalQty.toStringAsFixed(2);
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isWideScreen = constraints.maxWidth > 600;
 
         return GridView.builder(
-          controller: scrollController, // still works with GridView
+          controller: scrollController,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: isWideScreen ? 2 : 1, // 2 columns for wide, 1 for small screens
+            crossAxisCount: isWideScreen ? 1 : 1,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: isWideScreen ? 1.1 : 0.65, // taller cards on smaller screens
+            childAspectRatio: isWideScreen ? 1.1 : 0.3,
           ),
           itemCount: filteredInvoice.length,
           itemBuilder: (context, index) {
@@ -806,6 +1103,15 @@ class InvoiceList extends StatelessWidget {
             double grandTotal = (invoice['grandTotal'] ?? 0.0).toDouble();
             double debitAmount = (invoice['debitAmount'] ?? 0.0).toDouble();
             final remainingAmount = (grandTotal - debitAmount).toDouble();
+
+            // Get global weight from invoice
+            final double globalWeight = (invoice['globalWeight'] ?? 0.0).toDouble();
+
+            // Get items from invoice
+            final List<dynamic> items = invoice['items'] ?? [];
+
+            // Get payment method totals
+            final paymentTotals = _getPaymentMethodTotals(invoice);
 
             return FutureBuilder(
               future: _getCustomerRemainingBalance(invoice['customerId']),
@@ -822,25 +1128,35 @@ class InvoiceList extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Header section
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              CircleAvatar(
-                                backgroundColor: Colors.teal,
-                                child: Text(
-                                  '${index + 1}',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                              Column(
+                                children: [
+                                  Text(
+                                    '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
+                                    style: TextStyle(
+                                      fontSize: isWideScreen ? 18 : 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  CircleAvatar(
+                                    backgroundColor: Colors.teal,
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              // SizedBox(width: 120,),
                               Center(
                                 child: Image.asset(
-                                  'assets/images/logo.png', // your logo path
-                                  height: 100,
+                                  'assets/images/logo.png',
+                                  height: 80,
                                   fit: BoxFit.contain,
                                 ),
                               ),
-
                               Text(
                                 '${languageProvider.isEnglish ? 'Date' : 'تاریخ'}: ${_formatDate(invoice['createdAt'])}',
                                 style: TextStyle(
@@ -850,31 +1166,26 @@ class InvoiceList extends StatelessWidget {
                               ),
                             ],
                           ),
+
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Center(
                                 child: Image.asset(
-                                  'assets/images/everysarya.png', // your logo path
-                                  height: 75,
-                                  width: 200,
+                                  'assets/images/everysarya.png',
+                                  height: 60,
+                                  width: 180,
                                 ),
                               ),
                             ],
                           ),
+
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                '${languageProvider.isEnglish ? 'Invoice #' : 'انوائس نمبر'} ${invoice['referenceNumber']} ${invoice['numberType'] == 'timestamp' ? '(Legacy)' : ''}',
-                                style: TextStyle(
-                                  fontSize: isWideScreen ? 18 : 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
                               Container(
-                                width: 80,
-                                height: 20,
+                                width: 150,
+                                height: 30,
                                 decoration: BoxDecoration(
                                   image: DecorationImage(
                                     image: AssetImage('assets/images/name.png'),
@@ -883,111 +1194,519 @@ class InvoiceList extends StatelessWidget {
                               ),
                             ],
                           ),
+
                           const SizedBox(height: 6),
-                          Text(
-                            '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'} ${invoice['customerName']}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: isWideScreen ? 18 : 16,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                '${languageProvider.isEnglish ? 'Rs ' : ''}${grandTotal.toStringAsFixed(2)}${languageProvider.isEnglish ? '' : ' روپے'}',
+                                '${languageProvider.isEnglish ? 'Customer' : 'کسٹمر'}: ${invoice['customerName']}',
                                 style: TextStyle(
-                                  fontSize: isWideScreen ? 18 : 16,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: isWideScreen ? 18 : 16,
                                 ),
                               ),
-                              Column(
-                                children: [
-                                  Text(
-                                    '${languageProvider.isEnglish ? 'Sarya Weight' : 'سریا وزن'}: ${_getTotalWeight(invoice['items'])}',
-                                    style: TextStyle(
-                                      fontSize: isWideScreen ? 18 : 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${languageProvider.isEnglish ? 'Sarya Length' : 'سریا لمبائی'}: ${_getFirstItemLength(invoice['items'] ?? [])}',
-                                    style: TextStyle(
-                                      fontSize: isWideScreen ? 16 : 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${languageProvider.isEnglish ? 'Sarya Qty' : 'سریا مقدار'}: ${_getTotalqty(invoice['items'] ?? [])}',
-                                    style: TextStyle(
-                                      fontSize: isWideScreen ? 16 : 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              )
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${languageProvider.isEnglish ? 'Remaining: ' : 'بقیہ: '}${remainingAmount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: isWideScreen ? 18 : 16,
-                              color: remainingAmount > 0 ? Colors.red : Colors.green,
+
+                          const SizedBox(height: 8),
+
+                          // GLOBAL WEIGHT SECTION - Show once only
+                          Container(
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.blue.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.blue.shade50,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  languageProvider.isEnglish
+                                      ? 'Invoice Summary:'
+                                      : 'انوائس کا خلاصہ:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isWideScreen ? 16 : 14,
+                                    color: Colors.blue.shade800,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+
+                                // Global Weight (Shown Once)
+                                Container(
+                                  padding: EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.blue.shade200),
+                                    borderRadius: BorderRadius.circular(6),
+                                    color: Colors.blue.shade100,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        languageProvider.isEnglish
+                                            ? 'Total Weight (Global):'
+                                            : 'کل وزن:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isWideScreen ? 16 : 14,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${globalWeight.toStringAsFixed(2)} سریا وزن',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isWideScreen ? 16 : 14,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.blue.shade200),
+                                    borderRadius: BorderRadius.circular(6),
+                                    color: Colors.blue.shade100,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        languageProvider.isEnglish
+                                            ? 'Total Amount:'
+                                            : 'کل رقم:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isWideScreen ? 16 : 14,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${grandTotal.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isWideScreen ? 16 : 14,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                // ITEMS SECTION - Only show item names and lengths, not weights
+                                if (items.isNotEmpty)
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        languageProvider.isEnglish
+                                            ? 'Items:'
+                                            : 'اشیاء:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isWideScreen ? 16 : 14,
+                                          color: Colors.teal.shade800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+
+                                      // Display each item without weight
+                                      ...items.asMap().entries.map((entry) {
+                                        final int itemIndex = entry.key;
+                                        final dynamic item = entry.value;
+                                        final Map<String, dynamic> itemData = item is Map ? Map<String, dynamic>.from(item) : {};
+
+                                        final itemName = itemData['itemName']?.toString() ?? 'N/A';
+                                        final length = itemData['length']?.toString() ?? 'N/A';
+                                        final rate = (itemData['rate'] ?? 0.0).toDouble();
+                                        final description = itemData['description']?.toString() ?? '';
+
+                                        return Container(
+                                          margin: EdgeInsets.only(bottom: 6),
+                                          padding: EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(color: Colors.grey.shade300),
+                                            borderRadius: BorderRadius.circular(6),
+                                            color: Colors.white,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    '$itemName',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: isWideScreen ? 14 : 12,
+                                                      color: Colors.teal.shade800,
+                                                    ),
+                                                  ),
+
+                                                ],
+                                              ),
+                                              Text(
+                                                description,
+                                                style: TextStyle(
+                                                  fontSize: isWideScreen ? 18 : 14,
+                                                  color: Colors.green.shade700,
+                                                ),
+                                              ),
+                                              if (length.isNotEmpty && length != 'N/A')
+                                                Padding(
+                                                  padding: const EdgeInsets.only(top: 4.0),
+                                                  child: _buildLengthsWithQuantities(itemData, isWideScreen, languageProvider),
+                                                ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ],
+                                  ),
+                              ],
                             ),
                           ),
-                          Text(
-                            '${languageProvider.isEnglish ? 'Paid: ' : 'وصول شدہ: '}${debitAmount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: isWideScreen ? 18 : 16,
-                              color: Colors.green,
+
+                          const SizedBox(height: 8),
+
+                          // Payment Methods Section
+                          Container(
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.orange.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.orange.shade50,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  languageProvider.isEnglish
+                                      ? 'Payment Methods:'
+                                      : 'ادائیگی کے طریقے:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isWideScreen ? 16 : 14,
+                                    color: Colors.orange.shade800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                // Display only payment methods that have amounts > 0
+                                ...paymentTotals.entries
+                                    .where((entry) => entry.value > 0)
+                                    .map((entry) {
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _getPaymentMethodName(entry.key, languageProvider),
+                                          style: TextStyle(
+                                            fontSize: isWideScreen ? 18 : 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Rs ${entry.value.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            fontSize: isWideScreen ? 18 : 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                                // Show message if no payments yet
+                                if (paymentTotals.values.every((value) => value == 0))
+                                  Text(
+                                    languageProvider.isEnglish
+                                        ? 'No payments received'
+                                        : 'ابھی تک کوئی ادائیگی نہیں ہوئی',
+                                    style: TextStyle(
+                                      fontSize: isWideScreen ? 12 : 10,
+                                      fontStyle: FontStyle.italic,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                          Text(
-                            '${languageProvider.isEnglish ? 'Balance: ' : 'بیلنس: '}${customerBalance.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: isWideScreen ? 18 : 16,
-                              color: customerBalance >= 0 ? Colors.green : Colors.red,
-                            ),
-                          ),
-                         Row(
-                           children: [
-                             IconButton(onPressed: (){
-                               onInvoiceLongPress(invoice);
-                             }, icon: Icon(Icons.delete,color: Colors.red,)),
-                             IconButton(onPressed: (){
-                               onInvoiceTap(invoice);
-                             }, icon: Icon(Icons.edit)),
-                             Spacer(),
-                             IconButton(
-                               icon: const Icon(Icons.share, size: 20),
-                               onPressed: () {
-                                 _captureAndShareInvoice(screenshotKey, context);
-                               },
-                               tooltip: languageProvider.isEnglish
-                                   ? 'Share invoice'
-                                   : 'انوائس شیئر کریں',
-                             ),
-                           ],
-                         ),
-                          // Align(
-                          //   alignment: Alignment.bottomRight,
-                          //   child: IconButton(
-                          //     icon: const Icon(Icons.share, size: 20),
-                          //     onPressed: () {
-                          //       _captureAndShareInvoice(screenshotKey, context);
-                          //     },
-                          //     tooltip: languageProvider.isEnglish
-                          //         ? 'Share invoice'
-                          //         : 'انوائس شیئر کریں',
+
+                          const SizedBox(height: 8),
+
+                          // // FINAL TOTALS SECTION - Show all totals one time only
+                          // Container(
+                          //   padding: EdgeInsets.all(8),
+                          //   decoration: BoxDecoration(
+                          //     border: Border.all(color: Colors.teal.shade300),
+                          //     borderRadius: BorderRadius.circular(8),
+                          //     color: Colors.teal.shade50,
+                          //   ),
+                          //   child: Column(
+                          //     children: [
+                          //       // Grand Total (calculated from global weight * rates)
+                          //       _buildSummaryRow(
+                          //         languageProvider.isEnglish ? 'Grand Total:' : 'مجموعی کل:',
+                          //         'Rs ${grandTotal.toStringAsFixed(2)}',
+                          //         isWideScreen,
+                          //         Colors.teal.shade800,
+                          //       ),
+                          //
+                          //       // Customer Balance - Fetch and display correctly
+                          //       FutureBuilder<double>(
+                          //         future: _getCustomerRemainingBalance(invoice['customerId']),
+                          //         builder: (context, snapshot) {
+                          //           double customerBalance = snapshot.hasData ? snapshot.data! : 0.0;
+                          //           return _buildSummaryRow(
+                          //             languageProvider.isEnglish ? 'Customer Balance:' : 'کسٹمر بیلنس:',
+                          //             'Rs ${customerBalance.toStringAsFixed(2)}',
+                          //             isWideScreen,
+                          //             customerBalance > 0 ? Colors.red : Colors.green, // Red for positive balance (amount due), green for negative/zero (credit)
+                          //           );
+                          //         },
+                          //       ),
+                          //
+                          //       // Paid Amount
+                          //       _buildSummaryRow(
+                          //         languageProvider.isEnglish ? 'Paid Amount:' : 'وصول رقم:',
+                          //         'Rs ${debitAmount.toStringAsFixed(2)}',
+                          //         isWideScreen,
+                          //         Colors.green.shade700,
+                          //       ),
+                          //
+                          //       // Customer Balance
+                          //       _buildSummaryRow(
+                          //         languageProvider.isEnglish ? 'Customer Balance:' : 'کسٹمر بیلنس:',
+                          //         'Rs ${customerBalance.toStringAsFixed(2)}',
+                          //         isWideScreen,
+                          //         customerBalance >= 0 ? Colors.green : Colors.red,
+                          //       ),
+                          //     ],
                           //   ),
                           // ),
+// In the InvoiceList widget build method, replace the FutureBuilder section with this:
+
+                          // Replace the entire FINAL TOTALS SECTION with:
+
+// FINAL TOTALS SECTION - Show all totals one time only
+                          Container(
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.teal.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.teal.shade50,
+                            ),
+                            child: FutureBuilder<double>(
+                              future: _getCustomerRemainingBalance(
+                                invoice['customerId'],
+                                excludeInvoiceId: invoice['invoiceNumber'] ?? invoice['id'],
+                              ),
+                              builder: (context, snapshot) {
+                                double previousBalance = snapshot.hasData ? snapshot.data! : 0.0;
+                                double currentInvoiceRemaining = grandTotal - debitAmount;
+                                double totalBalance = previousBalance + currentInvoiceRemaining;
+                                double totalnew = grandTotal+previousBalance;
+                                return Column(
+                                  children: [
+                                    // Grand Total
+                                    _buildSummaryRow(
+                                      languageProvider.isEnglish ? 'Grand Total:' : 'مجموعی کل:',
+                                      'Rs ${grandTotal.toStringAsFixed(2)}',
+                                      isWideScreen,
+                                      Colors.teal.shade800,
+                                    ),
+                                    // Previous Balance (excluding current invoice)
+                                    _buildSummaryRow(
+                                      languageProvider.isEnglish ? 'Previous Balance:' : 'سابقہ رقم:',
+                                      'Rs ${previousBalance.toStringAsFixed(2)}',
+                                      isWideScreen,
+                                      previousBalance > 0 ? Colors.red : Colors.green,
+                                    ),
+                                    _buildSummaryRow(
+                                      languageProvider.isEnglish ? 'Total:' : 'ٹوٹل رقم:',
+                                      'Rs ${totalnew.toStringAsFixed(2)}',
+                                      isWideScreen,
+                                      Colors.green.shade700,
+                                    ),
+                                    _buildSummaryRow(
+                                      languageProvider.isEnglish ? 'Paid Amount:' : 'وصول رقم:',
+                                      'Rs ${debitAmount.toStringAsFixed(2)}',
+                                      isWideScreen,
+                                      Colors.green.shade700,
+                                    ),
+
+                                    // Current Invoice Remaining
+                                    // _buildSummaryRow(
+                                    //   languageProvider.isEnglish ? 'Remaining (this invoice):' : 'باقی رقم (اس انوائس کی):',
+                                    //   'Rs ${currentInvoiceRemaining.toStringAsFixed(2)}',
+                                    //   isWideScreen,
+                                    //   currentInvoiceRemaining > 0 ? Colors.red : Colors.green,
+                                    // ),
+
+                                    // Total Balance
+                                    _buildSummaryRow(
+                                      languageProvider.isEnglish ? 'Total Balance:' : 'کل بیلنس:',
+                                      'Rs ${totalBalance.toStringAsFixed(2)}',
+                                      isWideScreen,
+                                      totalBalance > 0 ? Colors.red : Colors.green,
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Action Buttons
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: () => onInvoiceLongPress(invoice),
+                                icon: Icon(Icons.delete, color: Colors.red, size: 20),
+                              ),
+                              IconButton(
+                                onPressed: () => onInvoiceTap(invoice),
+                                icon: Icon(Icons.edit, size: 20),
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => InvoiceImageManager(
+                                        invoiceId: invoice['id'],
+                                        invoiceNumber: invoice['invoiceNumber'],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.image, color: Colors.blue, size: 20),
+                                tooltip: languageProvider.isEnglish
+                                    ? 'Manage Invoice Images'
+                                    : 'انوائس کی تصاویر منظم کریں',
+                              ),
+                              Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.share, size: 20),
+                                onPressed: () {
+                                  _captureAndShareInvoice(screenshotKey, context);
+                                },
+                                tooltip: languageProvider.isEnglish
+                                    ? 'Share invoice'
+                                    : 'انوائس شیئر کریں',
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+
+// ADD THIS NEW SECTION: Invoice Images Gallery
+                          FutureBuilder<List<Map<String, dynamic>>>(
+                            future: _getInvoiceImages(invoice['id']),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const SizedBox.shrink();
+                              }
+
+                              final images = snapshot.data ?? [];
+
+                              if (images.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.purple.shade300),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.purple.shade50,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.photo_library,
+                                            color: Colors.purple.shade700,
+                                            size: 20),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          languageProvider.isEnglish
+                                              ? 'Attached Images (${images.length})'
+                                              : 'منسلک تصاویر (${images.length})',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: isWideScreen ? 16 : 14,
+                                            color: Colors.purple.shade800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      height: 100,
+                                      child: ListView.builder(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: images.length,
+                                        itemBuilder: (context, imgIndex) {
+                                          final imageData = images[imgIndex];
+                                          return GestureDetector(
+                                            onTap: () => _showFullImage(context, imageData),
+                                            child: Container(
+                                              margin: const EdgeInsets.only(right: 8),
+                                              child: Column(
+                                                children: [
+                                                  Container(
+                                                    width: 80,
+                                                    height: 80,
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                        color: Colors.purple.shade300,
+                                                        width: 2,
+                                                      ),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: _buildImageThumbnail(imageData, context),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    imageData['imageType']?.toString() ?? 'Image',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.purple.shade800,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                           Center(
                             child: Image.asset(
-                              'assets/images/line.png', // your logo path
-                              height: 60,
-                              width: 250,
+                              'assets/images/line.png',
+                              height: 50,
+                              width: 200,
                               fit: BoxFit.contain,
                             ),
                           ),
@@ -1000,8 +1719,35 @@ class InvoiceList extends StatelessWidget {
             );
           },
         );
-
       },
+    );
+  }
+
+  // Helper widget for summary rows
+  Widget _buildSummaryRow(String label, String value, bool isWideScreen, Color color) {
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: isWideScreen ? 20 : 15,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: isWideScreen ? 20 : 15,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        )
     );
   }
 }
@@ -1012,7 +1758,7 @@ class SearchAndFilterSection extends StatelessWidget {
   final Function(DateTimeRange?) onDateRangeSelected;
   final VoidCallback onClearDateFilter;
   final LanguageProvider languageProvider;
-  final VoidCallback onGenerateReport; // Add this callback
+  final VoidCallback onGenerateReport;
 
   const SearchAndFilterSection({
     required this.searchController,
@@ -1020,7 +1766,7 @@ class SearchAndFilterSection extends StatelessWidget {
     required this.onDateRangeSelected,
     required this.onClearDateFilter,
     required this.languageProvider,
-    required this.onGenerateReport, // Add this parameter
+    required this.onGenerateReport,
   });
 
   @override
@@ -1047,62 +1793,464 @@ class SearchAndFilterSection extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: ElevatedButton.icon(
-            onPressed: () async {
-              DateTimeRange? pickedDateRange = await showDateRangePicker(
-                context: context,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2101),
-                initialDateRange: selectedDateRange,
-              );
-              if (pickedDateRange != null) {
-                onDateRangeSelected(pickedDateRange);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.white,
-              backgroundColor: Colors.teal.shade400,
-            ),
-            icon: const Icon(Icons.date_range, color: Colors.white),
-            label: Text(
-              selectedDateRange == null
-                  ? languageProvider.isEnglish
-                  ? 'Select Date Range'
-                  : 'تاریخ کی حد منتخب کریں'
-                  : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
-            ),
-          ),
-        ),
-        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              ElevatedButton(
-                onPressed: onClearDateFilter,
-                child: Text(languageProvider.isEnglish
-                    ? 'Clear Filters'
-                    : 'فلٹرز صاف کریں'),
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: Colors.teal.shade400,
+
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    DateTimeRange? pickedDateRange = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2101),
+                      initialDateRange: selectedDateRange,
+                    );
+                    if (pickedDateRange != null) {
+                      onDateRangeSelected(pickedDateRange);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.teal.shade400,
+                  ),
+                  icon: const Icon(Icons.date_range, color: Colors.white),
+                  label: Text(
+                    selectedDateRange == null
+                        ? languageProvider.isEnglish
+                        ? 'Select Date'
+                        : 'تاریخ کی حد منتخب کریں'
+                        : 'From: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.start)} - To: ${DateFormat('yyyy-MM-dd').format(selectedDateRange!.end)}',
+                  ),
                 ),
               ),
-              ElevatedButton(
-                onPressed: onGenerateReport,
-                child: Text(languageProvider.isEnglish
-                    ? 'Generate Report'
-                    : 'رپورٹ بنائیں'),
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: Colors.teal,
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onGenerateReport,
+                  child: Text(languageProvider.isEnglish
+                      ? 'Generate Report'
+                      : 'رپورٹ بنائیں'),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.teal,
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+
+class InvoiceImageManager extends StatefulWidget {
+  final String invoiceId;
+  final String invoiceNumber;
+
+  const InvoiceImageManager({
+    required this.invoiceId,
+    required this.invoiceNumber,
+  });
+
+  @override
+  _InvoiceImageManagerState createState() => _InvoiceImageManagerState();
+}
+
+class _InvoiceImageManagerState extends State<InvoiceImageManager> {
+  final List<Map<String, dynamic>> _imageTypes = [
+    {'type': 'signature', 'title': 'Signature', 'icon': Icons.edit},
+    {'type': 'stamp', 'title': 'Stamp', 'icon': Icons.approval},
+    {'type': 'note', 'title': 'Note', 'icon': Icons.note},
+    {'type': 'delivery', 'title': 'Delivery Proof', 'icon': Icons.local_shipping},
+    {'type': 'custom', 'title': 'Custom', 'icon': Icons.photo},
+  ];
+
+  Map<String, Map<String, dynamic>> _currentImages = {};
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImages();
+  }
+
+  Future<void> _loadImages() async {
+    setState(() => _isLoading = true);
+
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+    final images = await invoiceProvider.getAllInvoiceImages(widget.invoiceId);
+
+    _currentImages = {};
+    for (var image in images) {
+      _currentImages[image['imageType']] = image;
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _pickImage(String imageType) async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      await _saveImage(imageType, bytes);
+    }
+  }
+
+  Future<void> _takePhoto(String imageType) async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      await _saveImage(imageType, bytes);
+    }
+  }
+
+  Future<void> _saveImage(String imageType, Uint8List imageBytes) async {
+    try {
+      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+
+      await invoiceProvider.saveInvoiceImage(
+        invoiceId: widget.invoiceId,
+        imageBytes: imageBytes,
+        imageType: imageType,
+        description: 'Image for invoice ${widget.invoiceNumber}',
+      );
+
+      // Reload images
+      await _loadImages();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteImage(String imageType) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Image'),
+        content: const Text('Are you sure you want to delete this image?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+        await invoiceProvider.db
+            .child('invoiceImages')
+            .child(widget.invoiceId)
+            .child(imageType)
+            .remove();
+
+        setState(() {
+          _currentImages.remove(imageType);
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image deleted successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete image: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _viewImage(String imageType, Map<String, dynamic> imageData) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                imageData['imageType']?.toString().toUpperCase() ?? 'IMAGE',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: _buildImageWidget(imageData),
+              ),
+              const SizedBox(height: 16),
+              if (imageData['description'] != null && imageData['description'].toString().isNotEmpty)
+                Text(
+                  'Description: ${imageData['description']}',
+                  textAlign: TextAlign.center,
+                ),
+              const SizedBox(height: 8),
+              if (imageData['uploadedAt'] != null)
+                Text(
+                  'Uploaded: ${DateTime.parse(imageData['uploadedAt'].toString()).toString().split(' ')[0]}',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _deleteImage(imageType);
+                    },
+                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                  const SizedBox(width: 20),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageWidget(Map<String, dynamic> imageData) {
+    final base64Image = imageData['image'];
+    if (base64Image == null) return const Center(child: Text('No image'));
+
+    try {
+      final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+      final imageBytes = invoiceProvider.base64ToImage(base64Image.toString());
+
+      return Image.memory(
+        imageBytes,
+        fit: BoxFit.contain,
+      );
+    } catch (e) {
+      return const Center(child: Text('Error loading image'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Invoice Images - ${widget.invoiceNumber}'),
+        backgroundColor: Colors.teal,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Manage Images for Invoice ${widget.invoiceNumber}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Current Images Section
+            if (_currentImages.isNotEmpty) ...[
+              const Text(
+                'Current Images:',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 8),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1,
+                ),
+                itemCount: _currentImages.length,
+                itemBuilder: (context, index) {
+                  final imageType = _currentImages.keys.elementAt(index);
+                  final imageData = _currentImages[imageType]!;
+
+                  return GestureDetector(
+                    onTap: () => _viewImage(imageType, imageData),
+                    child: Card(
+                      elevation: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  color: Colors.grey[200],
+                                ),
+                                child: _buildImageWidget(imageData),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              imageData['imageType']?.toString().toUpperCase() ?? 'IMAGE',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+            ],
+
+            // Add New Images Section
+            const Text(
+              'Add New Image:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 2,
+                ),
+                itemCount: _imageTypes.length,
+                itemBuilder: (context, index) {
+                  final imageType = _imageTypes[index];
+                  final hasImage = _currentImages.containsKey(imageType['type']);
+
+                  return Card(
+                    elevation: 2,
+                    color: hasImage ? Colors.green[50] : null,
+                    child: ListTile(
+                      leading: Icon(
+                        imageType['icon'] as IconData,
+                        color: hasImage ? Colors.green : Colors.blue,
+                      ),
+                      title: Text(
+                        imageType['title'] as String,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: hasImage ? Colors.green : null,
+                        ),
+                      ),
+                      subtitle: hasImage
+                          ? const Text('Image uploaded', style: TextStyle(color: Colors.green))
+                          : const Text('No image yet'),
+                      onTap: () {
+                        _showImageSourceDialog(imageType['type'] as String);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showImageSourceDialog(String imageType) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(imageType);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take a Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _takePhoto(imageType);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

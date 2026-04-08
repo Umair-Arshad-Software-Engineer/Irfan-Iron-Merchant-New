@@ -4,7 +4,37 @@ class Bank {
 
   Bank({required this.name, required this.iconPath});
 }
+class BankTransfer {
+  final String fromBankId;
+  final String fromBankName;
+  final String toBankId;
+  final String toBankName;
+  final double amount;
+  final String description;
+  final DateTime timestamp;
 
+  BankTransfer({
+    required this.fromBankId,
+    required this.fromBankName,
+    required this.toBankId,
+    required this.toBankName,
+    required this.amount,
+    required this.description,
+    required this.timestamp,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'fromBankId': fromBankId,
+      'fromBankName': fromBankName,
+      'toBankId': toBankId,
+      'toBankName': toBankName,
+      'amount': amount,
+      'description': description,
+      'timestamp': timestamp.millisecondsSinceEpoch,
+    };
+  }
+}
 final List<Bank> pakistaniBanks = [
   Bank(name: 'Allied Bank', iconPath: 'assets/bank_icons/allied_bank.png'),
   Bank(name: 'Habib Bank Limited (HBL)', iconPath: 'assets/bank_icons/hbl.png'),
@@ -28,6 +58,8 @@ final List<Bank> pakistaniBanks = [
   Bank(name: 'Silk Bank', iconPath: 'assets/bank_icons/silk.jpeg'),
   Bank(name: 'Soneri Bank', iconPath: 'assets/bank_icons/soneri.jpg'),
   Bank(name: 'Bank Islami', iconPath: 'assets/bank_icons/bank_islamic.jpg'),
+  Bank(name: 'Al Barka', iconPath: 'assets/bank_icons/al_barka.png'),
+  Bank(name: 'Dubai Islamic', iconPath: 'assets/bank_icons/dubai_islamic.jpg'),
 
   // Add more banks as needed
 ];

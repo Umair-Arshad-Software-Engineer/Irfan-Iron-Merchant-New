@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -19,7 +20,84 @@ class InvoiceProvider with ChangeNotifier {
   String? _lastKey;
   final int _pageSize = 20;
 
+  // Add these methods to InvoiceProvider class (in invoice provider.dart)
 
+// Make these methods public by removing the underscore
+  Uint8List base64ToImage(String base64String) {
+    return base64Decode(base64String);
+  }
+
+  String imageToBase64(Uint8List imageBytes) {
+    return base64Encode(imageBytes);
+  }
+
+// Add a public getter for the database reference
+  DatabaseReference get db => _db;
+
+// Add this method to InvoiceProvider class
+  Future<void> saveInvoiceImage({
+    required String invoiceId,
+    required Uint8List imageBytes,
+    required String imageType, // 'signature', 'stamp', 'note', etc.
+    String? description,
+  })
+  async {
+    try {
+      String base64Image = _imageToBase64(imageBytes);
+
+      final imageData = {
+        'image': base64Image,
+        'imageType': imageType,
+        'description': description ?? '',
+        'uploadedAt': DateTime.now().toIso8601String(),
+      };
+
+      await _db.child('invoiceImages').child(invoiceId).child(imageType).set(imageData);
+      print("✅ Image saved for invoice $invoiceId");
+
+    } catch (e) {
+      print('❌ Error saving invoice image: $e');
+      throw Exception('Failed to save invoice image: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> getInvoiceImage(String invoiceId, String imageType) async {
+    try {
+      final snapshot = await _db.child('invoiceImages').child(invoiceId).child(imageType).get();
+      if (snapshot.exists) {
+        final imageData = Map<String, dynamic>.from(snapshot.value as Map);
+        return imageData;
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error fetching invoice image: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllInvoiceImages(String invoiceId) async {
+    try {
+      final snapshot = await _db.child('invoiceImages').child(invoiceId).get();
+      if (snapshot.exists) {
+        final imagesMap = snapshot.value as Map<dynamic, dynamic>;
+        List<Map<String, dynamic>> images = [];
+
+        imagesMap.forEach((key, value) {
+          final imageData = Map<String, dynamic>.from(value);
+          images.add({
+            'imageType': key.toString(),
+            ...imageData,
+          });
+        });
+
+        return images;
+      }
+      return [];
+    } catch (e) {
+      print('❌ Error fetching invoice images: $e');
+      return [];
+    }
+  }
 
   String _imageToBase64(Uint8List imageBytes) {
     return base64Encode(imageBytes);
@@ -263,6 +341,9 @@ class InvoiceProvider with ChangeNotifier {
     required double subtotal,
     required double discount,
     required double mazdoori,
+    required double globalWeight, // NEW: Add global weight parameter
+    required double globalRate, // NEW: Add global rate parameter
+    required bool useGlobalRateMode, // NEW: Add mode parameter
     required double grandTotal,
     required String paymentType,
     required String referenceNumber,
@@ -273,14 +354,59 @@ class InvoiceProvider with ChangeNotifier {
   async {
     try {
       final cleanedItems = items.map((item) {
+        // Get lengths and quantities to save
+        String lengthToSave = '';
+        List<String> selectedLengths = [];
+        Map<String, dynamic> lengthQuantities = {}; // Changed to dynamic
+
+        // Handle length quantities
+        if (item['selectedLengths'] != null && item['selectedLengths'] is List) {
+          selectedLengths = (item['selectedLengths'] as List)
+              .map((e) => e.toString())
+              .toList();
+
+          // Get length quantities - FIXED: Convert numeric keys to string keys
+          if (item['lengthQuantities'] != null && item['lengthQuantities'] is Map) {
+            final Map<dynamic, dynamic> quantitiesMap = item['lengthQuantities'] as Map<dynamic, dynamic>;
+            lengthQuantities = quantitiesMap.map<String, dynamic>((key, value) {
+              // Convert key to string and ensure it doesn't contain invalid characters
+              String stringKey = key.toString();
+              // Replace any invalid characters or format appropriately
+              stringKey = stringKey.replaceAll('.', '_dot_'); // Replace dot with a safe string
+              return MapEntry(
+                stringKey,
+                _parseToDouble(value),
+              );
+            });
+          } else {
+            // Default quantity to 1 if not specified
+            for (var length in selectedLengths) {
+              String safeLength = length.toString().replaceAll('.', '_dot_');
+              lengthQuantities[safeLength] = 1.0;
+            }
+          }
+
+          lengthToSave = selectedLengths.join(', ');
+        } else if (item['length'] != null) {
+          lengthToSave = item['length'].toString();
+        }
+
+
+        String itemName = item['selectedMotai']?.toString() ?? item['itemName']?.toString() ?? '';
+
+
         return {
-          'itemName': item['itemName'],
+          'itemName': itemName, // Use the corrected item name
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
-          'weight': item['weight'] ?? 0.0,
-          'length': item['length']?.toString() ?? '', // Always convert to string
+          // 'weight': globalWeight, // Use global weight for all items
+          'weight': item['weight'] ?? globalWeight, // Use item's weight, not global
+          'length': lengthToSave,
+          'selectedLengths': selectedLengths,
+          'lengthQuantities': lengthQuantities, // This now has safe string keys
           'description': item['description'] ?? '',
           'total': item['total'],
+          'initialWeight': item['weight'] ?? globalWeight, // Store initial weight for updates
         };
       }).toList();
 
@@ -295,6 +421,9 @@ class InvoiceProvider with ChangeNotifier {
         'paymentType': paymentType,
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
+        'globalWeight': globalWeight, // NEW: Save global weight at invoice level
+        'globalRate': globalRate, // NEW: Save global rate
+        'useGlobalRateMode': useGlobalRateMode, // NEW: Save mode
         'mazdoori': mazdoori,
         'createdAt': createdAt,
         'numberType': _isTimestampNumber(invoiceNumber) ? 'timestamp' : 'sequential',
@@ -302,6 +431,9 @@ class InvoiceProvider with ChangeNotifier {
 
       await _db.child('invoices').child(invoiceId).set(invoiceData);
 
+
+      // ✅ NEW: Update stock (deduct weight for each item)
+      await _updateItemStockForInvoice(items, invoiceId, isNewInvoice: true);
       // Now update the ledger for this customer
       await _updateCustomerLedger(
         customerId,
@@ -310,20 +442,96 @@ class InvoiceProvider with ChangeNotifier {
         remainingBalance: grandTotal,
         invoiceNumber: invoiceNumber,
         referenceNumber: referenceNumber,
-        // createdAt: createdAt,
-        transactionDate: createdAt, // Use the invoice date as transaction date
-
+        transactionDate: createdAt,
       );
     } catch (e) {
       throw Exception('Failed to save invoice: $e');
     }
   }
 
+  Future<void> _updateItemStockForInvoice(
+      List<Map<String, dynamic>> items,
+      String invoiceId, {
+        bool isNewInvoice = true,
+        List<Map<String, dynamic>>? oldItems,
+      }) async {
+    try {
+      for (var item in items) {
+        final itemName = item['itemName'] as String?;
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in database
+        final itemsSnapshot = await _db.child('items')
+            .orderByChild('itemName')
+            .equalTo(itemName)
+            .once();
+
+        if (itemsSnapshot.snapshot.exists) {
+          final itemsMap = itemsSnapshot.snapshot.value as Map<dynamic, dynamic>;
+          final itemKey = itemsMap.keys.first as String;
+          final itemData = Map<String, dynamic>.from(itemsMap[itemKey] as Map);
+
+          double currentQtyOnHand = _parseToDouble(itemData['qtyOnHand'] ?? 0.0);
+          double itemWeight = _parseToDouble(item['weight'] ?? 0.0);
+          double initialWeight = _parseToDouble(item['initialWeight'] ?? itemWeight);
+
+          double weightChange;
+
+          if (isNewInvoice) {
+            // For new invoice: deduct the weight
+            weightChange = -itemWeight;
+          } else if (oldItems != null) {
+            // For update: find the old item weight
+            final oldItem = oldItems.firstWhere(
+                  (old) => old['itemName'] == itemName,
+              orElse: () => {'weight': 0.0, 'initialWeight': 0.0},
+            );
+
+            double oldWeight = _parseToDouble(oldItem['weight'] ?? 0.0);
+            weightChange = oldWeight - itemWeight; // Positive if weight decreased, negative if increased
+          } else {
+            weightChange = 0.0;
+          }
+
+          double newQtyOnHand = currentQtyOnHand + weightChange;
+
+          // Ensure stock doesn't go negative (unless explicitly allowed)
+          if (newQtyOnHand < 0) {
+            print("⚠️ Warning: Stock would go negative for $itemName. Current: $currentQtyOnHand, Change: $weightChange");
+            // You can decide whether to allow negative stock or throw an error
+            // newQtyOnHand = 0.0; // Or throw an exception
+          }
+
+          // Update the item stock
+          await _db.child('items/$itemKey').update({
+            'qtyOnHand': newQtyOnHand,
+            'lastUpdated': DateTime.now().toIso8601String(),
+            'lastInvoice': invoiceId,
+          });
+
+          print("✅ Updated stock for $itemName: $currentQtyOnHand → $newQtyOnHand (Change: $weightChange)");
+        } else {
+          print("❌ Item not found: $itemName");
+        }
+      }
+    } catch (e) {
+      print('❌ Error updating item stock: $e');
+      throw Exception('Failed to update item stock: $e');
+    }
+  }
+
+
   Future<Map<String, dynamic>?> getInvoiceById(String invoiceId) async {
     try {
       final snapshot = await _db.child('invoices').child(invoiceId).get();
       if (snapshot.exists) {
-        return Map<String, dynamic>.from(snapshot.value as Map);
+        final invoiceData = Map<String, dynamic>.from(snapshot.value as Map);
+
+        // Ensure global rate and mode are included
+        invoiceData['globalRate'] = invoiceData['globalRate'] ?? 0.0;
+        invoiceData['useGlobalRateMode'] = invoiceData['useGlobalRateMode'] ?? false;
+
+        return invoiceData;
       }
       return null;
     } catch (e) {
@@ -337,6 +545,9 @@ class InvoiceProvider with ChangeNotifier {
     required String customerId,
     required String customerName,
     required double subtotal,
+    required double globalWeight, // NEW: Add global weight parameter
+    required double globalRate, // NEW: Add global rate parameter
+    required bool useGlobalRateMode, // NEW: Add mode parameter
     required double discount,
     required double grandTotal,
     required double mazdoori,
@@ -345,31 +556,69 @@ class InvoiceProvider with ChangeNotifier {
     required String referenceNumber,
     required List<Map<String, dynamic>> items,
     required String createdAt,
-  })
-  async {
+  }) async {
     try {
       // Fetch the old invoice data
       final oldInvoice = await getInvoiceById(invoiceId);
       if (oldInvoice == null) {
         throw Exception('Invoice not found.');
       }
+      final List<Map<String, dynamic>> oldItems = List<Map<String, dynamic>>.from(oldInvoice['items'] ?? []);
       final isTimestamp = oldInvoice['numberType'] == 'timestamp';
 
       // Get the old grand total
       final double oldGrandTotal = (oldInvoice['grandTotal'] as num).toDouble();
-
-      // Calculate the difference between the old and new grand totals
       final double difference = grandTotal - oldGrandTotal;
 
       final cleanedItems = items.map((item) {
+        // Get lengths and quantities to save
+        String lengthToSave = '';
+        List<String> selectedLengths = [];
+        Map<String, dynamic> lengthQuantities = {}; // Changed to dynamic
+
+        // Handle length quantities
+        if (item['selectedLengths'] != null && item['selectedLengths'] is List) {
+          selectedLengths = (item['selectedLengths'] as List)
+              .map((e) => e.toString())
+              .toList();
+
+          // Get length quantities - FIXED: Convert numeric keys to string keys
+          if (item['lengthQuantities'] != null && item['lengthQuantities'] is Map) {
+            final Map<dynamic, dynamic> quantitiesMap = item['lengthQuantities'] as Map<dynamic, dynamic>;
+            lengthQuantities = quantitiesMap.map<String, dynamic>((key, value) {
+              // Convert key to string and ensure it doesn't contain invalid characters
+              String stringKey = key.toString();
+              // Replace any invalid characters or format appropriately
+              stringKey = stringKey.replaceAll('.', '_dot_'); // Replace dot with a safe string
+              return MapEntry(
+                stringKey,
+                _parseToDouble(value),
+              );
+            });
+          } else {
+            // Default quantity to 1 if not specified
+            for (var length in selectedLengths) {
+              String safeLength = length.toString().replaceAll('.', '_dot_');
+              lengthQuantities[safeLength] = 1.0;
+            }
+          }
+
+          lengthToSave = selectedLengths.join(', ');
+        } else if (item['length'] != null) {
+          lengthToSave = item['length'].toString();
+        }
+
         return {
           'itemName': item['itemName'],
           'rate': item['rate'] ?? 0.0,
           'qty': item['qty'] ?? 0.0,
-          'weight': item['weight'] ?? 0.0,
-          'length': item['length']?.toString() ?? '', // Always convert to string
+          'weight': item['weight'] ?? globalWeight,
+          'length': lengthToSave,
+          'selectedLengths': selectedLengths,
+          'lengthQuantities': lengthQuantities,
           'description': item['description'] ?? '',
           'total': item['total'],
+          'initialWeight': item['initialWeight'] ?? item['weight'] ?? globalWeight,
         };
       }).toList();
 
@@ -384,6 +633,9 @@ class InvoiceProvider with ChangeNotifier {
         'discount': discount,
         'grandTotal': grandTotal,
         'paymentType': paymentType,
+        'globalWeight': globalWeight, // NEW: Update global weight
+        'globalRate': globalRate, // NEW: Update global rate
+        'useGlobalRateMode': useGlobalRateMode, // NEW: Update mode
         'paymentMethod': paymentMethod ?? '',
         'items': cleanedItems,
         'updatedAt': DateTime.now().toIso8601String(),
@@ -393,8 +645,15 @@ class InvoiceProvider with ChangeNotifier {
 
       // Update the invoice in the database
       await _db.child('invoices').child(invoiceId).update(invoiceData);
+      // ✅ Update stock for items (handles both additions and subtractions)
+      await _updateItemStockForInvoice(
+        items,
+        invoiceId,
+        isNewInvoice: false,
+        oldItems: oldItems,
+      );
 
-      // Step 1: Find the existing ledger entry for this invoice
+      // Update ledger entry
       final customerLedgerRef = _db.child('ledger').child(customerId);
       final query = customerLedgerRef.orderByChild('invoiceNumber').equalTo(invoiceNumber);
       final snapshot = await query.get();
@@ -405,7 +664,6 @@ class InvoiceProvider with ChangeNotifier {
           String entryKey = entries.keys.first;
           Map<String, dynamic> entry = Map<String, dynamic>.from(entries[entryKey]);
 
-          // Step 2: Update the existing entry with the difference
           double currentCredit = (entry['creditAmount'] as num).toDouble();
           double newCredit = currentCredit + difference;
 
@@ -416,12 +674,10 @@ class InvoiceProvider with ChangeNotifier {
             'creditAmount': newCredit,
             'remainingBalance': newRemaining,
           });
-
-
         }
       }
 
-      // Update the stock (qtyOnHand) for each item
+      // Update the stock (qtyOnHand) for each item based on weight changes
       for (var item in items) {
         final itemName = item['itemName'];
         if (itemName == null || itemName.isEmpty) continue;
@@ -429,7 +685,7 @@ class InvoiceProvider with ChangeNotifier {
         // Find the item in the _items list
         final dbItem = _items.firstWhere(
               (i) => i.itemName == itemName,
-          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, itemType: ''),
         );
 
         if (dbItem.id.isNotEmpty) {
@@ -438,7 +694,7 @@ class InvoiceProvider with ChangeNotifier {
           final double newWeight = item['weight'] ?? 0.0;
           final double initialWeight = item['initialWeight'] ?? 0.0;
 
-          // Calculate the difference between the initial quantity and the new quantity
+          // Calculate the difference between the initial weight and the new weight
           double delta = initialWeight - newWeight;
 
           // Update the qtyOnHand in the database
@@ -450,17 +706,46 @@ class InvoiceProvider with ChangeNotifier {
 
       // Refresh the invoice list
       await fetchInvoices();
-
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to update invoice: $e');
     }
   }
 
+
   void _processInvoiceEntry(String key, dynamic value) {
     if (value is! Map<dynamic, dynamic>) return;
 
     final invoiceData = Map<String, dynamic>.from(value);
+
+    // Helper function to parse length quantities
+    Map<String, double> parseLengthQuantities(dynamic quantitiesData) {
+      final Map<String, double> result = {};
+      double parseDouble(dynamic value) {
+        if (value == null) return 0.0;
+        if (value is num) return value.toDouble();
+        if (value is String) {
+          return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
+        }
+        return 0.0;
+      }
+
+      if (quantitiesData is Map) {
+        final Map<dynamic, dynamic> quantitiesMap = quantitiesData;
+        quantitiesMap.forEach((key, value) {
+          if (key != null && value != null) {
+            // Convert key back to original format if needed
+            String length = key.toString();
+            // Reverse the safe string conversion
+            length = length.replaceAll('_dot_', '.');
+            final quantity = parseDouble(value);
+            result[length] = quantity;
+          }
+        });
+      }
+
+      return result;
+    }
 
     // Helper function to safely parse dates
     DateTime parseDateTime(dynamic dateValue) {
@@ -474,12 +759,10 @@ class InvoiceProvider with ChangeNotifier {
       return DateTime.now();
     }
 
-
     double parseDouble(dynamic value) {
       if (value == null) return 0.0;
       if (value is num) return value.toDouble();
       if (value is String) {
-        // Handle currency formats or commas if necessary
         return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
       }
       return 0.0;
@@ -490,13 +773,44 @@ class InvoiceProvider with ChangeNotifier {
       if (itemsData is List) {
         return itemsData.map<Map<String, dynamic>>((item) {
           if (item is Map<dynamic, dynamic>) {
+            // Handle lengths - check both 'length' string and 'selectedLengths' array
+            String lengthString = item['length']?.toString() ?? '';
+            List<String> selectedLengths = [];
+            Map<String, double> lengthQuantities = {};
+
+            // Parse lengthQuantities if it exists
+            if (item['lengthQuantities'] != null) {
+              lengthQuantities = parseLengthQuantities(item['lengthQuantities']);
+            }
+
+            // Parse selectedLengths if it exists
+            if (item['selectedLengths'] != null && item['selectedLengths'] is List) {
+              selectedLengths = List<String>.from(item['selectedLengths'].map((l) => l.toString()));
+
+              // If quantities map is empty but we have lengths, set default quantity to 1
+              if (lengthQuantities.isEmpty && selectedLengths.isNotEmpty) {
+                for (var length in selectedLengths) {
+                  lengthQuantities[length] = 1.0;
+                }
+              }
+            } else if (lengthString.isNotEmpty) {
+              // Fallback: parse from comma-separated string
+              selectedLengths = lengthString.split(',').map((l) => l.trim()).toList();
+
+              // Set default quantity to 1 for each length
+              for (var length in selectedLengths) {
+                lengthQuantities[length] = 1.0;
+              }
+            }
+
             return {
               'itemName': item['itemName']?.toString() ?? '',
               'rate': parseDouble(item['rate']),
               'qty': parseDouble(item['qty']),
               'weight': parseDouble(item['weight']),
-              // 'length': parseDouble(item['length']), // Add this line'
-              'length': item['length']?.toString() ?? '',
+              'length': lengthString,
+              'selectedLengths': selectedLengths,
+              'lengthQuantities': lengthQuantities, // Add this
               'description': item['description']?.toString() ?? '',
               'total': parseDouble(item['total']),
             };
@@ -517,10 +831,14 @@ class InvoiceProvider with ChangeNotifier {
       'grandTotal': parseDouble(invoiceData['grandTotal']),
       'paymentType': invoiceData['paymentType']?.toString() ?? '',
       'paymentMethod': invoiceData['paymentMethod']?.toString() ?? '',
+      'globalWeight': parseDouble(invoiceData['globalWeight'] ?? 0.0), // NEW: Add global weight to processed invoice
+      'globalRate': parseDouble(invoiceData['globalRate'] ?? 0.0), // NEW: Add global rate
+      'useGlobalRateMode': invoiceData['useGlobalRateMode'] ?? false, // NEW: Add mode
       'cashPaidAmount': parseDouble(invoiceData['cashPaidAmount']),
-      'mazdoori': parseDouble(invoiceData['mazdoori'] ?? 0.0), // Add this line
+      'mazdoori': parseDouble(invoiceData['mazdoori'] ?? 0.0),
       'onlinePaidAmount': parseDouble(invoiceData['onlinePaidAmount']),
       'checkPaidAmount': parseDouble(invoiceData['checkPaidAmount'] ?? 0.0),
+      'bankPaidAmount': parseDouble(invoiceData['bankPaidAmount'] ?? 0.0),
       'slipPaidAmount': parseDouble(invoiceData['slipPaidAmount'] ?? 0.0),
       'debitAmount': parseDouble(invoiceData['debitAmount']),
       'debitAt': invoiceData['debitAt']?.toString() ?? '',
@@ -543,28 +861,10 @@ class InvoiceProvider with ChangeNotifier {
       final customerId = invoice['customerId'] as String;
       final invoiceNumber = invoice['invoiceNumber'] as String;
       final grandTotal = _parseToDouble(invoice['grandTotal']);
-
-      // Get the items from the invoice
       final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(invoice['items']);
 
-      // Reverse the qtyOnHand deduction for each item
-      for (var item in items) {
-        final itemName = item['itemName'] as String;
-        final qty = _parseToDouble(item['qty']);
-
-        final itemSnapshot = await _db.child('items').orderByChild('itemName').equalTo(itemName).get();
-
-        if (itemSnapshot.exists) {
-          final itemData = itemSnapshot.value as Map<dynamic, dynamic>;
-          final itemKey = itemData.keys.first;
-          final currentItem = itemData[itemKey] as Map<dynamic, dynamic>;
-
-          double currentQtyOnHand = _parseToDouble(currentItem['qtyOnHand']);
-          double updatedQtyOnHand = currentQtyOnHand + qty;
-
-          await _db.child('items').child(itemKey).update({'qtyOnHand': updatedQtyOnHand});
-        }
-      }
+      // ✅ Reverse the stock deduction (add weight back to items)
+      await _reverseItemStockForInvoice(items, invoiceId);
 
       // Delete all payment entries from external nodes before deleting the invoice
       await _deleteAllInvoicePayments(invoiceId, customerId, invoiceNumber);
@@ -574,8 +874,6 @@ class InvoiceProvider with ChangeNotifier {
 
       // Delete associated ledger entries
       final customerLedgerRef = _db.child('ledger').child(customerId);
-
-      // Find all ledger entries related to this invoice
       final snapshot = await customerLedgerRef.orderByChild('invoiceNumber').equalTo(invoiceNumber).get();
 
       if (snapshot.exists) {
@@ -591,6 +889,48 @@ class InvoiceProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to delete invoice and related entries: $e');
+    }
+  }
+
+// Add this helper method
+  Future<void> _reverseItemStockForInvoice(List<Map<String, dynamic>> items, String invoiceId) async {
+    try {
+      for (var item in items) {
+        final itemName = item['itemName'] as String?;
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in database
+        final itemsSnapshot = await _db.child('items')
+            .orderByChild('itemName')
+            .equalTo(itemName)
+            .once();
+
+        if (itemsSnapshot.snapshot.exists) {
+          final itemsMap = itemsSnapshot.snapshot.value as Map<dynamic, dynamic>;
+          final itemKey = itemsMap.keys.first as String;
+          final itemData = Map<String, dynamic>.from(itemsMap[itemKey] as Map);
+
+          double currentQtyOnHand = _parseToDouble(itemData['qtyOnHand'] ?? 0.0);
+          double itemWeight = _parseToDouble(item['weight'] ?? 0.0);
+
+          // Add the weight back (reverse the deduction)
+          double newQtyOnHand = currentQtyOnHand + itemWeight;
+
+          // Update the item stock
+          await _db.child('items/$itemKey').update({
+            'qtyOnHand': newQtyOnHand,
+            'lastUpdated': DateTime.now().toIso8601String(),
+            'lastReversalInvoice': invoiceId,
+          });
+
+          print("✅ Reversed stock for $itemName: $currentQtyOnHand → $newQtyOnHand (Added: $itemWeight)");
+        } else {
+          print("❌ Item not found during reversal: $itemName");
+        }
+      }
+    } catch (e) {
+      print('❌ Error reversing item stock: $e');
+      throw Exception('Failed to reverse item stock: $e');
     }
   }
 
@@ -1134,6 +1474,7 @@ class InvoiceProvider with ChangeNotifier {
         required String transactionDate, // Use this for date-based calculations
         String? paymentMethod,
         String? bankName,
+        String? description, // ← ADD THIS PARAMETER
       })
   async {
     try {
@@ -1192,6 +1533,7 @@ class InvoiceProvider with ChangeNotifier {
         'transactionDate': transactionDate, // The actual date of the transaction
         if (paymentMethod != null) 'paymentMethod': paymentMethod,
         if (bankName != null) 'bankName': bankName,
+        if (description != null && description.isNotEmpty) 'description': description, // ← ADD THIS
       };
 
       await customerLedgerRef.push().set(ledgerData);
@@ -1502,6 +1844,7 @@ class InvoiceProvider with ChangeNotifier {
           referenceNumber: referenceNumber,
           transactionDate: paymentDate.toIso8601String(),
           paymentMethod: paymentMethod,
+          description: description,
           bankName: paymentMethod == 'Bank'
               ? bankName
               : paymentMethod == 'Check'
@@ -1768,5 +2111,4 @@ class InvoiceProvider with ChangeNotifier {
       return 0.0;
     }
   }
-
 }

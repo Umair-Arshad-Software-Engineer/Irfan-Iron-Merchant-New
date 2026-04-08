@@ -7,6 +7,7 @@ import 'dart:io';
 import '../Provider/lanprovider.dart';
 import 'banknames.dart';
 import 'banktransactionpage.dart';
+import 'banktransferdalouge.dart';
 
 class BankManagementPage extends StatefulWidget {
   @override
@@ -45,8 +46,18 @@ class _BankManagementPageState extends State<BankManagementPage> {
     }
   }
 
+  // Add this method to _BankManagementPageState class
+  void _showTransferDialog() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (context) => BankTransferDialog(
+        languageProvider: languageProvider,
+        dbRef: _dbRef,
+      ),
+    );
+  }
 
-// Add this method inside the _BankManagementPageState class
   void _deleteBank(String bankKey) {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _dbRef.child(bankKey).remove().then((_) {
@@ -67,7 +78,6 @@ class _BankManagementPageState extends State<BankManagementPage> {
       );
     });
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -190,6 +200,22 @@ class _BankManagementPageState extends State<BankManagementPage> {
                     ),
                   ),
                 ),
+                // Add this button in the Column after the "Add Bank" button
+                SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: _showTransferDialog,
+                  child: Text(
+                    languageProvider.isEnglish ? 'Transfer Between Banks' : 'بینکوں کے درمیان منتقلی',
+                    style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -213,49 +239,6 @@ class _BankManagementPageState extends State<BankManagementPage> {
 
                 return ListView.builder(
                   itemCount: bankList.length,
-                  // itemBuilder: (context, index) {
-                  //   final bank = bankList[index].value;
-                  //   final bankName = bank['name'];
-                  //
-                  //   Bank? matchedBank = pakistaniBanks.firstWhere(
-                  //         (b) => b.name == bankName,
-                  //     orElse: () => Bank(name: bankName, iconPath: 'assets/default_bank.png'),
-                  //   );
-                  //   return Card(
-                  //     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  //     elevation: 3,
-                  //     shape: RoundedRectangleBorder(
-                  //       borderRadius: BorderRadius.circular(10),
-                  //     ),
-                  //     child: ListTile(
-                  //       leading: Image.asset(
-                  //         matchedBank.iconPath,
-                  //         height: 50,
-                  //         width: 50,
-                  //         errorBuilder: (context, error, stackTrace) {
-                  //           return Icon(Icons.account_balance, size: 50);
-                  //         },
-                  //       ),
-                  //       title: Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-                  //       subtitle: Text(
-                  //           '${languageProvider.isEnglish ? "Remaining Balance" : "بقیہ بیلنس"}: ${bank['balance']} Rs',
-                  //           style: TextStyle(color: Colors.grey.shade700)),
-                  //       trailing: Icon(Icons.arrow_forward_ios, color: Colors.blue.shade800),
-                  //       onTap: () {
-                  //         Navigator.push(
-                  //           context,
-                  //           MaterialPageRoute(
-                  //             builder: (context) => BankTransactionsPage(
-                  //               bankId: bankList[index].key,
-                  //               bankName: bank['name'],
-                  //             ),
-                  //           ),
-                  //         );
-                  //       },
-                  //     ),
-                  //   );
-                  // },
-                  // Update the ListView.builder's itemBuilder to include Dismissible
                   itemBuilder: (context, index) {
                     final bankEntry = bankList[index];
                     final bankKey = bankEntry.key;

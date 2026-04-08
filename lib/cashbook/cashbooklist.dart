@@ -36,6 +36,751 @@ class CashbookListPage extends StatefulWidget {
 
 class _CashbookListPageState extends State<CashbookListPage> {
 
+  Future<void> _deleteEntry(String id, String? expenseKey) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
+
+    try {
+      // First get the entry data before deleting
+      final entrySnapshot = await widget.databaseRef.child(id).get();
+      if (!entrySnapshot.exists) {
+        throw Exception(languageProvider.isEnglish ? 'Entry not found' : 'انٹری نہیں ملی');
+      }
+
+      final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
+      final entryAmount = entry.amount;
+      final entryDate = entry.dateTime;
+      final formattedDate = DateFormat('dd:MM:yyyy').format(entryDate);
+
+      print('🗑️ Starting deletion process for entry: ${entry.id}');
+      print('   - Type: ${entry.type}');
+      print('   - Amount: $entryAmount');
+      print('   - Source: ${entry.source}');
+      print('   - Invoice ID: ${entry.invoiceId}');
+      print('   - Filled ID: ${entry.filledId}');
+      print('   - Vendor ID: ${entry.vendorId}');
+      print('   - Vendor Name: ${entry.vendorName}');
+      print('   - Customer ID: ${entry.customerId}');
+
+      // Delete from cashbook first
+      await widget.databaseRef.child(id).remove();
+      print('✅ Removed from cashbook');
+
+      // Handle different types of entries
+      if (entry.source == "expense_page" && expenseKey != null) {
+        await _deleteExpenseEntry(entry, expenseKey, formattedDate, dbRef);
+      }
+
+      if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) {
+        await _deleteInvoiceEntry(entry);
+      }
+
+      if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+        await _deleteFilledEntry(entry);
+      }
+
+      // CRITICAL FIX: Better vendor payment detection
+      // A vendor payment has EITHER:
+      // 1. source == "vendor_payment" OR
+      // 2. vendorName is not null (since vendorId might be the timestamp)
+      final isVendorPayment = (entry.source == "vendor_payment") ||
+          (entry.vendorName != null && entry.vendorName!.isNotEmpty);
+
+      if (isVendorPayment) {
+        print('✅ Detected as vendor payment entry');
+        await _deleteVendorPaymentEntry(entry);
+      }
+
+      // Update customer balance if it's a customer transaction
+      if (entry.customerId != null && entry.customerId!.isNotEmpty) {
+        await _updateCustomerBalance(entry);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              languageProvider.isEnglish
+                  ? 'Entry deleted successfully from all records'
+                  : 'انٹری تمام ریکارڈز سے کامیابی سے حذف ہو گئی',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Refresh the UI
+        setState(() {});
+      }
+
+    } catch (error) {
+      print('❌ Error in _deleteEntry: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              languageProvider.isEnglish
+                  ? 'Failed to delete entry: $error'
+                  : 'انٹری حذف کرنے میں ناکام: $error',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteVendorPaymentEntry(CashbookEntry entry) async {
+    try {
+      print('🔄 Deleting vendor payment entry');
+      print('   - Entry ID (cashbook timestamp): ${entry.id}');
+      print('   - Vendor ID from entry: ${entry.vendorId}');
+      print('   - Vendor Name: ${entry.vendorName}');
+      print('   - Payment Amount: ${entry.amount}');
+
+      // CRITICAL FIX: The vendorId in cashbook entry is NOT the vendor's Firebase key
+      // We need to search for the vendor by name or by finding payments with matching cashbookId
+
+      if (entry.vendorName == null || entry.vendorName!.isEmpty) {
+        print('⚠️ No vendor name available, cannot find vendor');
+        return;
+      }
+
+      // Step 1: Find the actual vendor by name
+      final vendorsSnapshot = await FirebaseDatabase.instance
+          .ref('vendors')
+          .orderByChild('name')
+          .equalTo(entry.vendorName)
+          .get();
+
+      if (!vendorsSnapshot.exists) {
+        print('⚠️ Vendor not found with name: ${entry.vendorName}');
+        return;
+      }
+
+      final vendorsData = vendorsSnapshot.value as Map<dynamic, dynamic>;
+      final actualVendorId = vendorsData.keys.first.toString();
+
+      print('✅ Found actual vendor Firebase key: $actualVendorId');
+
+      // Step 2: Find the payment in this vendor's payments node
+      final paymentsRef = FirebaseDatabase.instance
+          .ref('vendors/$actualVendorId/payments');
+
+      final paymentsSnapshot = await paymentsRef.get();
+
+      if (!paymentsSnapshot.exists) {
+        print('⚠️ No payments found for this vendor');
+        return;
+      }
+
+      final payments = paymentsSnapshot.value as Map<dynamic, dynamic>;
+      String? paymentIdToDelete;
+
+      // Step 3: Find the payment that has matching cashbookId (timestamp string)
+      for (var paymentKey in payments.keys) {
+        final payment = Map<String, dynamic>.from(payments[paymentKey] as Map<dynamic, dynamic>);
+
+        // Check if this payment has the cashbookId matching our entry ID (timestamp)
+        if (payment.containsKey('cashbookId') &&
+            payment['cashbookId'] != null &&
+            payment['cashbookId'].toString() == entry.id) {
+
+          paymentIdToDelete = paymentKey.toString();
+          print('✅ Found matching vendor payment: $paymentKey with cashbookId: ${payment['cashbookId']}');
+          break;
+        }
+      }
+
+      if (paymentIdToDelete != null) {
+        // Delete the payment from vendor node
+        await FirebaseDatabase.instance
+            .ref('vendors/$actualVendorId/payments')
+            .child(paymentIdToDelete)
+            .remove();
+        print('✅ Deleted vendor payment: $paymentIdToDelete');
+
+        // Get current paid amount
+        final vendorSnapshot = await FirebaseDatabase.instance
+            .ref('vendors/$actualVendorId')
+            .get();
+
+        if (vendorSnapshot.exists) {
+          final vendorData = Map<String, dynamic>.from(
+              vendorSnapshot.value as Map<dynamic, dynamic>
+          );
+
+          double currentPaidAmount = _parseToDouble(vendorData['paidAmount'] ?? 0.0);
+          double newPaidAmount = (currentPaidAmount - entry.amount).clamp(0.0, double.infinity);
+
+          // Update vendor's paid amount
+          await FirebaseDatabase.instance
+              .ref('vendors/$actualVendorId')
+              .update({
+            'paidAmount': newPaidAmount,
+          });
+
+          print('✅ Updated vendor paid amount from $currentPaidAmount to $newPaidAmount');
+        }
+
+      } else {
+        print('⚠️ No matching vendor payment found with cashbookId: ${entry.id}');
+        // Fallback: Try to find by amount and date
+        await _findAndDeleteVendorPaymentByDetails(entry, actualVendorId);
+      }
+
+    } catch (e) {
+      print('❌ Error deleting vendor payment entry: $e');
+      throw Exception('Failed to delete vendor payment: $e');
+    }
+  }
+
+  Future<void> _findAndDeleteVendorPaymentByDetails(CashbookEntry entry, String vendorId) async {
+    try {
+      print('🔄 Attempting fallback: Find vendor payment by amount and date');
+
+      final paymentsRef = FirebaseDatabase.instance
+          .ref('vendors/$vendorId/payments');
+
+      final paymentsSnapshot = await paymentsRef.get();
+
+      if (!paymentsSnapshot.exists) {
+        print('⚠️ No payments found for vendor');
+        return;
+      }
+
+      final payments = paymentsSnapshot.value as Map<dynamic, dynamic>;
+      String? paymentIdToDelete;
+      bool found = false;
+
+      for (var paymentKey in payments.keys) {
+        final payment = Map<String, dynamic>.from(payments[paymentKey] as Map<dynamic, dynamic>);
+
+        final paymentAmount = _parseToDouble(payment['amount']);
+        final paymentDate = payment['date']?.toString() ?? '';
+
+        // Check if amount matches (with tolerance for floating point)
+        if ((paymentAmount - entry.amount).abs() < 0.01) {
+          // Try to parse the date and compare
+          try {
+            DateTime paymentDateTime = DateTime.parse(paymentDate);
+
+            // Compare dates (within same day)
+            if (paymentDateTime.year == entry.dateTime.year &&
+                paymentDateTime.month == entry.dateTime.month &&
+                paymentDateTime.day == entry.dateTime.day) {
+
+              paymentIdToDelete = paymentKey.toString();
+              print('✅ Found vendor payment by amount/date: $paymentKey');
+              print('   - Amount: $paymentAmount');
+              print('   - Date: $paymentDate');
+              found = true;
+              break;
+            }
+          } catch (e) {
+            // If date parsing fails, try to compare as strings
+            final formattedDate1 = DateFormat('yyyy-MM-dd').format(entry.dateTime);
+            final formattedDate2 = DateFormat('dd/MM/yyyy').format(entry.dateTime);
+            final formattedDate3 = DateFormat('dd:MM:yyyy').format(entry.dateTime);
+
+            if (paymentDate.contains(formattedDate1) ||
+                paymentDate.contains(formattedDate2) ||
+                paymentDate.contains(formattedDate3)) {
+
+              paymentIdToDelete = paymentKey.toString();
+              print('✅ Found vendor payment by amount and partial date match: $paymentKey');
+              found = true;
+              break;
+            }
+            continue;
+          }
+        }
+      }
+
+      if (found && paymentIdToDelete != null) {
+        // Delete the payment
+        await FirebaseDatabase.instance
+            .ref('vendors/$vendorId/payments')
+            .child(paymentIdToDelete)
+            .remove();
+        print('✅ Deleted vendor payment via fallback method: $paymentIdToDelete');
+
+        // Update vendor's paid amount
+        final vendorSnapshot = await FirebaseDatabase.instance
+            .ref('vendors/$vendorId')
+            .get();
+
+        if (vendorSnapshot.exists) {
+          final vendorData = Map<String, dynamic>.from(
+              vendorSnapshot.value as Map<dynamic, dynamic>
+          );
+
+          double currentPaidAmount = _parseToDouble(vendorData['paidAmount'] ?? 0.0);
+          double newPaidAmount = (currentPaidAmount - entry.amount).clamp(0.0, double.infinity);
+
+          await FirebaseDatabase.instance
+              .ref('vendors/$vendorId')
+              .update({
+            'paidAmount': newPaidAmount,
+          });
+
+          print('✅ Updated vendor paid amount from $currentPaidAmount to $newPaidAmount');
+        }
+      } else {
+        print('⚠️ Could not find vendor payment even with fallback method');
+      }
+
+    } catch (e) {
+      print('❌ Error in fallback vendor payment deletion: $e');
+    }
+  }
+
+  Future<void> _deleteExpenseEntry(CashbookEntry entry, String expenseKey, String formattedDate, DatabaseReference dbRef) async {
+    try {
+      print('🔄 Deleting expense entry');
+
+      // Delete from expenses
+      await dbRef.child(formattedDate).child("expenses").child(expenseKey).remove();
+      print('✅ Removed from expenses');
+
+      // Update the opening balance by adding back the deleted expense amount
+      final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
+      if (openingBalanceSnapshot.exists) {
+        double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
+        double newOpeningBalance = currentOpeningBalance + entry.amount;
+
+        await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
+        print('✅ Updated opening balance: $newOpeningBalance');
+      }
+    } catch (e) {
+      print('❌ Error deleting expense entry: $e');
+      throw Exception('Failed to delete expense entry: $e');
+    }
+  }
+
+  Future<void> _deleteInvoiceEntry(CashbookEntry entry) async {
+    try {
+      print('🔄 Deleting invoice-linked cashbook entry');
+      print('   - Invoice ID: ${entry.invoiceId}');
+      print('   - Invoice Number: ${entry.invoiceNumber}');
+      print('   - Customer: ${entry.customerName}');
+
+      // Find the invoice
+      final invoiceSnapshot = await FirebaseDatabase.instance.ref('invoices')
+          .orderByChild('invoiceNumber')
+          .equalTo(entry.invoiceNumber!)
+          .once();
+
+      if (!invoiceSnapshot.snapshot.exists) {
+        print('❌ Invoice not found with number: ${entry.invoiceNumber}');
+        return;
+      }
+
+      dynamic snapshotValue = invoiceSnapshot.snapshot.value;
+      Map<dynamic, dynamic> invoiceData;
+      String invoiceId = ''; // Initialize with empty string
+
+      // Handle different Firebase data structures
+      if (snapshotValue is Map<dynamic, dynamic>) {
+        invoiceData = snapshotValue;
+
+        // If we have the invoiceId directly from the entry, use it
+        if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty && invoiceData.containsKey(entry.invoiceId)) {
+          invoiceId = entry.invoiceId!;
+        } else {
+          // Otherwise use the first key
+          invoiceId = invoiceData.keys.first.toString();
+        }
+      } else if (snapshotValue is List<dynamic>) {
+        print('⚠️ Handling List format for invoices');
+
+        // Convert List to Map format
+        invoiceData = {};
+        for (int i = 0; i < snapshotValue.length; i++) {
+          if (snapshotValue[i] != null) {
+            invoiceData[i.toString()] = snapshotValue[i];
+          }
+        }
+
+        if (invoiceData.isEmpty) {
+          print('❌ No valid invoice data found in list');
+          return;
+        }
+
+        // Try to find the invoice by invoiceId or use the first one
+        if (entry.invoiceId != null && entry.invoiceId!.isNotEmpty) {
+          bool found = false;
+          for (var key in invoiceData.keys) {
+            final invoice = invoiceData[key] as Map<dynamic, dynamic>;
+            if (invoice['invoiceNumber'] == entry.invoiceNumber) {
+              invoiceId = key.toString();
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            invoiceId = invoiceData.keys.first.toString();
+          }
+        } else {
+          invoiceId = invoiceData.keys.first.toString();
+        }
+      } else {
+        print('❌ Unexpected data format for invoices: ${snapshotValue.runtimeType}');
+        return;
+      }
+
+      // Validate that invoiceId was assigned
+      if (invoiceId.isEmpty) {
+        print('❌ Failed to determine invoice ID');
+        return;
+      }
+
+      if (invoiceData.isEmpty || !invoiceData.containsKey(invoiceId)) {
+        print('❌ No invoice data found for ID: $invoiceId');
+        return;
+      }
+
+      final invoice = Map<String, dynamic>.from(invoiceData[invoiceId] as Map<dynamic, dynamic>);
+      print('✅ Found invoice: $invoiceId');
+
+      // Update invoice payment amounts
+      final currentCashPaidAmount = _parseToDouble(invoice['cashPaidAmount'] ?? 0.0);
+      final currentDebitAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
+
+      final newCashPaidAmount = (currentCashPaidAmount - entry.amount).clamp(0.0, double.infinity);
+      final newDebitAmount = (currentDebitAmount - entry.amount).clamp(0.0, double.infinity);
+
+      print('   - Current cash paid: $currentCashPaidAmount');
+      print('   - New cash paid: $newCashPaidAmount');
+      print('   - Current debit: $currentDebitAmount');
+      print('   - New debit: $newDebitAmount');
+
+      // Remove from cashPayments array
+      await _removeFromCashPaymentsArray('invoices', invoiceId, entry);
+
+      // Remove from simplecashbookPayments
+      await _removeFromSimpleCashbookPayments('invoices', invoiceId, entry);
+
+      // Update invoice amounts
+      await FirebaseDatabase.instance.ref('invoices').child(invoiceId).update({
+        'cashPaidAmount': newCashPaidAmount,
+        'debitAmount': newDebitAmount,
+      });
+      print('✅ Updated invoice amounts');
+
+      // Update ledger entry
+      await _updateLedgerForDeletedEntry(
+        customerId: entry.customerId!,
+        documentType: 'invoice',
+        documentNumber: entry.invoiceNumber!,
+        amount: entry.amount,
+        transactionDate: entry.dateTime,
+      );
+
+      // Update invoice status if needed
+      await _updateInvoiceStatus(invoiceId, newCashPaidAmount, _parseToDouble(invoice['totalAmount']));
+
+      print('✅ Successfully updated invoice after cashbook entry deletion');
+
+    } catch (e) {
+      print('❌ Error handling invoice entry deletion: $e');
+      throw Exception('Failed to update invoice: $e');
+    }
+  }
+
+  Future<void> _removeFromCashPaymentsArray(String collection, String docId, CashbookEntry entry) async {
+    try {
+      final cashPaymentsSnapshot = await FirebaseDatabase.instance
+          .ref(collection)
+          .child(docId)
+          .child('cashPayments')
+          .get();
+
+      if (cashPaymentsSnapshot.exists) {
+        final cashPayments = cashPaymentsSnapshot.value;
+
+        if (cashPayments is List<dynamic>) {
+          // Handle array format
+          final List<dynamic> paymentsList = List.from(cashPayments);
+          bool found = false;
+
+          for (int i = paymentsList.length - 1; i >= 0; i--) {
+            final payment = paymentsList[i];
+            if (payment == entry.id) {
+              paymentsList.removeAt(i);
+              found = true;
+              print('✅ Removed payment ID ${entry.id} from cashPayments array at index $i');
+              break;
+            }
+          }
+
+          if (found) {
+            // Update the cashPayments array in Firebase
+            await FirebaseDatabase.instance
+                .ref(collection)
+                .child(docId)
+                .child('cashPayments')
+                .set(paymentsList);
+          } else {
+            print('⚠️ Payment ID ${entry.id} not found in cashPayments array');
+
+            // Debug: Print available cashPayments for troubleshooting
+            print('Available cashPayments: $paymentsList');
+          }
+        } else if (cashPayments is Map<dynamic, dynamic>) {
+          // Handle map format (if it's stored as a map instead of array)
+          final paymentsMap = cashPayments as Map<dynamic, dynamic>;
+          bool found = false;
+
+          for (var paymentKey in paymentsMap.keys) {
+            final paymentValue = paymentsMap[paymentKey];
+            if (paymentValue == entry.id) {
+              await FirebaseDatabase.instance
+                  .ref(collection)
+                  .child(docId)
+                  .child('cashPayments')
+                  .child(paymentKey)
+                  .remove();
+
+              found = true;
+              print('✅ Removed payment ID ${entry.id} from cashPayments map with key $paymentKey');
+              break;
+            }
+          }
+
+          if (!found) {
+            print('⚠️ Payment ID ${entry.id} not found in cashPayments map');
+            print('Available cashPayments: $paymentsMap');
+          }
+        } else {
+          print('⚠️ Unexpected cashPayments format: ${cashPayments.runtimeType}');
+        }
+      } else {
+        print('⚠️ No cashPayments node found');
+      }
+    } catch (e) {
+      print('❌ Error removing from cashPayments array: $e');
+    }
+  }
+
+  Future<void> _deleteFilledEntry(CashbookEntry entry) async {
+    try {
+      print('🔄 Deleting filled-linked cashbook entry');
+      print('   - Filled ID: ${entry.filledId}');
+      print('   - Filled Number: ${entry.filledNumber}');
+      print('   - Customer: ${entry.customerName}');
+
+      DataSnapshot filledSnapshot;
+
+      // Try to find filled by ID first
+      if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+        filledSnapshot = await FirebaseDatabase.instance.ref('filled').child(entry.filledId!).get();
+      } else {
+        // Fallback to searching by filled number
+        filledSnapshot = await FirebaseDatabase.instance.ref('filled')
+            .orderByChild('filledNumber')
+            .equalTo(entry.filledNumber!)
+            .once()
+            .then((snapshot) => snapshot.snapshot);
+      }
+
+      if (!filledSnapshot.exists) {
+        print('❌ Filled document not found');
+        return;
+      }
+
+      dynamic snapshotValue = filledSnapshot.value;
+      Map<dynamic, dynamic> filledData;
+      String filledId;
+
+      if (snapshotValue is Map<dynamic, dynamic>) {
+        if (entry.filledId != null && entry.filledId!.isNotEmpty) {
+          filledData = {entry.filledId!: snapshotValue};
+          filledId = entry.filledId!;
+        } else {
+          filledData = snapshotValue;
+          filledId = filledData.keys.first;
+        }
+      } else {
+        print('❌ Unexpected data format for filled');
+        return;
+      }
+
+      if (filledData.isEmpty || !filledData.containsKey(filledId)) {
+        print('❌ No filled data found');
+        return;
+      }
+
+      final filled = Map<String, dynamic>.from(filledData[filledId]);
+      print('✅ Found filled: $filledId');
+
+      // Update filled payment amounts
+      final currentCashPaidAmount = _parseToDouble(filled['cashPaidAmount'] ?? 0.0);
+      final currentDebitAmount = _parseToDouble(filled['debitAmount'] ?? 0.0);
+
+      final newCashPaidAmount = (currentCashPaidAmount - entry.amount).clamp(0.0, double.infinity);
+      final newDebitAmount = (currentDebitAmount - entry.amount).clamp(0.0, double.infinity);
+
+      print('   - Current cash paid: $currentCashPaidAmount');
+      print('   - New cash paid: $newCashPaidAmount');
+      print('   - Current debit: $currentDebitAmount');
+      print('   - New debit: $newDebitAmount');
+
+      // Remove from cashPayments array
+      await _removeFromCashPaymentsArray('filled', filledId, entry);
+
+      // Remove from simplecashbookPayments
+      await _removeFromSimpleCashbookPayments('filled', filledId, entry);
+
+      // Update filled amounts
+      await FirebaseDatabase.instance.ref('filled').child(filledId).update({
+        'cashPaidAmount': newCashPaidAmount,
+        'debitAmount': newDebitAmount,
+      });
+      print('✅ Updated filled amounts');
+
+      // Update ledger entry
+      await _updateLedgerForDeletedEntry(
+        customerId: entry.customerId!,
+        documentType: 'filled',
+        documentNumber: entry.filledNumber!,
+        amount: entry.amount,
+        transactionDate: entry.dateTime,
+      );
+
+      // Update filled status if needed
+      await _updateFilledStatus(filledId, newCashPaidAmount, _parseToDouble(filled['totalAmount']));
+
+      print('✅ Successfully updated filled after cashbook entry deletion');
+
+    } catch (e) {
+      print('❌ Error handling filled entry deletion: $e');
+      throw Exception('Failed to update filled: $e');
+    }
+  }
+
+  Future<void> _removeFromSimpleCashbookPayments(String collection, String docId, CashbookEntry entry) async {
+    try {
+      final paymentsSnapshot = await FirebaseDatabase.instance
+          .ref(collection)
+          .child(docId)
+          .child('simplecashbookPayments')
+          .get();
+
+      if (paymentsSnapshot.exists) {
+        final payments = paymentsSnapshot.value as Map<dynamic, dynamic>;
+        bool found = false;
+
+        for (var paymentKey in payments.keys) {
+          final payment = payments[paymentKey] as Map<dynamic, dynamic>;
+          final paymentAmount = _parseToDouble(payment['amount']);
+          final paymentCustomerName = payment['customerName']?.toString() ?? '';
+
+          // Match by amount and customer name with tolerance for floating point
+          if ((paymentAmount - entry.amount).abs() < 0.01 &&
+              paymentCustomerName == entry.customerName) {
+
+            await FirebaseDatabase.instance
+                .ref(collection)
+                .child(docId)
+                .child('simplecashbookPayments')
+                .child(paymentKey)
+                .remove();
+
+            print('✅ Removed from simplecashbookPayments: $paymentKey');
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          print('⚠️ No matching payment found in simplecashbookPayments');
+        }
+      } else {
+        print('⚠️ No simplecashbookPayments node found');
+      }
+    } catch (e) {
+      print('❌ Error removing from simplecashbookPayments: $e');
+    }
+  }
+
+
+  Future<void> _updateInvoiceStatus(String invoiceId, double paidAmount, double totalAmount) async {
+    try {
+      String newStatus = 'pending';
+
+      if (paidAmount <= 0) {
+        newStatus = 'pending';
+      } else if (paidAmount >= totalAmount) {
+        newStatus = 'paid';
+      } else {
+        newStatus = 'partial';
+      }
+
+      await FirebaseDatabase.instance.ref('invoices').child(invoiceId).update({
+        'status': newStatus,
+      });
+
+      print('✅ Updated invoice status to: $newStatus');
+    } catch (e) {
+      print('❌ Error updating invoice status: $e');
+    }
+  }
+
+  Future<void> _updateFilledStatus(String filledId, double paidAmount, double totalAmount) async {
+    try {
+      String newStatus = 'pending';
+
+      if (paidAmount <= 0) {
+        newStatus = 'pending';
+      } else if (paidAmount >= totalAmount) {
+        newStatus = 'paid';
+      } else {
+        newStatus = 'partial';
+      }
+
+      await FirebaseDatabase.instance.ref('filled').child(filledId).update({
+        'status': newStatus,
+      });
+
+      print('✅ Updated filled status to: $newStatus');
+    } catch (e) {
+      print('❌ Error updating filled status: $e');
+    }
+  }
+
+  Future<void> _updateCustomerBalance(CashbookEntry entry) async {
+    try {
+      if (entry.customerId == null || entry.customerId!.isEmpty) return;
+
+      print('🔄 Updating customer balance for: ${entry.customerName}');
+
+      final customerRef = FirebaseDatabase.instance.ref('customers').child(entry.customerId!);
+      final customerSnapshot = await customerRef.get();
+
+      if (customerSnapshot.exists) {
+        final customer = Map<String, dynamic>.from(customerSnapshot.value as Map<dynamic, dynamic>);
+        double currentBalance = _parseToDouble(customer['balance'] ?? 0.0);
+        double newBalance = currentBalance;
+
+        // If it's a cash_in (payment), we're removing a payment, so increase customer balance (they owe more)
+        // If it's a cash_out (refund), we're removing a refund, so decrease customer balance (they owe less)
+        if (entry.type == 'cash_in') {
+          newBalance = currentBalance + entry.amount;
+        } else if (entry.type == 'cash_out') {
+          newBalance = currentBalance - entry.amount;
+        }
+
+        await customerRef.update({
+          'balance': newBalance,
+        });
+
+        print('✅ Updated customer balance from $currentBalance to $newBalance');
+      }
+    } catch (e) {
+      print('❌ Error updating customer balance: $e');
+    }
+  }
+
   Future<List<CashbookEntry>> _getFilteredEntries() async {
     DataSnapshot snapshot = await widget.databaseRef.get();
     List<CashbookEntry> entries = [];
@@ -318,333 +1063,6 @@ class _CashbookListPageState extends State<CashbookListPage> {
     }
   }
 
-  // Future<void> _deleteEntry(String id, String? expenseKey) async {
-  //   final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-  //   final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
-  //
-  //   try {
-  //     // First get the entry data before deleting
-  //     final entrySnapshot = await widget.databaseRef.child(id).get();
-  //     if (!entrySnapshot.exists) {
-  //       throw Exception(languageProvider.isEnglish ? 'Entry not found' : 'انٹری نہیں ملی');
-  //     }
-  //
-  //     final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
-  //     final entryAmount = entry.amount;
-  //     final entryDate = entry.dateTime;
-  //     final formattedDate = DateFormat('dd:MM:yyyy').format(entryDate);
-  //
-  //     // Delete from cashbook
-  //     await widget.databaseRef.child(id).remove();
-  //
-  //     // If this was an expense entry, delete from expenses too
-  //     if (expenseKey != null && entry.source == "expense_page") {
-  //       await dbRef.child(formattedDate).child("expenses").child(expenseKey).remove();
-  //
-  //       // Update the opening balance by adding back the deleted expense amount
-  //       final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
-  //       if (openingBalanceSnapshot.exists) {
-  //         double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
-  //         double newOpeningBalance = currentOpeningBalance + entryAmount;
-  //
-  //         await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
-  //       }
-  //     }
-  //
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text(
-  //             languageProvider.isEnglish
-  //                 ? 'Entry deleted successfully'
-  //                 : 'انٹری کامیابی سے حذف ہو گئی',
-  //           ),
-  //         ),
-  //       );
-  //     }
-  //   } catch (error) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text(
-  //             languageProvider.isEnglish
-  //                 ? 'Failed to delete entry: $error'
-  //                 : 'انٹری حذف کرنے میں ناکام: $error',
-  //           ),
-  //         ),
-  //       );
-  //     }
-  //   }
-  // }
-
-  Future<void> _deleteEntry(String id, String? expenseKey) async {
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    final dbRef = FirebaseDatabase.instance.ref("dailyKharcha");
-
-    try {
-      // First get the entry data before deleting
-      final entrySnapshot = await widget.databaseRef.child(id).get();
-      if (!entrySnapshot.exists) {
-        throw Exception(languageProvider.isEnglish ? 'Entry not found' : 'انٹری نہیں ملی');
-      }
-
-      final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
-      final entryAmount = entry.amount;
-      final entryDate = entry.dateTime;
-      final formattedDate = DateFormat('dd:MM:yyyy').format(entryDate);
-
-      // Check if this entry is from invoice or filled
-      bool isFromInvoice = entry.invoiceId != null && entry.invoiceId!.isNotEmpty;
-      bool isFromFilled = entry.filledId != null && entry.filledId!.isNotEmpty;
-
-      // Delete from cashbook
-      await widget.databaseRef.child(id).remove();
-
-      // If this was an expense entry, delete from expenses too
-      if (expenseKey != null && entry.source == "expense_page") {
-        await dbRef.child(formattedDate).child("expenses").child(expenseKey).remove();
-
-        // Update the opening balance by adding back the deleted expense amount
-        final openingBalanceSnapshot = await dbRef.child("openingBalance").child(formattedDate).get();
-        if (openingBalanceSnapshot.exists) {
-          double currentOpeningBalance = (openingBalanceSnapshot.value as num).toDouble();
-          double newOpeningBalance = currentOpeningBalance + entryAmount;
-
-          await dbRef.child("openingBalance").child(formattedDate).set(newOpeningBalance);
-        }
-      }
-
-      // Handle invoice or filled entries
-      if (isFromInvoice) {
-        await _handleInvoiceEntryDeletion(entry);
-      } else if (isFromFilled) {
-        await _handleFilledEntryDeletion(entry);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              languageProvider.isEnglish
-                  ? 'Entry deleted successfully'
-                  : 'انٹری کامیابی سے حذف ہو گئی',
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              languageProvider.isEnglish
-                  ? 'Failed to delete entry: $error'
-                  : 'انٹری حذف کرنے میں ناکام: $error',
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleInvoiceEntryDeletion(CashbookEntry entry) async {
-    try {
-      print('🔄 Deleting invoice-linked cashbook entry');
-      print('   - Invoice ID: ${entry.invoiceId}');
-      print('   - Invoice Number: ${entry.invoiceNumber}');
-      print('   - Amount: ${entry.amount}');
-
-      // Find the invoice by invoiceNumber
-      final invoiceSnapshot = await FirebaseDatabase.instance.ref('invoices')
-          .orderByChild('invoiceNumber')
-          .equalTo(entry.invoiceNumber!)
-          .once();
-
-      if (!invoiceSnapshot.snapshot.exists) {
-        print('❌ Invoice not found with number: ${entry.invoiceNumber}');
-        return;
-      }
-
-      dynamic snapshotValue = invoiceSnapshot.snapshot.value;
-      Map<dynamic, dynamic> invoiceData;
-
-      if (snapshotValue is Map<dynamic, dynamic>) {
-        invoiceData = snapshotValue;
-      } else {
-        print('❌ Unexpected data format for invoices');
-        return;
-      }
-
-      if (invoiceData.isEmpty) {
-        print('❌ No invoice data found');
-        return;
-      }
-
-      final invoiceId = invoiceData.keys.first;
-      final invoice = Map<String, dynamic>.from(invoiceData[invoiceId]);
-
-      print('✅ Found invoice: $invoiceId');
-
-      // Update invoice payment amounts
-      final currentSimpleCashbookPaid = _parseToDouble(invoice['simpleCashbookPaidAmount'] ?? 0.0);
-      final currentDebitAmount = _parseToDouble(invoice['debitAmount'] ?? 0.0);
-
-      final newSimpleCashbookPaid = (currentSimpleCashbookPaid - entry.amount).clamp(0.0, double.infinity);
-      final newDebitAmount = (currentDebitAmount - entry.amount).clamp(0.0, double.infinity);
-
-      // Remove from simplecashbookPayments if exists
-      final simpleCashbookPaymentsSnapshot = await FirebaseDatabase.instance
-          .ref('invoices')
-          .child(invoiceId)
-          .child('simplecashbookPayments')
-          .get();
-
-      if (simpleCashbookPaymentsSnapshot.exists) {
-        final payments = simpleCashbookPaymentsSnapshot.value as Map<dynamic, dynamic>;
-        for (var paymentKey in payments.keys) {
-          final payment = payments[paymentKey] as Map<dynamic, dynamic>;
-          if (_parseToDouble(payment['amount']) == entry.amount &&
-              payment['customerName'] == entry.customerName) {
-            await FirebaseDatabase.instance
-                .ref('invoices')
-                .child(invoiceId)
-                .child('simplecashbookPayments')
-                .child(paymentKey)
-                .remove();
-            print('✅ Removed from simplecashbookPayments: $paymentKey');
-            break;
-          }
-        }
-      }
-
-      // Update invoice amounts
-      await FirebaseDatabase.instance.ref('invoices').child(invoiceId).update({
-        'simpleCashbookPaidAmount': newSimpleCashbookPaid,
-        'debitAmount': newDebitAmount,
-      });
-
-      // Update ledger entry
-      await _updateLedgerForDeletedEntry(
-        customerId: entry.customerId!,
-        documentType: 'invoice',
-        documentNumber: entry.invoiceNumber!,
-        amount: entry.amount,
-        transactionDate: entry.dateTime,
-      );
-
-      print('✅ Successfully updated invoice after cashbook entry deletion');
-
-    } catch (e) {
-      print('❌ Error handling invoice entry deletion: $e');
-      throw Exception('Failed to update invoice: $e');
-    }
-  }
-
-  Future<void> _handleFilledEntryDeletion(CashbookEntry entry) async {
-    try {
-      print('🔄 Deleting filled-linked cashbook entry');
-      print('   - Filled ID: ${entry.filledId}');
-      print('   - Filled Number: ${entry.filledNumber}');
-      print('   - Amount: ${entry.amount}');
-
-      DataSnapshot filledSnapshot;
-
-      // Try to find filled by ID first
-      if (entry.filledId != null && entry.filledId!.isNotEmpty) {
-        filledSnapshot = await FirebaseDatabase.instance.ref('filled').child(entry.filledId!).get();
-      } else {
-        // Fallback to searching by filled number
-        filledSnapshot = await FirebaseDatabase.instance.ref('filled')
-            .orderByChild('filledNumber')
-            .equalTo(entry.filledNumber!)
-            .once()
-            .then((snapshot) => snapshot.snapshot);
-      }
-
-      if (!filledSnapshot.exists) {
-        print('❌ Filled document not found');
-        return;
-      }
-
-      dynamic snapshotValue = filledSnapshot.value;
-      Map<dynamic, dynamic> filledData;
-      String filledId;
-
-      if (snapshotValue is Map<dynamic, dynamic>) {
-        if (entry.filledId != null && entry.filledId!.isNotEmpty) {
-          filledData = {entry.filledId!: snapshotValue};
-          filledId = entry.filledId!;
-        } else {
-          filledData = snapshotValue;
-          filledId = filledData.keys.first;
-        }
-      } else {
-        print('❌ Unexpected data format for filled');
-        return;
-      }
-
-      if (filledData.isEmpty || !filledData.containsKey(filledId)) {
-        print('❌ No filled data found');
-        return;
-      }
-
-      final filled = Map<String, dynamic>.from(filledData[filledId]);
-      print('✅ Found filled: $filledId');
-
-      // Update filled payment amounts
-      final currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
-      final currentDebitAmount = _parseToDouble(filled['debitAmount'] ?? 0.0);
-
-      final newSimpleCashbookPaid = (currentSimpleCashbookPaid - entry.amount).clamp(0.0, double.infinity);
-      final newDebitAmount = (currentDebitAmount - entry.amount).clamp(0.0, double.infinity);
-
-      // Remove from simplecashbookPayments if exists
-      final simpleCashbookPaymentsSnapshot = await FirebaseDatabase.instance
-          .ref('filled')
-          .child(filledId)
-          .child('simplecashbookPayments')
-          .get();
-
-      if (simpleCashbookPaymentsSnapshot.exists) {
-        final payments = simpleCashbookPaymentsSnapshot.value as Map<dynamic, dynamic>;
-        for (var paymentKey in payments.keys) {
-          final payment = payments[paymentKey] as Map<dynamic, dynamic>;
-          if (_parseToDouble(payment['amount']) == entry.amount &&
-              payment['customerName'] == entry.customerName) {
-            await FirebaseDatabase.instance
-                .ref('filled')
-                .child(filledId)
-                .child('simplecashbookPayments')
-                .child(paymentKey)
-                .remove();
-            print('✅ Removed from simplecashbookPayments: $paymentKey');
-            break;
-          }
-        }
-      }
-
-      // Update filled amounts
-      await FirebaseDatabase.instance.ref('filled').child(filledId).update({
-        'simpleCashbookPaidAmount': newSimpleCashbookPaid,
-        'debitAmount': newDebitAmount,
-      });
-
-      // Update ledger entry
-      await _updateLedgerForDeletedEntry(
-        customerId: entry.customerId!,
-        documentType: 'filled',
-        documentNumber: entry.filledNumber!,
-        amount: entry.amount,
-        transactionDate: entry.dateTime,
-      );
-
-      print('✅ Successfully updated filled after cashbook entry deletion');
-
-    } catch (e) {
-      print('❌ Error handling filled entry deletion: $e');
-      throw Exception('Failed to update filled: $e');
-    }
-  }
 
   Future<void> _updateLedgerForDeletedEntry({
     required String customerId,
@@ -770,6 +1188,7 @@ class _CashbookListPageState extends State<CashbookListPage> {
     final entry = CashbookEntry.fromJson(Map<String, dynamic>.from(entrySnapshot.value as Map));
     final isFromInvoice = entry.invoiceId != null && entry.invoiceId!.isNotEmpty;
     final isFromFilled = entry.filledId != null && entry.filledId!.isNotEmpty;
+    final isFromVendor = entry.vendorId != null && entry.vendorId!.isNotEmpty;
 
     String message;
     if (isFromInvoice) {
@@ -780,6 +1199,10 @@ class _CashbookListPageState extends State<CashbookListPage> {
       message = languageProvider.isEnglish
           ? 'This entry is linked to filled ${entry.filledNumber}. Deleting it will also update the filled payment records. Are you sure?'
           : 'یہ انٹری فلڈ ${entry.filledNumber} سے منسلک ہے۔ اسے حذف کرنا فلڈ کی ادائیگی کی ریکارڈز کو بھی اپ ڈیٹ کرے گا۔ کیا آپ واقعی حذف کرنا چاہتے ہیں؟';
+    } else if (isFromVendor) {
+      message = languageProvider.isEnglish
+          ? 'This entry is linked to vendor ${entry.vendorName ?? entry.vendorId}. Deleting it will also update the vendor payment records. Are you sure?'
+          : 'یہ انٹری وینڈر ${entry.vendorName ?? entry.vendorId} سے منسلک ہے۔ اسے حذف کرنا وینڈر کی ادائیگی کی ریکارڈز کو بھی اپ ڈیٹ کرے گا۔ کیا آپ واقعی حذف کرنا چاہتے ہیں؟';
     } else {
       message = languageProvider.isEnglish
           ? 'Are you sure you want to delete this entry?'

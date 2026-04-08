@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:iron_project_new/Reports/purchasereport.dart';
 import 'package:provider/provider.dart';
 import '../Provider/lanprovider.dart';
+import '../rough.dart';
 import 'FilledbypaymentType.dart';
+import 'SalesReportPage.dart';
 import 'bypaymentType.dart';
 
 class ReportsPage extends StatelessWidget {
@@ -18,6 +21,22 @@ class ReportsPage extends StatelessWidget {
         context,
         MaterialPageRoute(builder: (_) => FilledPaymentTypeReportPage()),
       );
+    }
+    else if (reportType == 'Sales Report') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => SalesReportPage()),
+      );
+    } else if (reportType == 'Purchase Report') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => PurchaseReportPage ()),
+      );
+    // }else if (reportType == 'Customer Report') {
+    //   Navigator.push(
+    //     context,
+    //     MaterialPageRoute(builder: (_) => CustomerListPage ()),
+    //   );
     }
   }
 
@@ -66,11 +85,11 @@ class ReportsPage extends StatelessWidget {
                   shrinkWrap: true,
                   physics: NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: isWeb ? 2 : 1,
+                    crossAxisCount: isWeb ? 4 : 2,
                     mainAxisSpacing: 24,
                     crossAxisSpacing: 24,
                     childAspectRatio: isWeb ? 1.5 : 1.2,
-                    mainAxisExtent: isWeb ? 300 : 220,
+                    mainAxisExtent: isWeb ? 300 : 300,
                   ),
                   children: [
                     _buildReportCard(
@@ -89,6 +108,29 @@ class ReportsPage extends StatelessWidget {
                       reportType: 'Filled Reports',
                       isWeb: isWeb,
                     ),
+
+                    _buildReportCard(
+                      context: context,
+                      title: languageProvider.isEnglish ? 'Sales Report' : 'فروخت کی رپورٹ',
+                      icon: Icons.currency_bitcoin_rounded,
+                      color: Colors.green.shade700,
+                      reportType: 'Sales Report',
+                      isWeb: isWeb,
+                    ),_buildReportCard(
+                      context: context,
+                      title: languageProvider.isEnglish ? 'Purchase Report' : 'خریداری کی رپورٹ',
+                      icon: Icons.currency_bitcoin_rounded,
+                      color: Colors.green.shade700,
+                      reportType: 'Purchase Report',
+                      isWeb: isWeb,
+                    ),_buildReportCard(
+                      context: context,
+                      title: languageProvider.isEnglish ? 'Customer Report' : 'کسٹمر رپورٹ',
+                      icon: Icons.currency_bitcoin_rounded,
+                      color: Colors.green.shade700,
+                      reportType: 'Customer Report',
+                      isWeb: isWeb,
+                    ),
                   ],
                 ),
               ),
@@ -99,6 +141,7 @@ class ReportsPage extends StatelessWidget {
     );
   }
 
+
   Widget _buildReportCard({
     required BuildContext context,
     required String title,
@@ -106,7 +149,8 @@ class ReportsPage extends StatelessWidget {
     required Color color,
     required String reportType,
     required bool isWeb,
-  }) {
+  })
+  {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: AnimatedContainer(

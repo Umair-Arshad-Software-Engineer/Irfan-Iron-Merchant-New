@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:iron_project_new/Provider/newFilledProvider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:printing/printing.dart';
@@ -14,16 +15,14 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../Models/itemModel.dart';
 import '../Provider/customerprovider.dart';
-import '../Provider/filled provider.dart';
 import '../Provider/lanprovider.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 import 'package:share_plus/share_plus.dart';
-
 import '../bankmanagement/banknames.dart';
 
 class FilledPage extends StatefulWidget {
-  final Map<String, dynamic>? filled;
+  final Map<String, dynamic>? filled; // Optional filled data for editing
 
   FilledPage({this.filled});
 
@@ -44,13 +43,13 @@ class _FilledPageState extends State<FilledPage> {
   String? _instantPaymentMethod;
   TextEditingController _discountController = TextEditingController();
   List<Map<String, dynamic>> _filledRows = [];
-  String? _filledId; // For editing existing filled
+  String? _filledId;
   late bool _isReadOnly;
   bool _isButtonPressed = false;
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _rateController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
-  double _remainingBalance = 0.0; // Add this variable to store the remaining balance
+  double _remainingBalance = 0.0;
   TextEditingController _paymentController = TextEditingController();
   TextEditingController _referenceController = TextEditingController();
   bool _isSaved = false;
@@ -62,11 +61,235 @@ class _FilledPageState extends State<FilledPage> {
   String? _selectedBankName;
   TextEditingController _chequeNumberController = TextEditingController();
   DateTime? _selectedChequeDate;
+  List<String> _availableMotais = [];
+  List<Item> _itemsByMotai = [];
+  String? _selectedMotai;
+  List<LengthBodyCombination> _selectedItemLengthCombinations = [];
+  Item? _selectedItemForCurrentRow;
+  Map<String, Map<String, dynamic>> _itemsWithLengthCombinations = {};
+  double _globalWeight = 0.0; // Keep this for backward compatibility but don't use it for row calculations
+  TextEditingController _globalWeightController = TextEditingController();
+  double _globalRate = 0.0;
+  TextEditingController _globalRateController = TextEditingController();
+  bool _useGlobalRateMode = false; // Toggle between modes
+
+  Map<String, double> _lengthQuantities = {};
+  List<String> _selectedLengths = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchItems();
+    fetchAllItems();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      refreshMotais();
+    });
+    _currentFilled = widget.filled;
+
+    if (widget.filled != null) {
+      _mazdoori = (widget.filled!['mazdoori'] as num).toDouble();
+      _mazdooriController.text = _mazdoori.toStringAsFixed(2);
+      _filledId = widget.filled!['filledNumber'];
+      _referenceController.text = widget.filled!['referenceNumber'] ?? '';
+
+      // Remove global weight initialization
+      if (widget.filled!['globalWeight'] != null) {
+        _globalWeight = (widget.filled!['globalWeight'] as num).toDouble();
+        _globalWeightController.text = _globalWeight.toStringAsFixed(2);
+      }
+
+      // NEW: Initialize global rate if exists
+      if (widget.filled!['globalRate'] != null) {
+        _globalRate = (widget.filled!['globalRate'] as num).toDouble();
+        _globalRateController.text = _globalRate.toStringAsFixed(2);
+        _useGlobalRateMode = widget.filled!['useGlobalRateMode'] ?? false;
+      } else if (widget.filled!['items'] != null && (widget.filled!['items'] as List).isNotEmpty) {
+        // Calculate average rate from all items
+        final items = List<Map<String, dynamic>>.from(widget.filled!['items']);
+        if (items.isNotEmpty) {
+          double totalRate = 0.0;
+          for (var item in items) {
+            totalRate += (item['rate'] as num?)?.toDouble() ?? 0.0;
+          }
+          _globalRate = totalRate / items.length;
+          _globalRateController.text = _globalRate.toStringAsFixed(2);
+        }
+      }
+    }
+
+    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    customerProvider.fetchCustomers().then((_) {
+      if (widget.filled != null) {
+        final filled = widget.filled!;
+        _dateController.text = filled['createdAt'] != null
+            ? DateTime.parse(filled['createdAt']).toLocal().toString().split(' ')[0]
+            : '';
+        _selectedCustomerId = filled['customerId'];
+        final customer = customerProvider.customers.firstWhere(
+              (c) => c.id == _selectedCustomerId,
+          orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '', city: '', customerSerial: ''),
+        );
+        setState(() {
+          _selectedCustomerName = customer.name;
+        });
+      }
+    });
+
+    _isReadOnly = widget.filled != null;
+
+    if (widget.filled != null) {
+      final filled = widget.filled!;
+      _discount = (filled['discount'] as num?)?.toDouble() ?? 0.0;
+      _discountController.text = _discount.toStringAsFixed(2);
+      _filledId = filled['filledNumber'];
+      _paymentType = filled['paymentType'];
+      _instantPaymentMethod = filled['paymentMethod'];
+
+      // Initialize rows with calculated totals
+      _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
+        double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
+        double weight = (row['weight'] as num?)?.toDouble() ?? 0.0;
+        double qty = (row['qty'] as num?)?.toDouble() ?? 0.0;
+        String length = row['length']?.toString() ?? '';
+        double total = rate * weight;
+
+        // Parse lengths and quantities - FIXED TYPE CASTING
+        List<String> selectedLengths = [];
+        Map<String, double> lengthQuantities = {};
+
+        // Check for lengthQuantities in the row data
+        if (row['lengthQuantities'] != null && row['lengthQuantities'] is Map) {
+          final quantities = Map<String, dynamic>.from(row['lengthQuantities'] as Map);
+          lengthQuantities = quantities.map<String, double>((key, value) {
+            double qtyValue = 0.0;
+            if (value is int) {
+              qtyValue = value.toDouble();
+            } else if (value is double) {
+              qtyValue = value;
+            } else if (value is String) {
+              qtyValue = double.tryParse(value) ?? 1.0;
+            } else if (value is num) {
+              qtyValue = value.toDouble();
+            } else {
+              qtyValue = 1.0;
+            }
+            return MapEntry(key.toString(), qtyValue);
+          });
+          selectedLengths = lengthQuantities.keys.toList();
+        } else if (row['selectedLengths'] != null && row['selectedLengths'] is List) {
+          // FIXED: Properly cast List<dynamic> to List<String>
+          selectedLengths = (row['selectedLengths'] as List)
+              .map((l) => l.toString())
+              .toList();
+          // Initialize quantities as 1 for each length
+          for (var length in selectedLengths) {
+            lengthQuantities[length] = 1.0;
+          }
+        } else if (length.isNotEmpty && length.contains(',')) {
+          // Fallback: parse from comma-separated string
+          selectedLengths = length.split(',').map((l) => l.trim()).toList();
+          for (var length in selectedLengths) {
+            lengthQuantities[length] = 1.0;
+          }
+        } else if (length.isNotEmpty) {
+          selectedLengths = [length];
+          lengthQuantities[length] = 1.0;
+        }
+
+        // Create display text for lengths with quantities
+        String lengthsDisplay = '';
+        if (selectedLengths.isNotEmpty) {
+          lengthsDisplay = selectedLengths.map((length) {
+            double qty = lengthQuantities[length] ?? 1.0;
+            return '$length (${qty.toStringAsFixed(0)})';
+          }).join(', ');
+        }
+// Store initial weight for stock management
+        double initialWeight = weight;
+        return {
+          'itemName': row['itemName'],
+          'rate': rate,
+          'weight': weight,
+          'initialWeight': initialWeight, // ✅ Store initial weight
+          'qty': qty,
+          'length': length,
+          'selectedLengths': selectedLengths,
+          'lengthQuantities': lengthQuantities,
+          'description': row['description'],
+          'total': total,
+          // 'itemNameController': TextEditingController(text: row['itemName'] ?? ''), // Initialize with itemName
+          // In initState() where you create rows
+          'itemNameController': TextEditingController(text: row['itemName'] ?? row['selectedMotai'] ?? ''), // ✅ Use selectedMotai as fallback
+          'weightController': TextEditingController(text: weight.toStringAsFixed(4)),
+          'rateController': TextEditingController(text: rate.toStringAsFixed(2)),
+          'qtyController': TextEditingController(text: qty.toStringAsFixed(0)),
+          'descriptionController': TextEditingController(text: row['description']),
+          'lengthController': TextEditingController(text: lengthsDisplay),
+        };
+      }).toList();
+    } else {
+      _filledRows = [
+        {
+          'total': 0.0,
+          'rate': 0.0,
+          'qty': 0.0,
+          'length': '',
+          'selectedLengths': <String>[],
+          'lengthQuantities': <String, double>{},
+          'weight': 0.0,
+          'description': '',
+          'itemName': '',
+          'itemNameController': TextEditingController(), // Add this
+          'weightController': TextEditingController(),
+          'rateController': TextEditingController(),
+          'lengthController': TextEditingController(),
+          'qtyController': TextEditingController(),
+          'descriptionController': TextEditingController(),
+        },
+      ];
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var row in _filledRows) {
+      row['itemNameController']?.dispose(); // Add this
+      row['weightController']?.dispose();
+      row['rateController']?.dispose();
+      row['qtyController']?.dispose();
+      row['lengthController']?.dispose(); // Add this line
+      row['descriptionController']?.dispose();
+      row['rateController']?.dispose();
+    }
+    _discountController.dispose(); // Dispose discount controller
+    _customerController.dispose();
+    _mazdooriController.dispose();
+    _dateController.dispose();
+    _referenceController.dispose();
+    _globalWeightController.dispose(); // Dispose global weight controller
+    _globalRateController.dispose(); // Dispose global rate controller
+
+    super.dispose();
+  }
+
+  void _toggleRateMode() {
+    setState(() {
+      _useGlobalRateMode = !_useGlobalRateMode;
+      if (_useGlobalRateMode) {
+        // When switching to global rate mode, calculate total based on global rate
+        _recalculateAllRowTotalsWithGlobalRate();
+      } else {
+        // When switching back to item rate mode, recalculate with individual rates
+        _recalculateAllRowTotals();
+      }
+    });
+  }
 
   Future<void> _fetchRemainingBalance() async {
     if (_selectedCustomerId != null) {
       try {
-        final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+        final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
         final balance = await filledProvider.getCustomerRemainingBalance(_selectedCustomerId!);
         setState(() {
           _remainingBalance = balance;
@@ -102,28 +325,432 @@ class _FilledPageState extends State<FilledPage> {
     setState(() {
       _filledRows.add({
         'total': 0.0,
-        'rate': 0.0,
+        'rate': _useGlobalRateMode ? _globalRate : 0.0,
         'qty': 0.0,
+        'weight': 0.0,
         'description': '',
-        'itemName': '', // Add this field to store the item name
-        'itemNameController': TextEditingController(), // Add this line
-        'rateController': TextEditingController(),
+        'itemName': '',
+        'itemId': '',
+        'itemType': '',
+        'selectedMotai': '',
+        'selectedLength': '',
+        'selectedLengths': [],
+        'lengthQuantities': {}, // Store length quantities here
+        'lengthCombinations': [],
+        'itemNameController': TextEditingController(),
+        'weightController': TextEditingController(text: '0.00'),
+        'rateController': TextEditingController(
+            text: _useGlobalRateMode ? _globalRate.toStringAsFixed(2) : '0.00'
+        ),
         'qtyController': TextEditingController(),
         'descriptionController': TextEditingController(),
       });
     });
   }
 
-  void _updateRow(int index, String field, dynamic value) {
-    setState(() {
-      _filledRows[index][field] = value;
-      // Recalculate totals based on rate and qty
-      if (field == 'rate' || field == 'qty')  {
-        double rate = _filledRows[index]['rate'] ?? 0.0;
-        double qty = _filledRows[index]['qty'] ?? 0.0;
-        _filledRows[index]['total'] = rate * qty;
-      }
+  void _showLengthCombinationsDialog(int rowIndex, Map<String, dynamic> itemData) {
+    final lengthCombinations = itemData['lengthCombinations'] as List<LengthBodyCombination>? ?? [];
 
+    // FIX: Ensure proper type conversion from the start
+    final currentSelections = _filledRows[rowIndex]['selectedLengths'] != null
+        ? (_filledRows[rowIndex]['selectedLengths'] as List)
+        .map((e) => e.toString())
+        .toList()
+        : <String>[];
+
+    final currentQuantities = _filledRows[rowIndex]['lengthQuantities'] != null
+        ? Map<String, double>.from(_filledRows[rowIndex]['lengthQuantities'] as Map)
+        : <String, double>{};
+
+    // Store the weight controller for manual weight input
+    TextEditingController manualWeightController = TextEditingController(
+        text: _filledRows[rowIndex]['weight']?.toStringAsFixed(2) ?? '0.00'
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Select Lengths with Quantities'),
+              content: Container(
+                width: double.maxFinite,
+                height: 500,
+                child: Column(
+                  children: [
+                    // Manual Weight Input Field
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Manual Weight Input:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          TextField(
+                            controller: manualWeightController,
+                            keyboardType: TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              labelText: 'Enter Weight (Kg)',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.scale),
+                              hintText: 'Enter weight manually',
+                            ),
+                            onChanged: (value) {
+                              final weight = double.tryParse(value) ?? 0.0;
+                              setState(() {
+                                _filledRows[rowIndex]['weight'] = weight;
+                                _filledRows[rowIndex]['weightController'].text = weight.toStringAsFixed(2);
+                                // Recalculate row total when weight changes
+                                _recalculateRowTotals(rowIndex);
+                              });
+                            },
+                          ),
+                          Text(
+                            'Note: Weight is entered manually for each item',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    Divider(),
+
+                    // Length Combinations Selection
+                    if (lengthCombinations.isEmpty)
+                      Center(
+                        child: Text('No length combinations available for this item'),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: lengthCombinations.length,
+                          itemBuilder: (context, index) {
+                            final combination = lengthCombinations[index];
+                            final isSelected = currentSelections.contains(combination.length);
+                            final quantity = currentQuantities[combination.length] ?? 0.0;
+
+                            return Card(
+                              margin: EdgeInsets.symmetric(vertical: 4),
+                              child: Column(
+                                children: [
+                                  CheckboxListTile(
+                                    title: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Length: ${combination.length}',
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        if (combination.lengthDecimal.isNotEmpty)
+                                          Text(
+                                            'Decimal: ${combination.lengthDecimal}',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                                          ),
+                                        Text(
+                                          'Rate: ${combination.salePricePerKg?.toStringAsFixed(2) ?? "N/A"} PKR/Kg',
+                                          style: TextStyle(fontSize: 12, color: Colors.green),
+                                        ),
+                                      ],
+                                    ),
+                                    value: isSelected,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          currentSelections.add(combination.length);
+                                          currentQuantities[combination.length] = 1.0;
+                                        } else {
+                                          currentSelections.remove(combination.length);
+                                          currentQuantities.remove(combination.length);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  if (isSelected)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text('Quantity:'),
+                                              ),
+                                              SizedBox(width: 10),
+                                              Expanded(
+                                                child: TextField(
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: InputDecoration(
+                                                    hintText: 'Enter quantity',
+                                                    border: OutlineInputBorder(),
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  ),
+                                                  controller: TextEditingController(
+                                                    text: quantity > 0 ? quantity.toStringAsFixed(0) : '',
+                                                  ),
+                                                  onChanged: (value) {
+                                                    final qty = double.tryParse(value) ?? 0.0;
+                                                    currentQuantities[combination.length] = qty;
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text('Price/Kg:'),
+                                              ),
+                                              SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  '${(combination.salePricePerKg ?? 0.0).toStringAsFixed(2)} PKR',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.green,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    if (lengthCombinations.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${currentSelections.length} selected',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    if (currentSelections.isNotEmpty)
+                                      Text(
+                                        'Total Quantity: ${currentQuantities.values.fold(0.0, (sum, qty) => sum + qty).toStringAsFixed(0)} pieces',
+                                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                                      ),
+                                  ],
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      currentSelections.clear();
+                                      currentQuantities.clear();
+                                    });
+                                  },
+                                  child: Text(
+                                    'Clear All',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            Container(
+                              padding: EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Weight & Total Calculation:',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Weight:'),
+                                      Text(
+                                        '${(double.tryParse(manualWeightController.text) ?? 0.0).toStringAsFixed(2)} Kg',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Rate:'),
+                                      Text(
+                                        _useGlobalRateMode
+                                            ? '${_globalRate.toStringAsFixed(2)} PKR/Kg (Global)'
+                                            : calculateAverageRateFromCombinations(lengthCombinations, currentSelections, currentQuantities).toStringAsFixed(2) + ' PKR/Kg',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 4),
+                                  Divider(),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Row Total:'),
+                                      Text(
+                                        '${calculateRowTotalFromWeightAndRate(
+                                            double.tryParse(manualWeightController.text) ?? 0.0,
+                                            rowIndex
+                                        ).toStringAsFixed(2)} PKR',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Colors.teal[800],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    double manualWeight = double.tryParse(manualWeightController.text) ?? 0.0;
+                    double totalPrice = 0.0;
+                    String lengthsDisplay = '';
+
+                    for (var length in currentSelections) {
+                      final quantity = currentQuantities[length] ?? 0.0;
+                      final combination = lengthCombinations.firstWhere(
+                            (c) => c.length == length,
+                        orElse: () => LengthBodyCombination(length: '', lengthDecimal: ''),
+                      );
+
+                      double pricePerKg = combination.salePricePerKg ?? 0.0;
+                      if (manualWeight > 0 && currentSelections.isNotEmpty) {
+                        double weightProportion = quantity / currentQuantities.values.fold(0.0, (sum, qty) => sum + qty);
+                        totalPrice += pricePerKg * manualWeight * weightProportion;
+                      }
+
+                      if (lengthsDisplay.isNotEmpty) lengthsDisplay += ', ';
+                      lengthsDisplay += '$length (${quantity.toStringAsFixed(0)})';
+                    }
+
+                    double averageRate = manualWeight > 0 ? totalPrice / manualWeight : 0.0;
+
+                    setState(() {
+                      // FIX: Explicitly cast to List<String> and Map<String, double>
+                      _filledRows[rowIndex]['selectedLengths'] = currentSelections.map((e) => e.toString()).toList();
+
+                      _filledRows[rowIndex]['lengthQuantities'] = Map<String, double>.from(currentQuantities);
+                      _filledRows[rowIndex]['length'] = lengthsDisplay;
+                      _filledRows[rowIndex]['weight'] = manualWeight;
+
+                      if (_useGlobalRateMode) {
+                        _filledRows[rowIndex]['rate'] = _globalRate;
+                        _filledRows[rowIndex]['total'] = manualWeight * _globalRate;
+                      } else {
+                        _filledRows[rowIndex]['rate'] = averageRate;
+                        _filledRows[rowIndex]['total'] = totalPrice;
+                      }
+
+                      if (_filledRows[rowIndex]['lengthController'] == null) {
+                        _filledRows[rowIndex]['lengthController'] = TextEditingController(text: lengthsDisplay);
+                      } else {
+                        _filledRows[rowIndex]['lengthController'].text = lengthsDisplay;
+                      }
+
+                      _filledRows[rowIndex]['weightController'].text = manualWeight.toStringAsFixed(2);
+                      _filledRows[rowIndex]['rateController'].text = _useGlobalRateMode
+                          ? _globalRate.toStringAsFixed(2)
+                          : averageRate.toStringAsFixed(2);
+                      _filledRows[rowIndex]['totalQty'] = currentQuantities.values.fold(0.0, (sum, qty) => sum + qty);
+                    });
+
+                    Navigator.pop(context);
+                  },
+                  child: Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  double calculateAverageRateFromCombinations(
+      List<LengthBodyCombination> combinations,
+      List<String> selectedLengths,
+      Map<String, double> lengthQuantities
+      )
+  {
+    double totalQuantity = lengthQuantities.values.fold(0.0, (sum, qty) => sum + qty);
+    if (totalQuantity == 0) return 0.0;
+
+    double weightedRate = 0.0;
+    for (var length in selectedLengths) {
+      final quantity = lengthQuantities[length] ?? 0.0;
+      final combination = combinations.firstWhere(
+            (c) => c.length == length,
+        orElse: () => LengthBodyCombination(length: '', lengthDecimal: ''),
+      );
+      double pricePerKg = combination.salePricePerKg ?? 0.0;
+      double proportion = quantity / totalQuantity;
+      weightedRate += pricePerKg * proportion;
+    }
+    return weightedRate;
+  }
+
+  double calculateRowTotalFromWeightAndRate(double weight, int rowIndex) {
+    if (_useGlobalRateMode) {
+      return weight * _globalRate;
+    } else {
+      double rate = _filledRows[rowIndex]['rate'] ?? 0.0;
+      return weight * rate;
+    }
+  }
+
+  void _recalculateAllRowTotals() {
+    setState(() {
+      for (var row in _filledRows) {
+        double rate = row['rate'] ?? 0.0;
+        double weight = row['weight'] ?? 0.0;
+        row['total'] = rate * weight;
+      }
     });
   }
 
@@ -132,8 +759,10 @@ class _FilledPageState extends State<FilledPage> {
       final deletedRow = _filledRows[index];
       // Dispose all controllers for the deleted row
       deletedRow['itemNameController']?.dispose();
+      deletedRow['weightController']?.dispose();
       deletedRow['rateController']?.dispose();
       deletedRow['qtyController']?.dispose();
+      deletedRow['lengthController']?.dispose(); // Add this line
       deletedRow['descriptionController']?.dispose();
       _filledRows.removeAt(index);
     });
@@ -150,31 +779,71 @@ class _FilledPageState extends State<FilledPage> {
     return subtotal - discountAmount + _mazdoori;
   }
 
+  Future<double> _getRemainingBalance(String customerId, {String? excludeFilledId, DateTime? asOfDate}) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('transactionDate');
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double runningBalance = 0.0;
+          final targetDate = asOfDate ?? DateTime.now();
+
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Skip entries after the target date
+            if (entryDate.isAfter(targetDate)) {
+              continue;
+            }
+
+            // Skip the filled we want to exclude
+            if (excludeFilledId != null && entryData['filledNumber'] == excludeFilledId) {
+              continue;
+            }
+
+            final creditAmount = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+            final debitAmount = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+            // Update running balance
+            runningBalance += creditAmount - debitAmount;
+          }
+
+          return runningBalance;
+        }
+      }
+
+      return 0.0;
+    } catch (e) {
+      print("Error fetching remaining balance: $e");
+      return 0.0;
+    }
+  }
+
   Future<Uint8List> _generatePDFBytes(String filledNumber) async {
     final pdf = pw.Document();
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
 
     // Get filled data
     final filled = widget.filled ?? _currentFilled;
     if (filled == null) {
       throw Exception("No filled data available");
     }
-
-
-    // Preload total section label images
-    final subTotalLabel = await _createTextImage(languageProvider.isEnglish ? 'Sub Total:' : 'ذیلی کل:');
-    final discountLabel = await _createTextImage(languageProvider.isEnglish ? 'Discount:' : 'رعایت:');
-    final mazdooriLabel = await _createTextImage(languageProvider.isEnglish ? 'Mazdoori:' : 'مزدوری:');
-    final filledAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Filled Amount:' : 'فلڈ کی رقم:');
-    final previousBalanceLabel = await _createTextImage(languageProvider.isEnglish ? 'Previous Balance:' : 'پچھلا بیلنس:');
-    final totalLabel = await _createTextImage(languageProvider.isEnglish
-        ? 'Total (Filled + Previous Balance):'
-        : 'کل (انوائس + پچھلا بیلنس):');
-    final paidAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Paid Amount:' : 'ادا شدہ رقم:');
-    final remainingAmountLabel = await _createTextImage(languageProvider.isEnglish ? 'Remaining Amount:' : 'بقیہ رقم:');
-
 
     // Get payment details
     double paidAmount = 0.0;
@@ -195,7 +864,8 @@ class _FilledPageState extends State<FilledPage> {
             id: 'unknown',
             name: 'Unknown Customer',
             phone: '',
-            address: ''
+            address: '', city: '',
+            customerSerial: ''
         )
     );
 
@@ -223,6 +893,8 @@ class _FilledPageState extends State<FilledPage> {
     final String formattedDate = '${filledDate.day}/${filledDate.month}/${filledDate.year}';
     final String formattedTime = '${filledDate.hour}:${filledDate.minute.toString().padLeft(2, '0')}';
 
+
+    // Get the balance EXCLUDING the current filled amount
     double previousBalance = await _getRemainingBalance(
       _selectedCustomerId!,
       excludeFilledId: filled['filledNumber'], // Always exclude current filled
@@ -231,8 +903,6 @@ class _FilledPageState extends State<FilledPage> {
     double grandTotal = _calculateGrandTotal();
     double newBalance = previousBalance + grandTotal;
     double remainingAmount = newBalance - paidAmount;
-
-
 
     // Load the image asset for the logo
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
@@ -244,6 +914,7 @@ class _FilledPageState extends State<FilledPage> {
     final namebuffer = namebytes.buffer.asUint8List();
     final nameimage = pw.MemoryImage(namebuffer);
 
+
     final ByteData discountbytes = await rootBundle.load('assets/images/discount.png');
     final discountbuffer = discountbytes.buffer.asUint8List();
     final discountimage = pw.MemoryImage(discountbuffer);
@@ -252,7 +923,7 @@ class _FilledPageState extends State<FilledPage> {
     final mazdooribuffer = mazdooribytes.buffer.asUint8List();
     final mazdooriimage = pw.MemoryImage(mazdooribuffer);
 
-    final ByteData filledamountbytes = await rootBundle.load('assets/images/filledamount.png');
+    final ByteData filledamountbytes = await rootBundle.load('assets/images/saryaamount.png');
     final filledamountbuffer = filledamountbytes.buffer.asUint8List();
     final filledamountimage = pw.MemoryImage(filledamountbuffer);
 
@@ -261,7 +932,7 @@ class _FilledPageState extends State<FilledPage> {
     final previousamountbuffer = previousamountbytes.buffer.asUint8List();
     final previousamountimage = pw.MemoryImage(previousamountbuffer);
 
-    final ByteData totalwithpreviousamountbytes = await rootBundle.load('assets/images/totalwithprevious.png');
+    final ByteData totalwithpreviousamountbytes = await rootBundle.load('assets/images/totalinvoicewithprevious.png');
     final totalwithpreviousbuffer = totalwithpreviousamountbytes.buffer.asUint8List();
     final totalwithpreviousimage = pw.MemoryImage(totalwithpreviousbuffer);
 
@@ -273,6 +944,7 @@ class _FilledPageState extends State<FilledPage> {
     final ByteData remainingamountbytes = await rootBundle.load('assets/images/remainingamount.png');
     final remainingamountbuffer = remainingamountbytes.buffer.asUint8List();
     final remainingamountimage = pw.MemoryImage(remainingamountbuffer);
+
     // Load the image asset for the logo
     final ByteData addressbytes = await rootBundle.load('assets/images/address.png');
     final addressbuffer = addressbytes.buffer.asUint8List();
@@ -307,9 +979,61 @@ class _FilledPageState extends State<FilledPage> {
           'Customer Address: ${selectedCustomer.address}',
     );
 
+    // ✅ Pre-generate images for all lengths
+    List<pw.MemoryImage> lengthImages = [];
+
+    for (var row in _filledRows) {
+      String lengthsText = '';
+
+      if (row['selectedLengths'] != null && row['selectedLengths'] is List) {
+        // FIX: Properly handle dynamic list and convert to List<String>
+        final List<dynamic> dynamicList = row['selectedLengths'] as List<dynamic>;
+        final selectedLengths = dynamicList.map((e) => e.toString()).toList();
+
+        final lengthQuantities = (row['lengthQuantities'] as Map<String, dynamic>? ?? {}) as Map<String, dynamic>;
+
+        lengthsText = selectedLengths.map((length) {
+          final qtyValue = lengthQuantities[length];
+          double qty = 1.0;
+
+          if (qtyValue is int) {
+            qty = qtyValue.toDouble();
+          } else if (qtyValue is double) {
+            qty = qtyValue;
+          } else if (qtyValue is String) {
+            qty = double.tryParse(qtyValue) ?? 1.0;
+          } else if (qtyValue is num) {
+            qty = qtyValue.toDouble();
+          }
+
+          return '$length (${qty.toStringAsFixed(0)})';
+        }).join('\n');
+      }
+      else if (row['length'] != null) {
+        lengthsText = row['length'].toString();
+      }
+
+      final img = await _createTextImage(lengthsText);
+      lengthImages.add(img);
+    }
 
 
-    // Add a page with A5 size
+    Future<pw.MemoryImage> loadImage(String path) async {
+      final ByteData bytes = await rootBundle.load('assets/images/$path');
+      final buffer = bytes.buffer.asUint8List();
+      return pw.MemoryImage(buffer);
+    }
+
+    // Then load all images:
+    final itemNameLogo = await loadImage('itemName.png');
+    final descriptionLogo = await loadImage('description.png');
+    final lengthLogo = await loadImage('length.png');
+    final rateLogo = await loadImage('rate.png');
+    final weightLogo = await loadImage('weight.png');
+    final totalLogo = await loadImage('total.png');
+    final qtyLogo = await loadImage('qty.png');
+
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a5, // Set page size to A5
@@ -356,7 +1080,6 @@ class _FilledPageState extends State<FilledPage> {
                 ],
               ),
               pw.Divider(),
-
               // Customer Information
               pw.Image(customerDetailsImage, width: 250, dpi: 1000), // Adjust width
               pw.Text('Customer Number: ${selectedCustomer.phone}', style: const pw.TextStyle(fontSize: 12)),
@@ -366,30 +1089,77 @@ class _FilledPageState extends State<FilledPage> {
 
               pw.SizedBox(height: 10),
 
-              // filled Table with Urdu text converted to image
+              // Filled Table with Urdu text converted to image
               pw.Table.fromTextArray(
+                // headers: [
+                //   pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
+                //   pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
+                //   pw.Text('Weight', style: const pw.TextStyle(fontSize: 10)),
+                //   pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
+                //   pw.Text('Length', style: const pw.TextStyle(fontSize: 10)),
+                //   pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
+                //   pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+                // ],
                 headers: [
-                  pw.Text('Item Name', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Description', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Qty(Pcs)', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Rate', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Total', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(itemNameLogo, width: 60, height: 15),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(descriptionLogo, width: 80, height: 15),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(weightLogo, width: 50, height: 15),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(qtyLogo, width: 50, height: 15),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(lengthLogo, width: 50, height: 15),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(rateLogo, width: 50, height: 15),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.center,
+                    child: pw.Image(totalLogo, width: 50, height: 15),
+                  ),
                 ],
                 data: _filledRows.asMap().map((index, row) {
+                  // Format lengths with quantities for display
+                  String lengthsText = '';
+                  if (row['selectedLengths'] != null && row['selectedLengths'] is List) {
+                    final selectedLengths = row['selectedLengths'] as List;
+                    final lengthQuantities = row['lengthQuantities'] as Map<String, dynamic>? ?? {};
+
+                    lengthsText = selectedLengths.map((length) {
+                      double qty = (lengthQuantities[length] as num?)?.toDouble() ?? 1.0;
+                      return '$length (${qty.toStringAsFixed(0)})';
+                    }).join(', ');
+                  } else if (row['length'] != null) {
+                    lengthsText = row['length'].toString();
+                  }
+
                   return MapEntry(
                     index,
                     [
                       pw.Image(itemnameImages[index], dpi: 1000),
                       pw.Image(descriptionImages[index], dpi: 1000),
-                      pw.Text((row['qty'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text((row['weight'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text((row['totalQty'] ?? 0).toStringAsFixed(0), style: const pw.TextStyle(fontSize: 10)), // Show total quantity
+                      // ✅ LENGTH cell (image, multi rows)
+                      pw.Image(lengthImages[index], dpi: 1000),
                       pw.Text((row['rate'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                       pw.Text((row['total'] ?? 0.0).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
                     ],
                   );
                 }).values.toList(),
               ),
-              pw.SizedBox(height: 10),
-
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -450,7 +1220,7 @@ class _FilledPageState extends State<FilledPage> {
                   pw.Text(remainingAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
-              pw.SizedBox(height: 30),
+              // pw.SizedBox(height: 30),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
@@ -459,7 +1229,7 @@ class _FilledPageState extends State<FilledPage> {
               ),
 
               // Footer Section
-              pw.Spacer(), // Push footer to the bottom of the page
+              // pw.Spacer(), // Push footer to the bottom of the page
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -494,7 +1264,7 @@ class _FilledPageState extends State<FilledPage> {
     if (widget.filled != null) {
       filledNumber = widget.filled!['filledNumber'];
     } else {
-      final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+      final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
       filledNumber = (await filledProvider.getNextFilledNumber()).toString();
     }
 
@@ -565,60 +1335,6 @@ class _FilledPageState extends State<FilledPage> {
     return pw.MemoryImage(buffer);
   }
 
-  Future<double> _getRemainingBalance(String customerId, {String? excludeFilledId, DateTime? asOfDate}) async {
-    try {
-      final customerLedgerRef = _db.child('filledledger').child(customerId);
-      final query = customerLedgerRef.orderByChild('transactionDate');
-
-      final snapshot = await query.get();
-
-      if (snapshot.exists) {
-        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
-
-        if (ledgerData != null) {
-          // Convert to list and sort by transactionDate
-          final entries = ledgerData.entries.toList()
-            ..sort((a, b) {
-              final dateA = DateTime.parse(a.value['transactionDate'] as String);
-              final dateB = DateTime.parse(b.value['transactionDate'] as String);
-              return dateA.compareTo(dateB);
-            });
-
-          double runningBalance = 0.0;
-          final targetDate = asOfDate ?? DateTime.now();
-
-          for (var entry in entries) {
-            final entryData = entry.value as Map<dynamic, dynamic>;
-            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
-
-            // Skip entries after the target date
-            if (entryDate.isAfter(targetDate)) {
-              continue;
-            }
-
-            // Skip the filled we want to exclude
-            if (excludeFilledId != null && entryData['filledNumber'] == excludeFilledId) {
-              continue;
-            }
-
-            final creditAmount = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
-            final debitAmount = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
-
-            // Update running balance
-            runningBalance += creditAmount - debitAmount;
-          }
-
-          return runningBalance;
-        }
-      }
-
-      return 0.0;
-    } catch (e) {
-      print("Error fetching remaining balance: $e");
-      return 0.0;
-    }
-  }
-
   Future<List<Item>> fetchItems() async {
     final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
     final DatabaseEvent snapshot = await itemsRef.once();
@@ -634,11 +1350,79 @@ class _FilledPageState extends State<FilledPage> {
     }
   }
 
-  Future<void> _fetchItems() async {
-    final items = await fetchItems();
+  void _removeLengthFromRow(int rowIndex, String length) {
     setState(() {
-      _items = items;
+      final row = _filledRows[rowIndex];
+      final selectedLengths = List<String>.from(row['selectedLengths'] ?? []);
+      final lengthQuantities = Map<String, double>.from(row['lengthQuantities'] ?? {});
+
+      selectedLengths.remove(length);
+      lengthQuantities.remove(length);
+
+      row['selectedLengths'] = selectedLengths;
+      row['lengthQuantities'] = lengthQuantities;
+      row['totalQty'] = lengthQuantities.values.fold(0.0, (sum, qty) => sum + qty);
+
+      // Update length display
+      String lengthsDisplay = selectedLengths.map((len) {
+        double qty = lengthQuantities[len] ?? 1.0;
+        return '$len (${qty.toStringAsFixed(0)})';
+      }).join(', ');
+
+      if (row['lengthController'] != null) {
+        row['lengthController'].text = lengthsDisplay;
+      }
+
+      // Recalculate row totals
+      _recalculateRowTotals(rowIndex);
     });
+  }
+
+  Future<void> _fetchItems() async {
+    try {
+      final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
+      final DatabaseEvent snapshot = await itemsRef.once();
+
+      if (snapshot.snapshot.exists) {
+        final Map<dynamic, dynamic> itemsMap = snapshot.snapshot.value as Map<dynamic, dynamic>;
+
+        // Parse all items
+        final allItems = itemsMap.entries.map((entry) {
+          try {
+            return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
+          } catch (e) {
+            print("Error parsing item ${entry.key}: $e");
+            return null;
+          }
+        }).where((item) => item != null).cast<Item>().toList();
+
+        // Extract unique motais from itemName
+        final motais = allItems
+            .where((item) => item.itemName.isNotEmpty)
+            .map((item) => item.itemName)
+            .toSet()
+            .toList()
+          ..sort();
+
+        print("✅ Found ${allItems.length} items with ${motais.length} motais");
+
+        setState(() {
+          _items = allItems;
+          _availableMotais = motais;
+        });
+      } else {
+        setState(() {
+          _items = [];
+          _availableMotais = [];
+        });
+      }
+    } catch (e) {
+      print("❌ Error fetching items: $e");
+      setState(() {
+        _items = [];
+        _availableMotais = [];
+      });
+    }
   }
 
   Future<void> _updateQtyOnHand(List<Map<String, dynamic>> validItems) async {
@@ -649,17 +1433,17 @@ class _FilledPageState extends State<FilledPage> {
 
         final dbItem = _items.firstWhere(
               (i) => i.itemName == itemName,
-          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, itemType: ''),
         );
 
         if (dbItem.id.isNotEmpty) {
           final String itemId = dbItem.id;
           final double currentQty = dbItem.qtyOnHand ?? 0.0;
-          final double newQty = item['qty'] ?? 0.0;
-          final double initialQty = item['initialQty'] ?? 0.0;
+          final double newQty = item['weight'] ?? 0.0;
+          final double initialWeight = item['initialWeight'] ?? 0.0;
 
           // Calculate the difference between the new quantity and the initial quantity
-          double delta = initialQty - newQty;
+          double delta = initialWeight - newQty;
 
           // Update the qtyOnHand in the database
           double updatedQty = currentQty + delta;
@@ -676,7 +1460,7 @@ class _FilledPageState extends State<FilledPage> {
     try {
       final bytes = await _generatePDFBytes(filledNumber);
       final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/filled_$filledNumber.pdf');
+      final file = File('${directory.path}/filled$filledNumber.pdf');
       await file.writeAsBytes(bytes);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -696,7 +1480,7 @@ class _FilledPageState extends State<FilledPage> {
     try {
       final bytes = await _generatePDFBytes(filledNumber);
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/filled_$filledNumber.pdf');
+      final file = File('${tempDir.path}/filled$filledNumber.pdf');
       await file.writeAsBytes(bytes);
 
       print('PDF file created at: ${file.path}'); // Debug log
@@ -739,7 +1523,7 @@ class _FilledPageState extends State<FilledPage> {
             TextButton(
               onPressed: () async {
                 try {
-                  await Provider.of<FilledProvider>(context, listen: false).deletePaymentEntry(
+                  await Provider.of<NewFilledProvider>(context, listen: false).deletePaymentEntry(
                     context: context, // Pass the context here
                     filledId: filledId,
                     paymentKey: paymentKey,
@@ -810,7 +1594,7 @@ class _FilledPageState extends State<FilledPage> {
   }
 
   Future<void> _showPaymentDetails(Map<String, dynamic> filled) async {
-    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     try {
@@ -842,21 +1626,11 @@ class _FilledPageState extends State<FilledPage> {
 
                 return Card(
                   child: ListTile(
-                    // title: Text(
-                    //   payment['method'] == 'Bank'
-                    //       ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
-                    //       : payment['method'] == 'Check'
-                    //       ? '${payment['bankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
-                    //       : '${payment['method']}: Rs ${payment['amount']}',
-                    // ),
                     title: Text(
                       payment['method'] == 'Bank'
                           ? '${payment['bankName'] ?? 'Bank'}: Rs ${payment['amount']}'
                           : payment['method'] == 'Check'
                           ? '${payment['chequeBankName'] ?? 'Bank'} Cheque: Rs ${payment['amount']}'
-                      // Add this case for SimpleCashbook
-                          : payment['method'] == 'SimpleCashbook'
-                          ? 'Simple Cashbook: Rs ${payment['amount']}'
                           : '${payment['method']}: Rs ${payment['amount']}',
                     ),
                     subtitle: Column(
@@ -1026,9 +1800,9 @@ class _FilledPageState extends State<FilledPage> {
             children: tableRows,
           ),
 
-          // pw.SizedBox(height: 20),
+          pw.SizedBox(height: 20),
           pw.Divider(),
-          // pw.Spacer(),
+          pw.Spacer(),
 
           // Footer
           pw.Row(
@@ -1060,6 +1834,211 @@ class _FilledPageState extends State<FilledPage> {
 
     // Display or print the PDF
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+  }
+
+
+  Future<Map<String, double>?> showLengthQuantityDialog({
+    required BuildContext context,
+    required String itemName,
+    required List<String> availableLengths,
+    Map<String, double>? initialQuantities,
+    required LanguageProvider languageProvider,
+  })
+  async {
+    final Map<String, double> lengthQuantities = initialQuantities ?? {};
+    final List<TextEditingController> controllers = [];
+
+    for (var length in availableLengths) {
+      controllers.add(TextEditingController(
+        text: lengthQuantities[length]?.toString() ?? '1',
+      ));
+    }
+
+    return await showDialog<Map<String, double>>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            languageProvider.isEnglish
+                ? 'Enter quantities for $itemName'
+                : '$itemName کے لیے مقدار درج کریں',
+          ),
+          content: Container(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (int i = 0; i < availableLengths.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              availableLengths[i],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: controllers[i],
+                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                labelText: languageProvider.isEnglish ? 'Quantity' : 'مقدار',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final Map<String, double> result = {};
+                for (int i = 0; i < availableLengths.length; i++) {
+                  final length = availableLengths[i];
+                  final quantityText = controllers[i].text;
+                  final quantity = double.tryParse(quantityText) ?? 1.0;
+                  if (quantity > 0) {
+                    result[length] = quantity;
+                  }
+                }
+                Navigator.pop(context, result);
+              },
+              child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Map<String, double>?> showAdvancedLengthDialog({
+    required BuildContext context,
+    required String itemName,
+    required List<String> availableLengths,
+    Map<String, double>? initialQuantities,
+    required LanguageProvider languageProvider,
+  })
+  async {
+    final Map<String, double> selectedLengths = initialQuantities ?? {};
+    final Map<String, bool> isSelected = {};
+    final Map<String, TextEditingController> controllers = {};
+
+    for (var length in availableLengths) {
+      isSelected[length] = selectedLengths.containsKey(length);
+      controllers[length] = TextEditingController(
+        text: selectedLengths[length]?.toString() ?? '1',
+      );
+    }
+
+    return await showDialog<Map<String, double>>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                languageProvider.isEnglish
+                    ? 'Select lengths for $itemName'
+                    : '$itemName کے لیے لمبائیاں منتخب کریں',
+              ),
+              content: Container(
+                width: double.maxFinite,
+                constraints: BoxConstraints(maxHeight: 400),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var length in availableLengths)
+                        Card(
+                          margin: EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: isSelected[length] ?? false,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      isSelected[length] = value ?? false;
+                                    });
+                                  },
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    length,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 16),
+                                if (isSelected[length] ?? false)
+                                  SizedBox(
+                                    width: 100,
+                                    child: TextFormField(
+                                      controller: controllers[length],
+                                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                      decoration: InputDecoration(
+                                        labelText: languageProvider.isEnglish ? 'Qty' : 'مقدار',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: Text(languageProvider.isEnglish ? 'Cancel' : 'منسوخ'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final Map<String, double> result = {};
+                    for (var length in availableLengths) {
+                      if (isSelected[length] ?? false) {
+                        final quantityText = controllers[length]!.text;
+                        final quantity = double.tryParse(quantityText) ?? 1.0;
+                        if (quantity > 0) {
+                          result[length] = quantity;
+                        }
+                      }
+                    }
+                    Navigator.pop(context, result);
+                  },
+                  child: Text(languageProvider.isEnglish ? 'Save' : 'محفوظ کریں'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<Uint8List?> _pickImage(BuildContext context) async {
@@ -1103,7 +2082,8 @@ class _FilledPageState extends State<FilledPage> {
     return imageBytes;
   }
 
-  Future<Map<String, dynamic>?> _selectBank(BuildContext context) async {
+  Future<Map<String, dynamic>?> _selectBank(BuildContext context)
+  async {
     if (_cachedBanks.isEmpty) {
       final bankSnapshot = await FirebaseDatabase.instance.ref('banks').once();
       if (bankSnapshot.snapshot.value == null) return null;
@@ -1157,9 +2137,6 @@ class _FilledPageState extends State<FilledPage> {
                     bankName,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  // subtitle: Text(
-                  //   '${languageProvider.isEnglish ? "Balance" : "بیلنس"}: ${bankData['balance']} Rs',
-                  // ),
                   onTap: () {
                     selectedBank = {
                       'id': bankData['id'],
@@ -1187,10 +2164,9 @@ class _FilledPageState extends State<FilledPage> {
 
   Future<void> _showFilledPaymentDialog(
       Map<String, dynamic> filled,
-      FilledProvider filledProvider,
+      NewFilledProvider filledProvider,
       LanguageProvider languageProvider,
-      )
-  async {
+      ) async {
     String? selectedPaymentMethod;
     _paymentController.clear();
     bool _isPaymentButtonPressed = false;
@@ -1272,7 +2248,7 @@ class _FilledPageState extends State<FilledPage> {
                           value: 'Slip',
                           child: Text(languageProvider.isEnglish ? 'Slip' : 'پرچی'),
                         ),
-                        DropdownMenuItem(  // Add this new option
+                        DropdownMenuItem(
                           value: 'SimpleCashbook',
                           child: Text(languageProvider.isEnglish ? 'Simple Cashbook' : 'سادہ کیش بک'),
                         ),
@@ -1332,8 +2308,8 @@ class _FilledPageState extends State<FilledPage> {
                             final selectedBank = await _selectBank(context);
                             if (selectedBank != null) {
                               setState(() {
-                                _selectedChequeBankId = selectedBank['id'];
-                                _selectedChequeBankName = selectedBank['name'];
+                                _selectedChequeBankId = selectedBank['id']?.toString(); // Ensure it's a string
+                                _selectedChequeBankName = selectedBank['name']?.toString(); // Ensure it's a string
                               });
                             }
                           },
@@ -1355,8 +2331,8 @@ class _FilledPageState extends State<FilledPage> {
                             final selectedBank = await _selectBank(context);
                             if (selectedBank != null) {
                               setState(() {
-                                _selectedBankId = selectedBank['id'];
-                                _selectedBankName = selectedBank['name'];
+                                _selectedBankId = selectedBank['id']?.toString(); // Ensure it's a string
+                                _selectedBankName = selectedBank['name']?.toString(); // Ensure it's a string
                               });
                             }
                           },
@@ -1416,9 +2392,11 @@ class _FilledPageState extends State<FilledPage> {
                     // Validate inputs
                     if (selectedPaymentMethod == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(languageProvider.isEnglish
-                            ? 'Please select a payment method.'
-                            : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔')),
+                        SnackBar(
+                          content: Text(languageProvider.isEnglish
+                              ? 'Please select a payment method.'
+                              : 'براہ کرم ادائیگی کا طریقہ منتخب کریں۔'),
+                        ),
                       );
                       setState(() => _isPaymentButtonPressed = false);
                       return;
@@ -1427,9 +2405,11 @@ class _FilledPageState extends State<FilledPage> {
                     final amount = double.tryParse(_paymentController.text);
                     if (amount == null || amount <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(languageProvider.isEnglish
-                            ? 'Please enter a valid payment amount.'
-                            : 'براہ کرم ایک درست رقم درج کریں۔')),
+                        SnackBar(
+                          content: Text(languageProvider.isEnglish
+                              ? 'Please enter a valid payment amount.'
+                              : 'براہ کرم ایک درست رقم درج کریں۔'),
+                        ),
                       );
                       setState(() => _isPaymentButtonPressed = false);
                       return;
@@ -1439,27 +2419,33 @@ class _FilledPageState extends State<FilledPage> {
                     if (selectedPaymentMethod == 'Check') {
                       if (_selectedChequeBankId == null || _selectedChequeBankName == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(languageProvider.isEnglish
-                              ? 'Please select a bank for the cheque'
-                              : 'براہ کرم چیک کے لیے بینک منتخب کریں')),
+                          SnackBar(
+                            content: Text(languageProvider.isEnglish
+                                ? 'Please select a bank for the cheque'
+                                : 'براہ کرم چیک کے لیے بینک منتخب کریں'),
+                          ),
                         );
                         setState(() => _isPaymentButtonPressed = false);
                         return;
                       }
                       if (_chequeNumberController.text.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(languageProvider.isEnglish
-                              ? 'Please enter cheque number'
-                              : 'براہ کرم چیک نمبر درج کریں')),
+                          SnackBar(
+                            content: Text(languageProvider.isEnglish
+                                ? 'Please enter cheque number'
+                                : 'براہ کرم چیک نمبر درج کریں'),
+                          ),
                         );
                         setState(() => _isPaymentButtonPressed = false);
                         return;
                       }
                       if (_selectedChequeDate == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(languageProvider.isEnglish
-                              ? 'Please select cheque date'
-                              : 'براہ کرم چیک کی تاریخ منتخب کریں')),
+                          SnackBar(
+                            content: Text(languageProvider.isEnglish
+                                ? 'Please select cheque date'
+                                : 'براہ کرم چیک کی تاریخ منتخب کریں'),
+                          ),
                         );
                         setState(() => _isPaymentButtonPressed = false);
                         return;
@@ -1469,36 +2455,37 @@ class _FilledPageState extends State<FilledPage> {
                     // Validate bank-specific fields
                     if (selectedPaymentMethod == 'Bank' && (_selectedBankId == null || _selectedBankName == null)) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(languageProvider.isEnglish
-                            ? 'Please select a bank'
-                            : 'براہ کرم بینک منتخب کریں')),
+                        SnackBar(
+                          content: Text(languageProvider.isEnglish
+                              ? 'Please select a bank'
+                              : 'براہ کرم بینک منتخب کریں'),
+                        ),
                       );
                       setState(() => _isPaymentButtonPressed = false);
                       return;
                     }
 
-
-
                     try {
+                      // FIX: Ensure all string parameters are not null by providing empty string fallbacks
                       await filledProvider.payFilledWithSeparateMethod(
-                        // createdAt: _dateController.text,
                         createdAt: _selectedPaymentDate.toIso8601String(),
                         context,
-                        filled['filledNumber'],
+                        filled['filledNumber']?.toString() ?? '', // Ensure not null
                         amount,
                         selectedPaymentMethod!,
-                        description: _description,
+                        description: _description ?? '', // Ensure not null
                         imageBytes: _imageBytes,
                         paymentDate: _selectedPaymentDate,
-                        bankId: _selectedBankId,
-                        bankName: _selectedBankName,
-                        chequeNumber: _chequeNumberController.text,
+                        bankId: _selectedBankId?.toString(), // Already handling null
+                        bankName: _selectedBankName?.toString(), // Already handling null
+                        chequeNumber: _chequeNumberController.text.isNotEmpty ? _chequeNumberController.text : null, // Don't send empty string
                         chequeDate: _selectedChequeDate,
-                        chequeBankId: _selectedChequeBankId,
-                        chequeBankName: _selectedChequeBankName,
+                        chequeBankId: _selectedChequeBankId?.toString(),
+                        chequeBankName: _selectedChequeBankName?.toString(),
                       );
                       Navigator.of(context).pop();
                     } catch (e) {
+                      print(e);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Error: ${e.toString()}')),
                       );
@@ -1522,11 +2509,11 @@ class _FilledPageState extends State<FilledPage> {
         filled['filledNumber'] == null ||  // Use filledNumber as ID
         filled['customerId'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot process payment - invalid Filled data')),
+        const SnackBar(content: Text('Cannot process payment - invalid filled data')),
       );
       return;
     }
-    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+    final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _showFilledPaymentDialog(filled, filledProvider, languageProvider);
   }
@@ -1535,112 +2522,147 @@ class _FilledPageState extends State<FilledPage> {
     // At the start of both methods
     if (filled == null || filled['filledNumber'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot view payments - invalid Filled data')),
+        const SnackBar(content: Text('Cannot view payments - invalid filled data')),
       );
       return;
     }
     _showPaymentDetails(filled);
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchItems();
-    _currentFilled = widget.filled;
+  void _recalculateRowTotals(int rowIndex) {
+    final row = _filledRows[rowIndex];
+    double weight = row['weight'] ?? 0.0;
 
-    if (widget.filled != null) {
-      _mazdoori = (widget.filled!['mazdoori'] as num).toDouble();
-      _mazdooriController.text = _mazdoori.toStringAsFixed(2);
-      _filledId = widget.filled!['filledNumber'];
-      _referenceController.text = widget.filled!['referenceNumber'] ?? '';
+    if (_useGlobalRateMode) {
+      // Use global rate for calculation
+      double total = weight * _globalRate;
+      row['total'] = total;
+      row['rate'] = _globalRate; // Update row rate to show global rate
+      row['rateController'].text = _globalRate.toStringAsFixed(2);
+    } else {
+      // Original logic: use item-specific rate
+      double rate = row['rate'] ?? 0.0;
+      row['total'] = weight * rate;
     }
 
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    customerProvider.fetchCustomers().then((_) {
-      if (widget.filled != null) {
-        final filled = widget.filled!;
-        _dateController.text = filled['createdAt'] != null
-            ? DateTime.parse(filled['createdAt']).toLocal().toString().split(' ')[0]
-            : '';
-        _selectedCustomerId = filled['customerId'];
-        final customer = customerProvider.customers.firstWhere(
-              (c) => c.id == _selectedCustomerId,
-          orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
-        );
-        setState(() {
-          _selectedCustomerName = customer.name;
-        });
+    setState(() {});
+  }
+
+  void _recalculateAllRowTotalsWithGlobalRate() {
+    setState(() {
+      for (var row in _filledRows) {
+        double weight = row['weight'] ?? 0.0;
+        double total = weight * _globalRate;
+        row['rate'] = _globalRate;
+        row['total'] = total;
+
+        if (row['rateController'] != null) {
+          row['rateController'].text = _globalRate.toStringAsFixed(2);
+        }
       }
     });
+  }
 
-    _isReadOnly = widget.filled != null;
+  Future<void> fetchAllItems() async {
+    try {
+      final DatabaseReference itemsRef = FirebaseDatabase.instance.ref().child('items');
+      final DatabaseEvent snapshot = await itemsRef.once();
 
-    if (widget.filled != null) {
-      final filled = widget.filled!;
-      _discount = (filled['discount'] as num?)?.toDouble() ?? 0.0;
-      _discountController.text = _discount.toStringAsFixed(2);
-      _filledId = filled['filledNumber'];
-      _paymentType = filled['paymentType'];
-      _instantPaymentMethod = filled['paymentMethod'];
+      if (snapshot.snapshot.exists) {
+        final Map<dynamic, dynamic> itemsMap = snapshot.snapshot.value as Map<dynamic, dynamic>;
 
-      // Initialize rows with calculated totals
-      _filledRows = List<Map<String, dynamic>>.from(filled['items']).map((row) {
-        double rate = (row['rate'] as num?)?.toDouble() ?? 0.0;
-        double qty = (row['qty'] as num?)?.toDouble() ?? 0.0;
-        double total = rate * qty;
+        // Parse all items
+        final allItems = itemsMap.entries.map((entry) {
+          try {
+            return Item.fromMap(entry.value as Map<dynamic, dynamic>, entry.key as String);
+          } catch (e) {
+            print("Error parsing item ${entry.key}: $e");
+            return null;
+          }
+        }).where((item) => item != null).cast<Item>().toList();
 
-        // Print debug information
-        print('Initializing row with:');
-        print('  - Item Name: ${row['itemName']}');
-        print('  - Rate: $rate');
-        print('  - Qty: $qty');
-        print('  - Total: $total');
+        // Extract unique motais
+        final motais = allItems
+            .where((item) => item.itemName.isNotEmpty)
+            .map((item) => item.itemName)
+            .toSet()
+            .toList()
+          ..sort();
 
-        return {
-          'itemName': row['itemName'],
-          'rate': rate,
-          'initialQty': qty,
-          'qty': qty,
-          'description': row['description'],
-          'total': total,
-          'itemNameController': TextEditingController(text: row['itemName']),
-          'rateController': TextEditingController(text: rate.toStringAsFixed(2)),
-          'qtyController': TextEditingController(text: qty.toStringAsFixed(0)),
-          'descriptionController': TextEditingController(text: row['description']),
-        };
-      }).toList();
-    } else {
-      _filledRows = [
-        {
-          'total': 0.0,
-          'rate': 0.0,
-          'qty': 0.0,
-          'description': '',
-          'itemNameController': TextEditingController(),
-          'rateController': TextEditingController(),
-          'qtyController': TextEditingController(),
-          'descriptionController': TextEditingController(),
-        },
-      ];
+        setState(() {
+          _items = allItems;
+          _availableMotais = motais;
+        });
+      }
+    } catch (e) {
+      print("Error fetching items: $e");
     }
   }
 
-  @override
-  void dispose() {
-    for (var row in _filledRows) {
-      row['itemNameController']?.dispose(); // Add this
-      row['rateController']?.dispose();
-      row['qtyController']?.dispose();
-      row['descriptionController']?.dispose();
-      row['rateController']?.dispose();
-    }
-    _discountController.dispose(); // Dispose discount controller
-    _customerController.dispose();
-    _mazdooriController.dispose();
-    _dateController.dispose();
-    _referenceController.dispose();
-    super.dispose();
+  void refreshMotais() async {
+    await _fetchItems();
   }
+
+
+  String _getRateHintText(int rowIndex, LanguageProvider languageProvider) {
+    final row = _filledRows[rowIndex];
+    final itemName = row['itemName'];
+    final availableCombinations = row['availableLengthCombinations'] as List<LengthBodyCombination>?;
+
+    if (itemName != null && itemName.isNotEmpty) {
+      // Find the item to get its sale price
+      final item = _items.firstWhere(
+            (i) => i.itemName == itemName,
+        orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, itemType: ''),
+      );
+
+      // Check for customer-specific rate first
+      if (_selectedCustomerId != null && availableCombinations != null) {
+        for (var combo in availableCombinations) {
+          if (combo.customerPrices.containsKey(_selectedCustomerId)) {
+            final customerRate = combo.customerPrices[_selectedCustomerId] ?? 0.0;
+            if (customerRate > 0) {
+              return 'Customer rate: ${customerRate.toStringAsFixed(2)} PKR/Kg';
+            }
+          }
+        }
+      }
+
+      // Fall back to motai sale price
+      final saleRate = item.salePrice ?? 0.0;
+      if (saleRate > 0) {
+        return 'Motai rate: ${saleRate.toStringAsFixed(2)} PKR/Kg';
+      }
+    }
+
+    return languageProvider.isEnglish ? 'Enter rate' : 'ریٹ درج کریں';
+  }
+
+
+  double _getHintRate(int rowIndex) {
+    final row = _filledRows[rowIndex];
+    final itemName = row['itemName'];
+    final availableCombinations = row['availableLengthCombinations'] as List<LengthBodyCombination>?;
+
+    if (itemName != null && itemName.isNotEmpty) {
+      final item = _items.firstWhere(
+            (i) => i.itemName == itemName,
+        orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, itemType: ''),
+      );
+
+      if (_selectedCustomerId != null && availableCombinations != null) {
+        for (var combo in availableCombinations) {
+          if (combo.customerPrices.containsKey(_selectedCustomerId)) {
+            return combo.customerPrices[_selectedCustomerId] ?? 0.0;
+          }
+        }
+      }
+
+      return item.salePrice ?? 0.0;
+    }
+    return 0.0;
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1655,10 +2677,9 @@ class _FilledPageState extends State<FilledPage> {
         return Scaffold(
           appBar: AppBar(
             title: Text(
-              // widget.filled == null
               _isReadOnly
-                  ? (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ بنائیں')
-                  : (languageProvider.isEnglish ? 'Create Filled' : 'فلڈ کو اپ ڈیٹ کریں'),
+                  ? (languageProvider.isEnglish ? 'Update Filled' : 'فلڈ اپ ڈیٹ کریں')
+                  : (languageProvider.isEnglish ? 'Create Filled' : 'فلڈ بنائیں  '),
               style: const TextStyle(color: Colors.white,
               ),
             ),
@@ -1668,11 +2689,14 @@ class _FilledPageState extends State<FilledPage> {
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white), // Three-dot menu icon
                 onSelected: (String value) async {
+                  // Get the appropriate filled number
                   String filledNumber;
                   if (widget.filled != null) {
+                    // For existing filled, use their original number
                     filledNumber = widget.filled!['filledNumber'];
                   } else {
-                    final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                    // For new filled, get the next sequential number
+                    final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
                     filledNumber = (await filledProvider.getNextFilledNumber()).toString();
                   }
 
@@ -1750,14 +2774,13 @@ class _FilledPageState extends State<FilledPage> {
             ],
           ),
 
-
           body: SingleChildScrollView(
             child: Consumer<CustomerProvider>(
               builder: (context, customerProvider, child) {
                 if (widget.filled != null && _selectedCustomerId != null) {
                   final customer = customerProvider.customers.firstWhere(
                         (c) => c.id == _selectedCustomerId,
-                    orElse: () => Customer(id: '', name: 'N/A', phone: '', address: ''),
+                    orElse: () => Customer(id: '', name: 'N/A', phone: '', address: '', city: '', customerSerial: ''),
                   );
                   _selectedCustomerName = customer.name; // Update name
                 }
@@ -1878,126 +2901,474 @@ class _FilledPageState extends State<FilledPage> {
                             onPressed: () => _selectDate(context),
                           ),
                         ),
-                        // readOnly: true, // Prevent manual typing
                         onTap: () => _selectDate(context),
                       ),
+                      const SizedBox(height: 20),
+                      Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    languageProvider.isEnglish
+                                        ? 'Rate Calculation Mode'
+                                        : 'ریٹ حساب کتاب کا طریقہ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.teal.shade800,
+                                    ),
+                                  ),
+                                  Text(
+                                    _useGlobalRateMode
+                                        ? (languageProvider.isEnglish
+                                        ? 'Global Rate Mode'
+                                        : 'گلوبل ریٹ موڈ')
+                                        : (languageProvider.isEnglish
+                                        ? 'Item Rate Mode'
+                                        : 'آئٹم ریٹ موڈ'),
+                                    style: TextStyle(
+                                      color: _useGlobalRateMode ? Colors.green : Colors.blue,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Switch(
+                                value: _useGlobalRateMode,
+                                onChanged: (value) => _toggleRateMode(),
+                                activeColor: Colors.teal,
+                                inactiveThumbColor: Colors.grey,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Global Rate Field (only visible when in global rate mode)
+                      // if (_useGlobalRateMode) ...[
+                      //   const SizedBox(height: 20),
+                      //   Text(
+                      //     languageProvider.isEnglish ? 'Global Rate (for all items):' : 'گلوبل ریٹ (تمام اشیاء کے لیے):',
+                      //     style: TextStyle(
+                      //       color: Colors.teal.shade800,
+                      //       fontSize: 18,
+                      //       fontWeight: FontWeight.bold,
+                      //     ),
+                      //   ),
+                      //   const SizedBox(height: 8),
+                      //   TextField(
+                      //     controller: _globalRateController,
+                      //     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      //     inputFormatters: [
+                      //       FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                      //     ],
+                      //     onChanged: (value) {
+                      //       double rate = double.tryParse(value) ?? 0.0;
+                      //       setState(() {
+                      //         _globalRate = rate;
+                      //         if (_useGlobalRateMode) {
+                      //           // Recalculate all row totals with new global rate
+                      //           _recalculateAllRowTotalsWithGlobalRate();
+                      //         }
+                      //       });
+                      //     },
+                      //     decoration: InputDecoration(
+                      //       labelText: languageProvider.isEnglish ? 'Enter Global Rate' : 'گلوبل ریٹ درج کریں',
+                      //       hintText: languageProvider.isEnglish ? 'Rate applies to all items' : 'ریٹ تمام اشیاء پر لاگو ہوگا',
+                      //       hintStyle: TextStyle(color: Colors.teal.shade600, fontSize: 12),
+                      //       border: const OutlineInputBorder(
+                      //         borderRadius: BorderRadius.all(Radius.circular(10)),
+                      //         borderSide: BorderSide(color: Colors.grey),
+                      //       ),
+                      //       focusedBorder: OutlineInputBorder(
+                      //         borderRadius: BorderRadius.all(Radius.circular(10)),
+                      //         borderSide: BorderSide(color: Colors.teal.shade600, width: 2),
+                      //       ),
+                      //       prefixIcon: Icon(Icons.currency_rupee, color: Colors.teal.shade600),
+                      //       suffixText: 'PKR/Kg',
+                      //       suffixStyle: TextStyle(
+                      //         color: Colors.teal.shade800,
+                      //         fontWeight: FontWeight.bold,
+                      //       ),
+                      //       filled: true,
+                      //       fillColor: Colors.teal.shade50,
+                      //     ),
+                      //     style: const TextStyle(
+                      //       fontSize: 16,
+                      //       fontWeight: FontWeight.bold,
+                      //     ),
+                      //   ),
+                      //   Container(
+                      //     margin: const EdgeInsets.only(top: 8),
+                      //     padding: const EdgeInsets.all(12),
+                      //     decoration: BoxDecoration(
+                      //       color: Colors.green.shade50,
+                      //       borderRadius: BorderRadius.circular(8),
+                      //       border: Border.all(color: Colors.green.shade200),
+                      //     ),
+                      //     child: Row(
+                      //       children: [
+                      //         Icon(Icons.info_outline, size: 20, color: Colors.green.shade700),
+                      //         const SizedBox(width: 8),
+                      //         Expanded(
+                      //           child: Text(
+                      //             languageProvider.isEnglish
+                      //                 ? 'Global Rate Mode: ${_globalRate.toStringAsFixed(2)} PKR/Kg applies to all items'
+                      //                 : 'گلوبل ریٹ موڈ: ${_globalRate.toStringAsFixed(2)} روپے/کلو تمام اشیاء پر لاگو ہوگا',
+                      //             style: TextStyle(
+                      //               fontSize: 12,
+                      //               color: Colors.green.shade700,
+                      //               fontStyle: FontStyle.italic,
+                      //             ),
+                      //           ),
+                      //         ),
+                      //       ],
+                      //     ),
+                      //   ),
+                      //   const SizedBox(height: 20),
+                      // ],
+                      // Remove the global weight section entirely
+                      Text(
+                        languageProvider.isEnglish ? 'Filled Items:' : 'فلڈ کی اشیاء:',
+                        style: TextStyle(
+                          color: Colors.teal.shade800,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 20, color: Colors.blue.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                languageProvider.isEnglish
+                                    ? 'Enter weight separately for each item in their respective rows'
+                                    : 'ہر شے کا وزن اس کی اپنی قطار میں الگ سے درج کریں',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade700,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                       const SizedBox(height: 20),
                       // Display columns for the filled details
                       Text(languageProvider.isEnglish ? 'Filled Details:' : 'فلڈ کی تفصیلات:',
                         style: TextStyle(color: Colors.teal.shade800, fontSize: 18),
                       ),
-                      // Replace the Table widget with a ListView.builder
-                      Card(
-                        elevation: 5,
-                        child: SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.6, // Adjust height as neededs
-                          child: ListView.builder(
-                            itemCount: _filledRows.length,
-                            itemBuilder: (context, i) {
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        itemCount: _filledRows.length,
+                        itemBuilder: (context, i) {
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Total Display and Delete button
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      // Total Displays
-                                      Row(
+                                      Text(
+                                        '${languageProvider.isEnglish ? 'Total:' : 'کل:'} ${_filledRows[i]['total']?.toStringAsFixed(2) ?? '0.00'}',
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _deleteRow(i),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+
+                                  // Motai and Item Selection
+                                  MotaiBasedItemSelector(
+                                    rowIndex: i,
+                                    availableMotais: _availableMotais,
+                                    onMotaiSelected: (motai) {
+                                      print("🎯 Motai selected: $motai");
+                                      setState(() {
+                                        _filledRows[i]['selectedMotai'] = motai;
+                                        _filledRows[i]['itemId'] = '';
+                                        _filledRows[i]['itemName'] = motai; // ✅ Set itemName to motai
+                                        _filledRows[i]['selectedLengths'] = [];
+                                        _filledRows[i]['lengthQuantities'] = {};
+                                        _filledRows[i]['totalQty'] = 0.0;
+                                      });
+                                    },
+                                    onItemSelected: (item) {
+                                      print("🎯 Item selected: ${item?.itemName}");
+                                      if (item != null) {
+                                        setState(() {
+                                          _filledRows[i]['itemId'] = item.id;
+                                          _filledRows[i]['itemName'] = _filledRows[i]['selectedMotai'] ?? item.itemName; // ✅ Use selectedMotai
+                                          _filledRows[i]['rate'] = item.costPrice;
+                                          if (_filledRows[i]['rateController'] != null) {
+                                            _filledRows[i]['rateController'].text = item.costPrice.toStringAsFixed(2);
+                                          }
+                                          // Recalculate total with the new rate
+                                          double weight = _filledRows[i]['weight'] ?? 0.0;
+                                          _filledRows[i]['total'] = weight * item.costPrice;
+                                        });
+                                      }
+                                    },
+                                    onLengthCombinationsFetched: (combinations) {
+                                      print("🎯 Length combinations fetched: ${combinations.length}");
+                                      setState(() {
+                                        _filledRows[i]['availableLengthCombinations'] = combinations;
+                                      });
+                                    },
+                                    onLengthQuantitiesSelected: (quantities, selectedLengths) {
+                                      print("🎯 Length quantities selected: $quantities");
+                                      setState(() {
+                                        _filledRows[i]['lengthQuantities'] = quantities;
+                                        _filledRows[i]['selectedLengths'] = selectedLengths;
+                                        _filledRows[i]['totalQty'] = quantities.values.fold(0.0, (sum, qty) => sum + qty);
+
+                                        // Update display
+                                        String lengthsDisplay = selectedLengths.map((length) {
+                                          double qty = quantities[length] ?? 1.0;
+                                          return '$length (${qty.toStringAsFixed(0)})';
+                                        }).join(', ');
+
+                                        if (_filledRows[i]['lengthController'] == null) {
+                                          _filledRows[i]['lengthController'] = TextEditingController(text: lengthsDisplay);
+                                        } else {
+                                          _filledRows[i]['lengthController'].text = lengthsDisplay;
+                                        }
+                                      });
+                                    },
+                                    onItemSelectedWithDetails: (motai, item) {
+                                      print("🎯 Item selected with details: $motai - ${item.itemName}");
+                                      // This ensures both motai and item are properly set
+                                      setState(() {
+                                        _filledRows[i]['selectedMotai'] = motai;
+                                        _filledRows[i]['itemId'] = item.id;
+                                        _filledRows[i]['itemName'] = motai; // ✅ Set itemName to motai
+                                        if (_filledRows[i]['itemNameController'] != null) {
+                                          _filledRows[i]['itemNameController'].text = motai; // ✅ Update controller
+                                        }
+                                      });
+                                    },
+                                    readOnly: widget.filled != null,
+                                  ),
+                                  // Display selected lengths with quantities
+                                  if (_filledRows[i]['selectedLengths'] != null &&
+                                      (_filledRows[i]['selectedLengths'] as List).isNotEmpty)
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        SizedBox(height: 8),
+                                        Text(
+                                          'Selected Lengths & Quantities:',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.purple[700],
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          children: (_filledRows[i]['selectedLengths'] as List<String>).map((length) {
+                                            double qty = _filledRows[i]['lengthQuantities'][length] ?? 0.0;
+                                            return Chip(
+                                              label: Text('$length × ${qty.toStringAsFixed(0)}'),
+                                              backgroundColor: Colors.blue[100],
+                                              deleteIcon: Icon(Icons.close, size: 16),
+                                              onDeleted: () => _removeLengthFromRow(i, length),
+                                            );
+                                          }).toList(),
+                                        ),
+                                        if (_filledRows[i]['totalQty'] != null && _filledRows[i]['totalQty'] > 0)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4.0),
+                                            child: Text(
+                                              'Total Pieces: ${_filledRows[i]['totalQty'].toStringAsFixed(0)}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.blue[700],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        SizedBox(height: 8),
+                                      ],
+                                    ),
+                                  // Button to select multiple lengths
+                                  if (_filledRows[i]['availableLengthCombinations'] != null &&
+                                      (_filledRows[i]['availableLengthCombinations'] as List).isNotEmpty)
+                                    ElevatedButton.icon(
+                                      onPressed: () => _showLengthCombinationsDialog(
+                                          i,
+                                          {'lengthCombinations': _filledRows[i]['availableLengthCombinations']}
+                                      ),
+                                      icon: Icon(Icons.straighten),
+                                      label: Text('Select Lengths & Quantities'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange,
+                                        foregroundColor: Colors.white,
+                                        minimumSize: Size(double.infinity, 40),
+                                      ),
+                                    ),
+
+                                  SizedBox(height: 12),
+
+                                  // WEIGHT TextField for each row
+                                  TextField(
+                                    controller: _filledRows[i]['weightController'],
+                                    onChanged: (value) {
+                                      double newWeight = double.tryParse(value) ?? 0.0;
+                                      double rate = _filledRows[i]['rate'] ?? 0.0;
+
+                                      setState(() {
+                                        _filledRows[i]['weight'] = newWeight;
+                                        if (_useGlobalRateMode) {
+                                          _filledRows[i]['total'] = newWeight * _globalRate;
+                                        } else {
+                                          _filledRows[i]['total'] = newWeight * rate;
+                                        }
+                                      });
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: languageProvider.isEnglish ? 'Quantity' : 'تعداد',
+                                      border: const OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.scale),
+                                      suffixText: 'Qty',
+                                    ),
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,4}')),
+                                    ],
+                                  ),
+
+                                  SizedBox(height: 8),
+
+                                  // Rate TextField (conditionally enabled based on mode)
+                                  TextField(
+                                    controller: _filledRows[i]['rateController'],
+                                    enabled: !_useGlobalRateMode,
+                                    readOnly: _useGlobalRateMode,
+                                    onChanged: !_useGlobalRateMode ? (value) {
+                                      double newRate = double.tryParse(value) ?? 0.0;
+                                      double weight = _filledRows[i]['weight'] ?? 0.0;
+                                      setState(() {
+                                        _filledRows[i]['rate'] = newRate;
+                                        _filledRows[i]['total'] = weight * newRate;
+                                      });
+                                    } : null,
+                                    onTap: () {
+                                      // When tapped and empty, pre-fill with the hint rate
+                                      if (_filledRows[i]['rateController'].text.isEmpty ||
+                                          _filledRows[i]['rateController'].text == '0.00') {
+                                        final hintRate = _getHintRate(i);
+                                        if (hintRate > 0) {
+                                          setState(() {
+                                            _filledRows[i]['rate'] = hintRate;
+                                            _filledRows[i]['rateController'].text = hintRate.toStringAsFixed(2);
+                                            double weight = _filledRows[i]['weight'] ?? 0.0;
+                                            _filledRows[i]['total'] = weight * hintRate;
+                                          });
+                                        }
+                                      }
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: languageProvider.isEnglish ? 'Rate (PKR/Kg)' : 'ریٹ (روپے/کلو)',
+                                      border: const OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.attach_money),
+                                      suffixText: 'PKR/Kg',
+                                      filled: _useGlobalRateMode,
+                                      fillColor: _useGlobalRateMode ? Colors.grey.shade200 : null,
+                                      // Show the rate as hint text so user can see it
+                                      hintText: _useGlobalRateMode
+                                          ? (languageProvider.isEnglish ? 'Using Global Rate' : 'گلوبل ریٹ استعمال ہو رہا ہے')
+                                          : _getRateHintText(i, languageProvider),
+                                    ),
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                                    ],
+                                  ),
+
+                                  // Total display
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                    child: Container(
+                                      padding: EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal[50],
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.teal[200]!),
+                                      ),
+                                      child: Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Text(
-                                            '${languageProvider.isEnglish ? 'Total:' : 'کل:'} ${_filledRows[i]['total']?.toStringAsFixed(2) ?? '0.00'}',
-                                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                                            'Row Total:',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.teal[800],
+                                            ),
                                           ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete, color: Colors.red),
-                                            onPressed: () {
-                                              _deleteRow(i);
-                                            },
+                                          Text(
+                                            '${_filledRows[i]['total']?.toStringAsFixed(2) ?? '0.00'} PKR',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Colors.teal[800],
+                                            ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 5,),
-                                      CustomAutocomplete(
-                                        items: _items,
-                                        controller: _filledRows[i]['itemNameController'],
-                                        onSelected: (Item selectedItem) {
-                                          setState(() {
-                                            _filledRows[i]['itemId'] = selectedItem.id; // Add itemId
-                                            _filledRows[i]['itemName'] = selectedItem.itemName;
-                                            _filledRows[i]['rate'] = selectedItem.costPrice;
-                                            _filledRows[i]['rateController'].text = selectedItem.costPrice.toString();
-                                            _filledRows[i]['itemNameController'].text = selectedItem.itemName;
-                                          });
-                                        },
-                                        // readOnly: _isReadOnly,
-                                      ),
-                                      const SizedBox(height: 5),
-                                      // Sarya Rate TextField
-                                      TextField(
-                                        controller: _filledRows[i]['rateController'],
-                                        onChanged: (value) {
-                                          double newRate = double.tryParse(value) ?? 0.0;
-                                          _updateRow(i, 'rate', newRate);
-                                        },
-                                        // enabled: !_isReadOnly,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Rate',
-                                          border: OutlineInputBorder(),
-                                        ),
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 5,),
-                                      // Sarya Qty
-                                      TextField(
-                                        controller: _filledRows[i]['qtyController'],
-                                        // enabled: !_isReadOnly,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.digitsOnly,
-                                        ],
-                                        onChanged: (value) {
-                                          _updateRow(i, 'qty', double.tryParse(value) ?? 0.0);
-                                        },
-                                        decoration: InputDecoration(
-                                          labelText: languageProvider.isEnglish ? 'Sarya Qty' : 'سرئے کی مقدار',
-                                          hintStyle: TextStyle(color: Colors.teal.shade600),
-                                          border: const OutlineInputBorder(
-                                            borderRadius: BorderRadius.all(Radius.circular(10)),
-                                            borderSide: BorderSide(color: Colors.grey),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5,),
-                                      // Descriptions
-                                      TextField(
-                                        controller: _filledRows[i]['descriptionController'],
-                                        // enabled: !_isReadOnly,
-                                        onChanged: (value) {
-                                          _updateRow(i, 'description', value);
-                                        },
-                                        decoration: InputDecoration(
-                                          labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
-                                          hintStyle: TextStyle(color: Colors.teal.shade600),
-                                          border: const OutlineInputBorder(
-                                            borderRadius: BorderRadius.all(Radius.circular(10)),
-                                            borderSide: BorderSide(color: Colors.grey),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5,),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+
+                                  // Description
+                                  TextField(
+                                    controller: _filledRows[i]['descriptionController'],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _filledRows[i]['description'] = value;
+                                      });
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: languageProvider.isEnglish ? 'Description' : 'تفصیل',
+                                      hintStyle: TextStyle(color: Colors.teal.shade600),
+                                      border: const OutlineInputBorder(
+                                        borderRadius: BorderRadius.all(Radius.circular(10)),
+                                        borderSide: BorderSide(color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: 5),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      // if(!_isReadOnly)
                       Center(
                         child: ElevatedButton.icon(
                           onPressed: _addNewRow,
@@ -2010,8 +3381,7 @@ class _FilledPageState extends State<FilledPage> {
                         ),
                       ),
                       // Subtotal row
-                      const SizedBox(height:
-                      20),
+                      const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
@@ -2029,16 +3399,13 @@ class _FilledPageState extends State<FilledPage> {
                       Text(languageProvider.isEnglish ? 'Discount (Amount):' : 'رعایت (رقم):', style: const TextStyle(fontSize: 18)),
                       TextField(
                         controller: _discountController,
-                        // enabled: !_isReadOnly, // Disable in read-only modess
                         keyboardType: TextInputType.number,
                         onChanged: (value) {
                           setState(() {
                             double parsedDiscount = double.tryParse(value) ?? 0.0;
                             // Check if the discount is greater than the subtotal
                             if (parsedDiscount > _calculateSubtotal()) {
-                              // If it is, you can either reset the value or show a warning
-                              _discount = _calculateSubtotal();  // Set discount to subtotal if greater
-                              // Optionally, show an error message to the user
+                              _discount = _calculateSubtotal();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text(languageProvider.isEnglish ? 'Discount cannot be greater than subtotal.' : 'رعایت کل رقم سے زیادہ نہیں ہو سکتی۔')),
                               );
@@ -2092,7 +3459,6 @@ class _FilledPageState extends State<FilledPage> {
                                         groupValue: _paymentType,
                                         title: Text(languageProvider.isEnglish ? 'Instant Payment' : 'فوری ادائیگی'),
                                         onChanged:
-                                        // _isReadOnly ? null :
                                             (value) {
                                           setState(() {
                                             _paymentType = value!;
@@ -2100,30 +3466,18 @@ class _FilledPageState extends State<FilledPage> {
 
                                           });
                                         },
-                                        // onChanged: (value) {
-                                        //   setState(() {
-                                        //     _paymentType = value!;
-                                        //     _instantPaymentMethod = null; // Reset instant payment method
-                                        //
-                                        //   });
-                                        // },
                                       ),
                                       RadioListTile<String>(
                                         value: 'udhaar',
                                         groupValue: _paymentType,
                                         title: Text(languageProvider.isEnglish ? 'Udhaar Payment' : 'ادھار ادائیگی'),
                                         onChanged:
-                                        // _isReadOnly ? null :
                                             (value) {
                                           setState(() {
                                             _paymentType = value!;
                                           });
                                         },
-                                        //                                         onChanged:(value) {
-                                        //                                           setState(() {
-                                        //                                             _paymentType = value!;
-                                        //                                           });
-                                        //                                         },
+
                                       ),
                                     ],
                                   ),
@@ -2137,34 +3491,23 @@ class _FilledPageState extends State<FilledPage> {
                                           groupValue: _instantPaymentMethod,
                                           title: Text(languageProvider.isEnglish ? 'Cash Payment' : 'نقد ادائیگی'),
                                           onChanged:
-                                          // _isReadOnly ? null :
                                               (value) {
                                             setState(() {
                                               _instantPaymentMethod = value!;
                                             });
                                           },
-                                          //                                           onChanged:  (value) {
-                                          //                                             setState(() {
-                                          //                                               _instantPaymentMethod = value!;
-                                          //                                             });
-                                          //                                           },
+
                                         ),
                                         RadioListTile<String>(
                                           value: 'online',
                                           groupValue: _instantPaymentMethod,
                                           title: Text(languageProvider.isEnglish ? 'Online Bank Transfer' : 'آن لائن بینک ٹرانسفر'),
                                           onChanged:
-                                          // _isReadOnly ? null :
                                               (value) {
                                             setState(() {
                                               _instantPaymentMethod = value!;
                                             });
                                           },
-                                          //                                           onChanged: (value) {
-                                          //                                             setState(() {
-                                          //                                               _instantPaymentMethod = value!;
-                                          //                                             });
-                                          //                                           },
                                         ),
                                       ],
                                     ),
@@ -2235,7 +3578,6 @@ class _FilledPageState extends State<FilledPage> {
                                   return;
                                 }
 
-
                                 // Validate payment type
                                 if (_paymentType == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2264,15 +3606,15 @@ class _FilledPageState extends State<FilledPage> {
                                   return;
                                 }
 
-                                // Validate qty and rate fields
+                                // Validate weight and rate fields for each row
                                 for (var row in _filledRows) {
-                                  if (row['qty'] == null || row['qty'] <= 0) {
+                                  if (row['weight'] == null || row['weight'] <= 0) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
                                           languageProvider.isEnglish
-                                              ? 'qty cannot be zero or less'
-                                              : 'تعداد صفر یا اس سے کم نہیں ہو سکتا',
+                                              ? 'Weight cannot be zero or less for each item'
+                                              : 'ہر شے کا وزن صفر یا اس سے کم نہیں ہو سکتا',
                                         ),
                                       ),
                                     );
@@ -2284,8 +3626,8 @@ class _FilledPageState extends State<FilledPage> {
                                       SnackBar(
                                         content: Text(
                                           languageProvider.isEnglish
-                                              ? 'Rate cannot be zero or less'
-                                              : 'ریٹ صفر یا اس سے کم نہیں ہو سکتا',
+                                              ? 'Rate cannot be zero or less for each item'
+                                              : 'ہر شے کا ریٹ صفر یا اس سے کم نہیں ہو سکتا',
                                         ),
                                       ),
                                     );
@@ -2315,20 +3657,20 @@ class _FilledPageState extends State<FilledPage> {
 
                                   Item? item = _items.firstWhere(
                                         (i) => i.itemName == itemName,
-                                    orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0),
+                                    orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, itemType: ''),
                                   );
 
                                   if (item.id.isEmpty) continue;
 
                                   double currentQty = item.qtyOnHand;
-                                  double qty = row['qty'] ?? 0.0;
+                                  double weight = row['weight'] ?? 0.0;
                                   double delta;
 
                                   if (widget.filled != null) {
-                                    double initialQty = row['initialQty'] ?? 0.0;
-                                    delta = initialQty - qty;
+                                    double initialWeight = row['initialWeight'] ?? 0.0;
+                                    delta = initialWeight - weight;
                                   } else {
-                                    delta = -qty;
+                                    delta = -weight;
                                   }
 
                                   double newQty = currentQty + delta;
@@ -2376,39 +3718,80 @@ class _FilledPageState extends State<FilledPage> {
                                   }
                                 }
 
-
-                                final grandTotal = _calculateGrandTotal();
-
-
-
                                 // Determine filled number
                                 String filledNumber;
                                 if (widget.filled != null) {
-                                  // For updates, keep the original number
                                   filledNumber = widget.filled!['filledNumber'];
                                 } else {
-
-                                  final filledProvider = Provider.of<FilledProvider>(context, listen: false);
+                                  final filledProvider = Provider.of<NewFilledProvider>(context, listen: false);
                                   filledNumber = (await filledProvider.getNextFilledNumber()).toString();
                                 }
 
+                                final grandTotal = _calculateGrandTotal();
+
+                                // Calculate total weight for filled (sum of all item weights)
+                                double totalFilledWeight = _filledRows.fold(0.0, (sum, row) => sum + (row['weight'] ?? 0.0));
 
                                 // Try saving the filled
                                 if (_filledId != null) {
                                   // Update existing filled
-                                  await Provider.of<FilledProvider>(context, listen: false).updateFilled(
-                                    filledId: _filledId!, // Pass the correct ID for updating
+                                  await Provider.of<NewFilledProvider>(context, listen: false).updateFilled(
+                                    filledId: _filledId!,
                                     filledNumber: filledNumber,
-                                    mazdoori: _mazdoori, // Add this
+                                    globalWeight: totalFilledWeight, // Use sum of all weights
+                                    globalRate: _globalRate,
+                                    useGlobalRateMode: _useGlobalRateMode,
+                                    mazdoori: _mazdoori,
                                     customerId: _selectedCustomerId!,
                                     customerName: _selectedCustomerName ?? 'Unknown Customer',
                                     subtotal: subtotal,
                                     discount: _discount,
                                     grandTotal: grandTotal,
                                     paymentType: _paymentType,
-                                    referenceNumber: _referenceController.text, // Add this
+                                    referenceNumber: _referenceController.text,
                                     paymentMethod: _instantPaymentMethod,
-                                    items: _filledRows,
+                                    items: _filledRows.map((row) {
+                                      // Get length combinations data if available
+                                      Map<String, dynamic> lengthCombinationData = {};
+                                      if (row['selectedLengths'] != null && row['selectedLengths'] is List) {
+                                        final selectedLengths = row['selectedLengths'] as List<String>;
+                                        final lengthQuantities = row['lengthQuantities'] as Map<String, double>? ?? {};
+
+                                        // Convert keys to safe format
+                                        Map<String, dynamic> safeQuantities = {};
+                                        lengthQuantities.forEach((key, value) {
+                                          String safeKey = key.toString().replaceAll('.', '_dot_');
+                                          safeQuantities[safeKey] = value;
+                                        });
+
+                                        lengthCombinationData = {
+                                          'selectedLengths': selectedLengths,
+                                          'lengthQuantities': safeQuantities,
+                                          'hasLengthCombinations': true,
+                                        };
+                                      }
+
+                                      // In global rate mode, use global rate for each item
+                                      double rateForItem = _useGlobalRateMode ? _globalRate : row['rate'];
+
+                                      return {
+                                        'itemName': row['itemName'],
+                                        'itemId': row['itemId'],
+                                        'itemType': row['itemType'],
+                                        'selectedMotai': row['selectedMotai'],
+                                        'selectedLength': row['selectedLength'],
+                                        'rate': rateForItem,
+                                        'weight': row['weight'], // Use individual weight
+                                        'initialWeight': row['initialWeight'] ?? row['weight'],
+                                        'qty': row['qty'],
+                                        'length': row['length'],
+                                        'selectedLengths': row['selectedLengths'],
+                                        'lengthQuantities': row['lengthQuantities'],
+                                        'description': row['description'],
+                                        'total': row['total'],
+                                        ...lengthCombinationData,
+                                      };
+                                    }).toList(),
                                     createdAt: _dateController.text.isNotEmpty
                                         ? DateTime(
                                       DateTime.parse(_dateController.text).year,
@@ -2420,21 +3803,16 @@ class _FilledPageState extends State<FilledPage> {
                                     ).toIso8601String()
                                         : DateTime.now().toIso8601String(),
                                   );
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        languageProvider.isEnglish
-                                            ? 'Filled updated successfully'
-                                            : 'فلڈ کامیابی سے تبدیل ہوگئی',
-                                      ),
-                                    ),
-                                  );
-                                } else {
+                                }
+                                else {
                                   // Save new filled
-                                  await Provider.of<FilledProvider>(context, listen: false).saveFilled(
+                                  await Provider.of<NewFilledProvider>(context, listen: false).saveFilled(
                                     filledId: filledNumber,
                                     filledNumber: filledNumber,
-                                    mazdoori: _mazdoori, // Add this
+                                    mazdoori: _mazdoori,
+                                    globalWeight: totalFilledWeight, // Use sum of all weights
+                                    globalRate: _globalRate,
+                                    useGlobalRateMode: _useGlobalRateMode,
                                     customerId: _selectedCustomerId!,
                                     customerName: _selectedCustomerName ?? 'Unknown Customer',
                                     subtotal: subtotal,
@@ -2442,10 +3820,7 @@ class _FilledPageState extends State<FilledPage> {
                                     grandTotal: grandTotal,
                                     paymentType: _paymentType,
                                     paymentMethod: _instantPaymentMethod,
-                                    referenceNumber: _referenceController.text, // Add this
-                                    // createdAt: _dateController.text.isNotEmpty
-                                    //     ? DateTime.parse(_dateController.text).toIso8601String()
-                                    //     : DateTime.now().toIso8601String(), // Pass the selected date
+                                    referenceNumber: _referenceController.text,
                                     createdAt: _dateController.text.isNotEmpty
                                         ? DateTime(
                                       DateTime.parse(_dateController.text).year,
@@ -2457,30 +3832,54 @@ class _FilledPageState extends State<FilledPage> {
                                     ).toIso8601String()
                                         : DateTime.now().toIso8601String(),
                                     items: _filledRows.map((row) {
+                                      // Get length combinations data if available
+                                      Map<String, dynamic> lengthCombinationData = {};
+                                      if (row['selectedLengths'] != null && row['selectedLengths'] is List) {
+                                        final selectedLengths = row['selectedLengths'] as List<String>;
+                                        final lengthQuantities = row['lengthQuantities'] as Map<String, double>? ?? {};
+
+                                        // Convert keys to safe format
+                                        Map<String, dynamic> safeQuantities = {};
+                                        lengthQuantities.forEach((key, value) {
+                                          String safeKey = key.toString().replaceAll('.', '_dot_');
+                                          safeQuantities[safeKey] = value;
+                                        });
+
+                                        lengthCombinationData = {
+                                          'selectedLengths': selectedLengths,
+                                          'lengthQuantities': safeQuantities,
+                                          'hasLengthCombinations': true,
+                                        };
+                                      }
+
+                                      // In global rate mode, use global rate for each item
+                                      double rateForItem = _useGlobalRateMode ? _globalRate : row['rate'];
+
                                       return {
-                                        'itemName': row['itemName'], // Include the item name
-                                        'rate': row['rate'],
+                                        'itemName': row['itemName'],
+                                        'itemId': row['itemId'],
+                                        'itemType': row['itemType'],
+                                        'selectedMotai': row['selectedMotai'],
+                                        'selectedLength': row['selectedLength'],
+                                        'rate': rateForItem,
+                                        'weight': row['weight'], // Use individual weight
+                                        'initialWeight': row['initialWeight'] ?? row['weight'],
                                         'qty': row['qty'],
+                                        'length': row['length'],
+                                        'selectedLengths': row['selectedLengths'],
+                                        'lengthQuantities': row['lengthQuantities'],
                                         'description': row['description'],
                                         'total': row['total'],
+                                        ...lengthCombinationData,
                                       };
                                     }).toList(),
-                                  );
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        languageProvider.isEnglish
-                                            ? 'Filled saved successfully'
-                                            : 'فلڈ کامیابی سے محفوظ ہوگئی',
-                                      ),
-                                    ),
                                   );
                                 }
                                 // Update qtyOnHand after saving/updating the filled
                                 _updateQtyOnHand(_filledRows);
                                 setState(() {
                                   _currentFilled = {
-                                    'id': filledNumber, // Add 'id' field with filledNumber
+                                    'id': filledNumber,
                                     'filledNumber': filledNumber,
                                     'grandTotal': _calculateGrandTotal(),
                                     'customerId': _selectedCustomerId!,
@@ -2500,7 +3899,7 @@ class _FilledPageState extends State<FilledPage> {
                                     content: Text(
                                       languageProvider.isEnglish
                                           ? 'Failed to save filled'
-                                          : 'فلڈ محفوظ کرنے میں ناکام',
+                                          : 'انوائس محفوظ کرنے میں ناکام',
                                     ),
                                   ),
                                 );
@@ -2559,85 +3958,829 @@ class _FilledPageState extends State<FilledPage> {
       },
     );
   }
+
 }
 
-class CustomAutocomplete extends StatefulWidget {
-  final List<Item> items;
-  final Function(Item) onSelected;
-  final TextEditingController controller;
-  final bool readOnly; // Add this parameter
+class LengthBodyCombination {
+  String length;
+  String lengthDecimal;
+  double? costPricePerKg;
+  double? salePricePerKg;
+  Map<String, double> customerPrices;
+  String? id;
 
-  const CustomAutocomplete({
-    required this.items,
-    required this.onSelected,
-    required this.controller,
-    this.readOnly = false, // Default to false
+  LengthBodyCombination({
+    required this.length,
+    required this.lengthDecimal,
+    this.costPricePerKg,
+    this.salePricePerKg,
+    this.customerPrices = const {},
+    this.id,
   });
 
-  @override
-  _CustomAutocompleteState createState() => _CustomAutocompleteState();
-}
-
-class _CustomAutocompleteState extends State<CustomAutocomplete> {
-  List<Item> _filteredItems = [];
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _filteredItems = widget.items;
-    widget.controller.addListener(_onTextChanged);
+  Map<String, dynamic> toMap() {
+    return {
+      'length': length,
+      'lengthDecimal': lengthDecimal,
+      'costPricePerKg': costPricePerKg,
+      'salePricePerKg': salePricePerKg,
+      'customerPrices': customerPrices,
+      if (id != null) 'id': id,
+    };
   }
 
-  void _onTextChanged() {
+  factory LengthBodyCombination.fromMap(Map<String, dynamic> map) {
+    Map<String, double> customerPrices = {};
+    if (map['customerPrices'] != null) {
+      final prices = Map<String, dynamic>.from(map['customerPrices']);
+      customerPrices = prices.map((key, value) =>
+          MapEntry(key, value is double ? value : double.parse(value.toString())));
+    }
+
+    return LengthBodyCombination(
+      length: map['length'] ?? '',
+      lengthDecimal: map['lengthDecimal'] ?? '',
+      costPricePerKg: map['costPricePerKg'] != null
+          ? double.tryParse(map['costPricePerKg'].toString())
+          : null,
+      salePricePerKg: map['salePricePerKg'] != null
+          ? double.tryParse(map['salePricePerKg'].toString())
+          : null,
+      customerPrices: customerPrices,
+      id: map['id'],
+    );
+  }
+}
+
+class MotaiBasedItemSelector extends StatefulWidget {
+  final List<String> availableMotais;
+  final Function(String?) onMotaiSelected;
+  final Function(Item?) onItemSelected;
+  final Function(List<LengthBodyCombination>) onLengthCombinationsFetched;
+  final Function(Map<String, double>, List<String>) onLengthQuantitiesSelected;
+  final Function(String, Item)? onItemSelectedWithDetails; // Add this callback
+  final bool readOnly;
+  final int? rowIndex;
+
+  const MotaiBasedItemSelector({
+    Key? key,
+    required this.availableMotais,
+    required this.onMotaiSelected,
+    required this.onItemSelected,
+    required this.onLengthCombinationsFetched,
+    required this.onLengthQuantitiesSelected,
+    this.onItemSelectedWithDetails, // Add this
+    this.readOnly = false,
+    this.rowIndex,
+  }) : super(key: key);
+
+  @override
+  _MotaiBasedItemSelectorState createState() => _MotaiBasedItemSelectorState();
+}
+
+class _MotaiBasedItemSelectorState extends State<MotaiBasedItemSelector> {
+  String? _selectedMotai;
+  Item? _selectedItem;
+  List<Item> _itemsByMotai = [];
+  List<LengthBodyCombination> _availableLengthCombinations = [];
+  DatabaseReference _db = FirebaseDatabase.instance.ref();
+  Map<String, Map<String, dynamic>> _itemsWithCombinations = {};
+
+  // State for length selection with quantities
+  Map<String, double> _lengthQuantities = {};
+  List<String> _selectedLengths = [];
+  bool _showLengthSelection = false;
+
+  Future<void> _fetchItemsByMotai(String motai) async {
+    try {
+      final itemsRef = _db.child('items');
+      final snapshot = await itemsRef.orderByChild('itemName').equalTo(motai).get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> itemsMap = snapshot.value as Map<dynamic, dynamic>;
+
+        List<Item> filteredItems = [];
+        _itemsWithCombinations.clear();
+        _availableLengthCombinations.clear();
+
+        for (var entry in itemsMap.entries) {
+          try {
+            final itemData = Map<String, dynamic>.from(entry.value as Map);
+
+            // Check if item has this motai (itemName)
+            if (itemData['itemName'] == motai) {
+              final item = Item.fromMap(itemData, entry.key as String);
+              filteredItems.add(item);
+
+              // Store item with length combinations
+              if (itemData['lengthCombinations'] != null && itemData['lengthCombinations'] is List) {
+                final rawCombinations = itemData['lengthCombinations'] as List;
+                List<LengthBodyCombination> lengthCombinations = [];
+
+                for (var combo in rawCombinations) {
+                  if (combo is Map) {
+                    final lengthCombo = LengthBodyCombination.fromMap(Map<String, dynamic>.from(combo));
+                    lengthCombinations.add(lengthCombo);
+                  }
+                }
+
+                _itemsWithCombinations[item.id] = {
+                  'item': item,
+                  'lengthCombinations': lengthCombinations,
+                };
+
+                // Store all length combinations
+                _availableLengthCombinations.addAll(lengthCombinations);
+              }
+            }
+          } catch (e) {
+            print("❌ Error parsing item: $e");
+          }
+        }
+
+        setState(() {
+          _itemsByMotai = filteredItems;
+          _selectedItem = null;
+          _showLengthSelection = false;
+          _lengthQuantities.clear();
+          _selectedLengths.clear();
+        });
+
+        // Notify parent about available length combinations
+        widget.onLengthCombinationsFetched(_availableLengthCombinations);
+
+        // If items were found, handle selection logic
+        if (filteredItems.isNotEmpty) {
+          // If there are length combinations, show selection UI
+          if (_availableLengthCombinations.isNotEmpty) {
+            _showLengthSelectionUI();
+          }
+          // If only one item found, select it automatically
+          else if (_itemsByMotai.length == 1) {
+            _selectItem(_itemsByMotai.first, []);
+          }
+          // If multiple items found without length combinations, show selection dialog
+          else if (_itemsByMotai.length > 1) {
+            _showSimpleItemSelectionDialog(_itemsByMotai);
+          }
+        } else {
+          // No items found for this motai
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No items found for motai: $motai'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        // No items found
+        setState(() {
+          _itemsByMotai = [];
+          _itemsWithCombinations.clear();
+          _availableLengthCombinations.clear();
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No items found for motai: $motai'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      print("❌ Error fetching items by motai: $e");
+      setState(() {
+        _itemsByMotai = [];
+        _itemsWithCombinations.clear();
+        _availableLengthCombinations.clear();
+      });
+    }
+  }
+
+  void _showLengthSelectionUI() {
     setState(() {
-      _filteredItems = widget.items
-          .where((item) => item.itemName
-          .toLowerCase()
-          .contains(widget.controller.text.toLowerCase()))
-          .toList();
+      _showLengthSelection = true;
     });
   }
 
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onTextChanged);
-    _focusNode.dispose();
-    super.dispose();
+  void _showLengthQuantitiesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final TextEditingController searchController = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Select Lengths with Quantities'),
+              content: Container(
+                width: double.maxFinite,
+                height: 500,
+                child: Column(
+                  children: [
+                    // Search bar
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: TextField(
+                        controller: searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search lengths...',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setState(() {});
+                        },
+                      ),
+                    ),
+
+                    // Lengths list with checkboxes and quantity inputs
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _availableLengthCombinations.length,
+                        itemBuilder: (context, index) {
+                          final combination = _availableLengthCombinations[index];
+                          final length = combination.length;
+                          final decimal = combination.lengthDecimal;
+                          final price = combination.salePricePerKg ?? 0.0;
+
+                          // Filter by search
+                          if (searchController.text.isNotEmpty &&
+                              !length.toLowerCase().contains(searchController.text.toLowerCase())) {
+                            return SizedBox.shrink();
+                          }
+
+                          final isSelected = _selectedLengths.contains(length);
+                          final quantity = _lengthQuantities[length] ?? 0.0;
+
+                          return Card(
+                            margin: EdgeInsets.symmetric(vertical: 4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                children: [
+                                  // Checkbox for selection
+                                  Checkbox(
+                                    value: isSelected,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          _selectedLengths.add(length);
+                                          _lengthQuantities[length] = 1.0;
+                                        } else {
+                                          _selectedLengths.remove(length);
+                                          _lengthQuantities.remove(length);
+                                        }
+                                      });
+                                    },
+                                  ),
+
+                                  SizedBox(width: 8),
+
+                                  // Length details
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          length,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        if (decimal.isNotEmpty)
+                                          Text(
+                                            'Decimal: $decimal',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        Text(
+                                          'Price: ${price.toStringAsFixed(2)} PKR/Kg',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.green[700],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Quantity input (only if selected)
+                                  if (isSelected)
+                                    SizedBox(
+                                      width: 100,
+                                      child: TextField(
+                                        controller: TextEditingController(
+                                          text: quantity > 0 ? quantity.toStringAsFixed(0) : '',
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        decoration: InputDecoration(
+                                          labelText: 'Qty',
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+                                        onChanged: (value) {
+                                          final qty = double.tryParse(value) ?? 0.0;
+                                          if (qty > 0) {
+                                            _lengthQuantities[length] = qty;
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    // Summary
+                    if (_selectedLengths.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: Container(
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Summary:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue[700],
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                '${_selectedLengths.length} length(s) selected',
+                                style: TextStyle(fontSize: 14),
+                              ),
+                              Text(
+                                'Total pieces: ${_lengthQuantities.values.fold(0.0, (sum, qty) => sum + qty).toStringAsFixed(0)}',
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Notify parent about selected lengths and quantities
+                    widget.onLengthQuantitiesSelected(_lengthQuantities, _selectedLengths);
+
+                    // If an item is selected, update it
+                    if (_selectedItem != null) {
+                      final lengthCombinations = _availableLengthCombinations
+                          .where((combo) => _selectedLengths.contains(combo.length))
+                          .toList();
+
+                      _selectItem(_selectedItem!, lengthCombinations);
+                    }
+
+                    Navigator.pop(context);
+                  },
+                  child: Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showItemSelectionDialog(String motai) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Select Item for Motai: $motai'),
+          content: Container(
+            width: double.maxFinite,
+            height: 300,
+            child: ListView.builder(
+              itemCount: _itemsWithCombinations.length,
+              itemBuilder: (context, index) {
+                final itemId = _itemsWithCombinations.keys.elementAt(index);
+                final itemData = _itemsWithCombinations[itemId]!;
+                final item = itemData['item'] as Item;
+                final lengthCombinations = itemData['lengthCombinations'] as List<LengthBodyCombination>;
+
+                return Card(
+                  margin: EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    title: Text(item.itemName),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (item.description != null && item.description!.isNotEmpty)
+                          Text('Description: ${item.description}'),
+                        Text('${lengthCombinations.length} length combinations available'),
+                      ],
+                    ),
+                    trailing: Icon(Icons.arrow_forward),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _selectItem(item, lengthCombinations);
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSimpleItemSelectionDialog(List<Item> items) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Select Item'),
+          content: Container(
+            width: double.maxFinite,
+            height: 200,
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return ListTile(
+                  title: Text(item.itemName),
+                  subtitle: Text('Rate: ${item.costPrice.toStringAsFixed(2)} PKR/Kg'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _selectItem(item, []);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _selectItem(Item item, List<LengthBodyCombination> lengthCombinations) {
+    setState(() {
+      _selectedItem = item;
+      _availableLengthCombinations = lengthCombinations;
+    });
+
+    // ✅ IMPORTANT: Set itemName to selectedMotai
+    final String itemNameToSave = _selectedMotai ?? item.itemName;
+
+    // Notify parent
+    widget.onItemSelected(item);
+    widget.onLengthCombinationsFetched(lengthCombinations);
+
+    // Call the new callback with item details
+    if (widget.onItemSelectedWithDetails != null) {
+      widget.onItemSelectedWithDetails!(_selectedMotai ?? '', item);
+    }
+
+    // If length combinations exist, show selection
+    if (lengthCombinations.isNotEmpty && !_showLengthSelection) {
+      _showLengthSelectionUI();
+    }
+
+    // Also trigger length quantity selection if needed
+    if (lengthCombinations.isNotEmpty && _selectedLengths.isEmpty) {
+      _showLengthQuantitiesDialog();
+    }
+  }
+
+
+
+  void _clearSelections() {
+    setState(() {
+      _lengthQuantities.clear();
+      _selectedLengths.clear();
+      _showLengthSelection = false;
+    });
+
+    // Notify parent
+    widget.onLengthQuantitiesSelected({}, []);
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextField(
-          controller: widget.controller,
-          focusNode: _focusNode,
-          enabled: !widget.readOnly, // Disable the field if readOnly is true
-          decoration: const InputDecoration(
-            labelText: 'Select Item',
-            border: OutlineInputBorder(),
+        // Step 1: Select Motai
+        if (!widget.readOnly)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Step 1: Select Motai',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[700],
+                ),
+              ),
+              SizedBox(height: 8),
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _selectedMotai ?? ''),
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return widget.availableMotais;
+                  }
+                  return widget.availableMotais.where((motai) =>
+                      motai.toLowerCase().contains(textEditingValue.text.toLowerCase()),
+                  );
+                },
+                displayStringForOption: (String option) => option,
+                fieldViewBuilder: (BuildContext context,
+                    TextEditingController textEditingController,
+                    FocusNode focusNode,
+                    VoidCallback onFieldSubmitted) {
+                  return TextField(
+                    controller: textEditingController,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: 'Search Motai',
+                      hintText: 'Type to search...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.search),
+                      suffixIcon: _selectedMotai != null
+                          ? IconButton(
+                        icon: Icon(Icons.clear),
+                        onPressed: () {
+                          textEditingController.clear();
+                          setState(() {
+                            _selectedMotai = null;
+                            _selectedItem = null;
+                            _availableLengthCombinations = [];
+                            _lengthQuantities.clear();
+                            _selectedLengths.clear();
+                            _showLengthSelection = false;
+                          });
+                          widget.onMotaiSelected(null);
+                          widget.onItemSelected(null);
+                          widget.onLengthCombinationsFetched([]);
+                          widget.onLengthQuantitiesSelected({}, []);
+                        },
+                      )
+                          : null,
+                    ),
+                  );
+                },
+                optionsViewBuilder: (BuildContext context,
+                    AutocompleteOnSelected<String> onSelected,
+                    Iterable<String> options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4.0,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: MediaQuery.of(context).size.width * 0.85,
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: options.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final String motai = options.elementAt(index);
+                            return ListTile(
+                              leading: Icon(Icons.category, color: Colors.teal),
+                              title: Text(motai),
+                              onTap: () => onSelected(motai),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                onSelected: (String value) async {
+                  setState(() {
+                    _selectedMotai = value;
+                    _selectedItem = null;
+                    _availableLengthCombinations = [];
+                    _lengthQuantities.clear();
+                    _selectedLengths.clear();
+                    _showLengthSelection = false;
+                  });
+
+                  widget.onMotaiSelected(value);
+                  widget.onItemSelected(null);
+                  widget.onLengthCombinationsFetched([]);
+                  widget.onLengthQuantitiesSelected({}, []);
+
+                  await _fetchItemsByMotai(value);
+                },
+              ),
+              // DropdownButtonFormField<String>(
+              //   value: _selectedMotai,
+              //   decoration: InputDecoration(
+              //     labelText: 'Select Motai',
+              //     border: OutlineInputBorder(),
+              //   ),
+              //   items: widget.availableMotais.map((motai) {
+              //     return DropdownMenuItem(
+              //       value: motai,
+              //       child: Text(motai),
+              //     );
+              //   }).toList(),
+              //   onChanged: (value) async {
+              //     if (value != null) {
+              //       setState(() {
+              //         _selectedMotai = value;
+              //         _selectedItem = null;
+              //         _availableLengthCombinations = [];
+              //         _lengthQuantities.clear();
+              //         _selectedLengths.clear();
+              //         _showLengthSelection = false;
+              //       });
+              //
+              //       widget.onMotaiSelected(value);
+              //       widget.onItemSelected(null);
+              //       widget.onLengthCombinationsFetched([]);
+              //       widget.onLengthQuantitiesSelected({}, []);
+              //
+              //       // Fetch items for this motai
+              //       await _fetchItemsByMotai(value);
+              //     }
+              //   },
+              // ),
+              SizedBox(height: 16),
+            ],
           ),
-        ),
-        if (_focusNode.hasFocus && _filteredItems.isNotEmpty && !widget.readOnly) // Only show dropdown if not read-only
-          Container(
-            height: 200,
-            child: ListView.builder(
-              itemCount: _filteredItems.length,
-              itemBuilder: (context, index) {
-                final item = _filteredItems[index];
-                return ListTile(
-                  title: Text(item.itemName),
-                  onTap: () {
-                    widget.onSelected(item);
-                    _focusNode.unfocus();
-                  },
-                );
-              },
+
+        // Length Selection Section (shown when length combinations exist)
+        if (_showLengthSelection && _availableLengthCombinations.isNotEmpty)
+          Card(
+            margin: EdgeInsets.symmetric(vertical: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Available Lengths:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple[700],
+                        ),
+                      ),
+                      if (_selectedLengths.isNotEmpty)
+                        TextButton(
+                          onPressed: _clearSelections,
+                          child: Text(
+                            'Clear All',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+
+                  // Show selected lengths with quantities
+                  if (_selectedLengths.isNotEmpty)
+                    Column(
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: _selectedLengths.map((length) {
+                            final quantity = _lengthQuantities[length] ?? 0;
+                            return Chip(
+                              label: Text('$length × ${quantity.toStringAsFixed(0)}'),
+                              backgroundColor: Colors.blue[100],
+                              deleteIcon: Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setState(() {
+                                  _selectedLengths.remove(length);
+                                  _lengthQuantities.remove(length);
+                                });
+                                widget.onLengthQuantitiesSelected(_lengthQuantities, _selectedLengths);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Total pieces: ${_lengthQuantities.values.fold(0.0, (sum, qty) => sum + qty).toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[700],
+                          ),
+                        ),
+                        SizedBox(height: 12),
+                      ],
+                    ),
+
+                  // Button to open length selection dialog
+                  ElevatedButton.icon(
+                    onPressed: _showLengthQuantitiesDialog,
+                    icon: Icon(Icons.edit),
+                    label: Text(
+                      _selectedLengths.isEmpty
+                          ? 'Select Lengths & Quantities'
+                          : 'Edit Lengths & Quantities',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      minimumSize: Size(double.infinity, 40),
+                    ),
+                  ),
+
+                  // Info text
+                  if (_selectedLengths.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        '${_availableLengthCombinations.length} length(s) available for this motai',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+        // Selected Item Display
+        if (_selectedItem != null)
+          Card(
+            margin: EdgeInsets.symmetric(vertical: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Selected Item:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.edit, size: 18),
+                        onPressed: () => _showItemSelectionDialog(_selectedMotai!),
+                      ),
+                    ],
+                  ),
+                  Text(_selectedItem!.itemName),
+                  if (_selectedItem!.description != null && _selectedItem!.description!.isNotEmpty)
+                    Text('Description: ${_selectedItem!.description}'),
+                  Text('Rate: ${_selectedItem!.costPrice.toStringAsFixed(2)} PKR/Kg'),
+
+                  if (_availableLengthCombinations.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: 8),
+                        Text(
+                          'Available Lengths:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Wrap(
+                          spacing: 4,
+                          children: _availableLengthCombinations.map((combo) {
+                            return Chip(
+                              label: Text('${combo.length} (${combo.salePricePerKg?.toStringAsFixed(2) ?? "N/A"} PKR/Kg)'),
+                              backgroundColor: Colors.blue[100],
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
       ],
     );
   }
 }
-

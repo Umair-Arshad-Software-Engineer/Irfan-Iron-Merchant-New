@@ -53,8 +53,15 @@ class _AddVendorPageState extends State<AddVendorPage> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        backgroundColor: Colors.blueAccent,
-
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFFF8A65), Color(0xFFFFB74D)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -77,7 +84,7 @@ class _AddVendorPageState extends State<AddVendorPage> {
             ElevatedButton(
               onPressed: _addVendor,
               style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white, backgroundColor: Colors.blueAccent, // Text color
+                foregroundColor: Colors.white, backgroundColor: Colors.orange[300], // Text color
                 padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 24.0), // Padding
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8.0), // Rounded corners

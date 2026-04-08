@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'itemslistpage.dart';
+
+import 'NewItemListPage.dart';
 
 class EditQtyPage extends StatefulWidget {
   final Map<String, dynamic> itemData;
@@ -73,7 +74,15 @@ class _EditQtyPageState extends State<EditQtyPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Update Quantity', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.blue,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFFF8A65), Color(0xFFFFB74D)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         centerTitle: true,
       ),
       body: Padding(
@@ -115,7 +124,7 @@ class _EditQtyPageState extends State<EditQtyPage> {
                   ElevatedButton(
                     onPressed: _updateQuantity,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: Colors.orange[300],
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),

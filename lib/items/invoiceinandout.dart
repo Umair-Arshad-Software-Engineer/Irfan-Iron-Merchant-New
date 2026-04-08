@@ -231,23 +231,36 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
   }
 
   Future<pw.MemoryImage> _createTextImage(String text) async {
+    // Guard against empty text — use a fallback to avoid zero-size canvas
+    final safeText = (text.trim().isEmpty) ? '-' : text.trim();
+
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromPoints(Offset(0, 0), Offset(500, 50)));
-    final paint = Paint()..color = Colors.black;
-
-    final textStyle = TextStyle(fontSize: 18, fontFamily: 'JameelNoori',color: Colors.black,fontWeight: FontWeight.bold);
-    final textSpan = TextSpan(text: text, style: textStyle);
-    final textPainter = TextPainter(
-        text: textSpan,
-        textAlign: TextAlign.left,
-        textDirection: ui.TextDirection.ltr
+    final textStyle = TextStyle(
+      fontSize: 18,
+      fontFamily: 'JameelNoori',
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
     );
-
+    final textSpan = TextSpan(text: safeText, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr,
+    );
     textPainter.layout();
+
+    // Guard against zero dimensions after layout
+    final width = textPainter.width > 0 ? textPainter.width : 10.0;
+    final height = textPainter.height > 0 ? textPainter.height : 20.0;
+
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(Offset(0, 0), Offset(width, height)),
+    );
     textPainter.paint(canvas, Offset(0, 0));
 
     final picture = recorder.endRecording();
-    final img = await picture.toImage(textPainter.width.toInt(), textPainter.height.toInt());
+    final img = await picture.toImage(width.ceil(), height.ceil());
     final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
     final buffer = byteData!.buffer.asUint8List();
 
@@ -286,168 +299,6 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
   }
 
 
-  // Future<Uint8List> _generatePdf() async {
-  //   final pdf = pw.Document();
-  //
-  //   // Create images for all customer names and item names first
-  //   final customerImages = <String, pw.MemoryImage>{};
-  //   final itemImages = <String, pw.MemoryImage>{};
-  //
-  //   // Pre-generate all needed images to avoid duplicate generation
-  //   for (final transaction in _filteredTransactions) {
-  //     final customerName = transaction['type'] == 'Purchase'
-  //         ? transaction['vendorName']
-  //         : transaction['customerName'] ?? '-';
-  //     final itemName = transaction['itemName'];
-  //
-  //     if (!customerImages.containsKey(customerName)) {
-  //       customerImages[customerName] = await _createTextImage(customerName);
-  //     }
-  //     if (!itemImages.containsKey(itemName)) {
-  //       itemImages[itemName] = await _createTextImage(itemName);
-  //     }
-  //   }
-  //
-  //
-  //
-  //
-  //   pdf.addPage(
-  //     pw.MultiPage(
-  //       margin: pw.EdgeInsets.all(5.0),
-  //       pageFormat: PdfPageFormat.a4,
-  //       build: (pw.Context context) {
-  //         return [
-  //           pw.Text('Transaction Type Report',
-  //               style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-  //           pw.SizedBox(height: 20),
-  //           pw.Table(
-  //             border: pw.TableBorder.all(),
-  //             columnWidths: {
-  //               0: const pw.FlexColumnWidth(1.5), // Date
-  //               1: const pw.FlexColumnWidth(1.2), // Type
-  //               2: const pw.FlexColumnWidth(1.2), // Doc No.
-  //               3: const pw.FlexColumnWidth(2.0), // Customer/Vendor (wider for image)
-  //               4: const pw.FlexColumnWidth(2.0), // Item (wider for image)
-  //               5: const pw.FlexColumnWidth(1.0), // Qty
-  //               if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
-  //                 6: const pw.FlexColumnWidth(1.0), // Weight
-  //               (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 7 : 6):
-  //               const pw.FlexColumnWidth(1.0), // Rate
-  //               (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0) ? 8 : 7):
-  //               const pw.FlexColumnWidth(1.2), // Total
-  //             },
-  //             children: [
-  //               // Header row
-  //               pw.TableRow(
-  //                 children: [
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Date'),
-  //                   ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Type'),
-  //                   ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Doc No.'),
-  //                   ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Customer/Vendor'),
-  //                   ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Item'),
-  //                   ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Qty'),
-  //                   ),
-  //                   if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text('Wt.'),
-  //                     ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Rate'),
-  //                   ),
-  //                   pw.Padding(
-  //                     padding: const pw.EdgeInsets.all(4),
-  //                     child: pw.Text('Total'),
-  //                   ),
-  //                 ],
-  //               ),
-  //               // Data rows
-  //               ..._filteredTransactions.map((transaction) {
-  //                 final customerName = transaction['type'] == 'Purchase'
-  //                     ? transaction['vendorName']
-  //                     : transaction['customerName'] ?? '-';
-  //                 final itemName = transaction['itemName'];
-  //
-  //                 return pw.TableRow(
-  //                   children: [
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text(DateFormat('yyyy-MM-dd').format(transaction['date'])),
-  //                     ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text(transaction['type']),
-  //                     ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text(
-  //                         transaction['type'] == 'Invoice Sale'
-  //                             ? transaction['invoiceNumber'].toString()
-  //                             : transaction['type'] == 'Filled Sale'
-  //                             ? transaction['filledNumber'].toString()
-  //                             : '-',
-  //                       ),
-  //                     ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Container(
-  //                         height: 20, // Fixed height for image
-  //                         child: pw.Image(customerImages[customerName]!),
-  //                       ),
-  //                     ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Container(
-  //                         height: 20, // Fixed height for image
-  //                         child: pw.Image(itemImages[itemName]!),
-  //                       ),
-  //                     ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text(transaction['quantity'].toStringAsFixed(2)),
-  //                     ),
-  //                     if (_filteredTransactions.any((t) => t['weight'] != null && t['weight'] > 0))
-  //                       pw.Padding(
-  //                         padding: const pw.EdgeInsets.all(4),
-  //                         child: pw.Text(transaction['weight']?.toStringAsFixed(2) ?? '-'),
-  //                       ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text(transaction['rate'].toStringAsFixed(2)),
-  //                     ),
-  //                     pw.Padding(
-  //                       padding: const pw.EdgeInsets.all(4),
-  //                       child: pw.Text(transaction['total'].toStringAsFixed(2)),
-  //                     ),
-  //                   ],
-  //                 );
-  //               }).toList(),
-  //             ],
-  //           ),
-  //         ];
-  //       },
-  //     ),
-  //   );
-  //   return pdf.save();
-  // }
 
   Future<Uint8List> _generatePdf() async {
     final pdf = pw.Document();
@@ -456,12 +307,13 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
     final customerImages = <String, pw.MemoryImage>{};
     final itemImages = <String, pw.MemoryImage>{};
 
-    // Pre-generate all needed images to avoid duplicate generation
     for (final transaction in _filteredTransactions) {
       final customerName = transaction['type'] == 'Purchase'
-          ? transaction['vendorName']
-          : transaction['customerName'] ?? '-';
-      final itemName = transaction['itemName'];
+          ? (transaction['vendorName'] ?? '-')
+          : (transaction['customerName'] ?? '-');
+
+      // itemName can be null for Purchase transactions
+      final itemName = transaction['itemName'] ?? '-';
 
       if (!customerImages.containsKey(customerName)) {
         customerImages[customerName] = await _createTextImage(customerName);
@@ -548,9 +400,9 @@ class _TransactionTypeReportPageState extends State<TransactionTypeReportPage> {
                 // Data rows
                 ..._filteredTransactions.map((transaction) {
                   final customerName = transaction['type'] == 'Purchase'
-                      ? transaction['vendorName']
-                      : transaction['customerName'] ?? '-';
-                  final itemName = transaction['itemName'];
+                      ? (transaction['vendorName'] ?? '-')
+                      : (transaction['customerName'] ?? '-');
+                  final itemName = transaction['itemName'] ?? '-';
 
                   return pw.TableRow(
                     children: [

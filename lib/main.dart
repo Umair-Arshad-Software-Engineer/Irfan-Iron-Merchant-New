@@ -11,8 +11,10 @@ import 'Provider/filled provider.dart';
 import 'Provider/filledreportprovider.dart';
 import 'Provider/invoice provider.dart';
 import 'Provider/lanprovider.dart';
+import 'Provider/newFilledProvider.dart';
 import 'Provider/purchaseprovider.dart';
 import 'Provider/reportprovider.dart';
+import 'Reports/custoemrreports.dart';
 import 'chequePayments/listofchequePayments.dart';
 import 'chequePayments/newchequelist.dart';
 import 'dashboard.dart';
@@ -21,13 +23,13 @@ import 'firebase_options.dart';
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform, // Initialize with the generated optionss
+    options: DefaultFirebaseOptions.currentPlatform,
   );
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => EmployeeProvider()),
-        ChangeNotifierProvider(create: (_) => FilledProvider()),
+        ChangeNotifierProvider(create: (_) => NewFilledProvider()),
         ChangeNotifierProvider(create: (_) => FilledCustomerReportProvider()),
         ChangeNotifierProvider(create: (_) => InvoiceProvider()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
@@ -46,15 +48,13 @@ void main() async{
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
-
     return Consumer<LanguageProvider>(
       builder: (context, languageProvider, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          home:  LoginPage(),
+          home:  Dashboard(),
           theme: ThemeData(
             fontFamily: languageProvider.isEnglish ? 'Roboto' : 'JameelNoori',
           ),
@@ -63,8 +63,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

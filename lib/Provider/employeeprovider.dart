@@ -47,7 +47,8 @@ class EmployeeProvider with ChangeNotifier {
       String employeeId,
       String status,
       String description,
-      DateTime date) async {
+      DateTime date)
+  async {
     final dateString = date.toIso8601String().split('T').first; // Format the date (e.g., "2025-01-08")
     final timeString = date.toIso8601String().split('T').last.split('.').first; // Extract the time (e.g., "14:30:00")
 

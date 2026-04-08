@@ -4,6 +4,7 @@ import '../Provider/customerprovider.dart';
 import '../Provider/lanprovider.dart';
 import 'filledbycustomerreport.dart';
 import 'filledledgerreport.dart';
+import 'filleditemwiseledger.dart';
 
 class Filledcustomerlistpage extends StatefulWidget {
   @override
@@ -63,20 +64,28 @@ class _FilledcustomerlistpageState extends State<Filledcustomerlistpage> {
               ),
               ListTile(
                 title: Text(
-                  languageProvider.isEnglish ? 'Reports by CustomerName' : 'کسٹمر نام کے ذریعہ رپورٹس', // Dynamic text based on language
+                  languageProvider.isEnglish ? 'Item Wise Ledger' : 'لیجر', // Dynamic text based on language
                 ),
                 onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => filledbycustomerreport(
-                        customerId: customerId,
-                        customerName: customerName,
-                        customerPhone: customerPhone,
-                      ),
+                  // Navigator.pop(context);
+                  // Navigator.push(
+                  //   context,
+                  //   MaterialPageRoute(
+                  //     builder: (context) => filledbycustomerreport(
+                  //       customerId: customerId,
+                  //       customerName: customerName,
+                  //       customerPhone: customerPhone,
+                  //     ),
+                  //   ),
+                  // );
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => ItemsWiseLedgerReportPage(
+                      customerId: customerId,
+                      customerName: customerName,
+                      customerPhone: customerPhone,
+
                     ),
-                  );
+                  ));
                 },
               ),
             ],

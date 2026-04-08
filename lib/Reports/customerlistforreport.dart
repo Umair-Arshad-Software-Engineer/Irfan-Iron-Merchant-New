@@ -5,6 +5,8 @@ import '../Provider/lanprovider.dart';
 import 'bycustomerreport.dart';
 import 'bypaymentType.dart';
 import 'custoemrreports.dart';
+import 'filleditemwiseledger.dart';
+import 'invoiceitemwiseledger.dart';
 
 class CustomerListPage extends StatefulWidget {
   @override
@@ -64,20 +66,21 @@ class _CustomerListPageState extends State<CustomerListPage> {
               ),
               ListTile(
                 title: Text(
-                  languageProvider.isEnglish ? 'Reports by CustomerName' : 'کسٹمر نام کے ذریعہ رپورٹس', // Dynamic text based on language
+                  languageProvider.isEnglish ? 'Item Wise Ledger' : 'آئٹم لیگر', // Dynamic text based on language
                 ),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => byCustomerReport(
+                      builder: (context) => invoiceitemwiseledger(
                         customerId: customerId,
                         customerName: customerName,
                         customerPhone: customerPhone,
                       ),
                     ),
                   );
+
                 },
               ),
             ],

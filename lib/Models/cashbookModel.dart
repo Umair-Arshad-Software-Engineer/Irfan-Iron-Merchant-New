@@ -30,7 +30,9 @@ class CashbookEntry {
   DateTime? transferredDate;
   double? transferredAmount;
   String? transferId;
-
+// Add these properties to your CashbookEntry class
+  final String? vendorId;
+  final String? vendorName;
 
   CashbookEntry({
     this.id,
@@ -63,6 +65,8 @@ class CashbookEntry {
     this.transferredDate,
     this.transferredAmount,
     this.transferId,
+    this.vendorId,
+    this.vendorName,
   });
 
   factory CashbookEntry.fromJson(Map<String, dynamic> json) {
@@ -91,6 +95,8 @@ class CashbookEntry {
       expenseKey: json['expenseKey'],
       // Add to fromJson
       customerId: json['customerId'],
+      vendorId: json['vendorId'], // Add this
+      vendorName: json['vendorName'], // Add this
       customerName: json['customerName'],
       bankId: json['bankId'],
       bankName: json['bankName'],
@@ -129,6 +135,8 @@ class CashbookEntry {
       if (source != null) 'source': source,
       if (expenseKey != null) 'expenseKey': expenseKey,
       // Add to toJson
+      if (vendorId != null) 'vendorId': vendorId,
+      if (vendorName != null) 'vendorName': vendorName,
       if (customerId != null) 'customerId': customerId,
       if (customerName != null) 'customerName': customerName,
       if (bankId != null) 'bankId': bankId,

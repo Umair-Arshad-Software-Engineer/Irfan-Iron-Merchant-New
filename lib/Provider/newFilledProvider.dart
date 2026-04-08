@@ -1,0 +1,2115 @@
+
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
+import '../Models/cashbookModel.dart';
+import '../Models/itemModel.dart';
+
+class NewFilledProvider with ChangeNotifier {
+  final DatabaseReference _db = FirebaseDatabase.instance.ref();
+  List<Map<String, dynamic>> _filled = [];
+  List<Item> _items = []; // Initialize the _items list
+  List<Item> get items => _items; // Add a getter for _items
+  List<Map<String, dynamic>> get filled => _filled;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+  bool _hasMoreData = true;
+  bool get hasMoreData => _hasMoreData;
+  int _lastLoadedIndex = 0;
+  String? _lastKey;
+  final int _pageSize = 20;
+
+
+  Uint8List base64ToImage(String base64String) {
+    return base64Decode(base64String);
+  }
+
+  String imageToBase64(Uint8List imageBytes) {
+    return base64Encode(imageBytes);
+  }
+
+  DatabaseReference get db => _db;
+
+ Future<void> saveFilledImage({
+    required String filledId,
+    required Uint8List imageBytes,
+    required String imageType, // 'signature', 'stamp', 'note', etc.
+    String? description,
+  })
+  async {
+    try {
+      String base64Image = _imageToBase64(imageBytes);
+
+      final imageData = {
+        'image': base64Image,
+        'imageType': imageType,
+        'description': description ?? '',
+        'uploadedAt': DateTime.now().toIso8601String(),
+      };
+
+      await _db.child('filledImages').child(filledId).child(imageType).set(imageData);
+      print("✅ Image saved for filled $filledId");
+
+    } catch (e) {
+      print('❌ Error saving filled image: $e');
+      throw Exception('Failed to save filled image: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> getFilledImage(String filledId, String imageType) async {
+    try {
+      final snapshot = await _db.child('filledImages').child(filledId).child(imageType).get();
+      if (snapshot.exists) {
+        final imageData = Map<String, dynamic>.from(snapshot.value as Map);
+        return imageData;
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error fetching filled image: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllFilledImages(String filledId) async {
+    try {
+      final snapshot = await _db.child('filledImages').child(filledId).get();
+      if (snapshot.exists) {
+        final imagesMap = snapshot.value as Map<dynamic, dynamic>;
+        List<Map<String, dynamic>> images = [];
+
+        imagesMap.forEach((key, value) {
+          final imageData = Map<String, dynamic>.from(value);
+          images.add({
+            'imageType': key.toString(),
+            ...imageData,
+          });
+        });
+
+        return images;
+      }
+      return [];
+    } catch (e) {
+      print('❌ Error fetching filled images: $e');
+      return [];
+    }
+  }
+
+  String _imageToBase64(Uint8List imageBytes) {
+    return base64Encode(imageBytes);
+  }
+
+  Uint8List _base64ToImage(String base64String) {
+    return base64Decode(base64String);
+  }
+
+  Future<void> fetchFilled({int limit = 20, String? lastKey}) async   {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      Query query = _db.child('filled')
+          .orderByChild('createdAt')
+          .limitToLast(limit);
+
+      if (lastKey != null) {
+        // Get the last filled to use its createdAt value for pagination
+        final lastFilledSnapshot = await _db.child('filled').child(lastKey).get();
+        if (lastFilledSnapshot.exists) {
+          final lastFilled = lastFilledSnapshot.value as Map<dynamic, dynamic>;
+          // print(lastFilled);
+          final lastCreatedAt = lastFilled['createdAt'];
+          query = query.endBefore(lastCreatedAt);
+        }
+      }
+
+      final snapshot = await query.get();
+      print(snapshot);
+
+      if (snapshot.exists) {
+        // Clear existing data only on first load
+        if (lastKey == null) {
+          print(_filled);
+          _filled.clear();
+        }
+
+        // Handle the response which could be a Map or a List
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processFilledData(values);
+
+          if (values.isNotEmpty) {
+            _lastKey = values.keys.last.toString();
+            _hasMoreData = values.length >= limit;
+          }
+        }
+        else if (snapshot.value is List) {
+          // Handle list response (possibly an array in Firebase)
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+          print(values);
+
+          // Convert list to map with indices as keys
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+
+          if (valuesMap.isNotEmpty) {
+            _processFilledData(valuesMap);
+            _lastKey = valuesMap.keys.last.toString();
+            _hasMoreData = valuesMap.length >= limit;
+          }
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching filled: ${e.toString()}');
+      throw Exception('Failed to fetch filled: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _processFilledData(Map<dynamic, dynamic> values) {
+    // Skip null or empty values
+    if (values.isEmpty) return;
+
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null) // Filter out null entries
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+
+        // Handle null dates
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      _processFilledEntry(entry.key.toString(), entry.value);
+    }
+  }
+
+  Future<void> loadMoreFilled() async {
+    if (_isLoading || !_hasMoreData) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Get the createdAt value of the last item in the list
+      String? lastCreatedAt;
+      if (_filled.isNotEmpty) {
+        lastCreatedAt = _filled.last['createdAt'];
+      } else {
+        _hasMoreData = false;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      Query query = _db.child('filled')
+          .orderByChild('createdAt')
+          .endBefore(lastCreatedAt)
+          .limitToLast(_pageSize);
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        // Handle different return types from Firebase
+        if (snapshot.value is Map) {
+          Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processPaginatedData(values);
+        }
+        else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+
+          // Convert list to map with indices as keys
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+
+          _processPaginatedData(valuesMap);
+        }
+      } else {
+        _hasMoreData = false;
+      }
+    } catch (e) {
+      print('Error loading more filled: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _processPaginatedData(Map<dynamic, dynamic> values) {
+    if (values.isEmpty) {
+      _hasMoreData = false;
+      return;
+    }
+
+    // Process data without adding duplicates
+    List<String> existingIds = _filled.map((item) => item['id'].toString()).toList();
+
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null) // Filter out null entries
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+
+        // Handle null dates
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        // Sort in descending order (newest first)
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    bool addedNewItems = false;
+
+    for (var entry in sortedEntries) {
+      String key = entry.key.toString();
+      // Only add items that aren't already in the list
+      if (!existingIds.contains(key)) {
+        _processFilledEntry(key, entry.value);
+        addedNewItems = true;
+      }
+    }
+
+    // Only update pagination variables if we actually added new items
+    if (addedNewItems) {
+      _hasMoreData = values.length >= _pageSize;
+    } else {
+      _hasMoreData = false;
+    }
+  }
+
+  void resetPagination() {
+    _filled = [];
+    _hasMoreData = true;
+    _lastLoadedIndex = 0;
+    _lastKey = null;
+    notifyListeners();
+  }
+
+  DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue is String) return DateTime.parse(dateValue);
+    if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
+    return DateTime.now();
+  }
+
+  Future<int> getNextFilledNumber() async {
+    final counterRef = _db.child('filledCounter');
+    final transactionResult = await counterRef.runTransaction((currentData) {
+      int currentCount = (currentData ?? 0) as int;
+      currentCount++;
+      return Transaction.success(currentCount);
+    });
+
+    if (transactionResult.committed) {
+      return transactionResult.snapshot!.value as int;
+    } else {
+      throw Exception('Failed to increment filled counter.');
+    }
+  }
+
+  bool _isTimestampNumber(String number) {
+    return number.length > 10 && int.tryParse(number) != null;
+  }
+
+  Future<void> saveFilled({
+    required String filledId,
+    required String filledNumber,
+    required String customerId,
+    required String customerName,
+    required double subtotal,
+    required double discount,
+    required double mazdoori,
+    required double globalWeight, // NEW: Add global weight parameter
+    required double globalRate, // NEW: Add global rate parameter
+    required bool useGlobalRateMode, // NEW: Add mode parameter
+    required double grandTotal,
+    required String paymentType,
+    required String referenceNumber,
+    String? paymentMethod,
+    required String createdAt,
+    required List<Map<String, dynamic>> items,
+  })
+  async {
+    try {
+      final cleanedItems = items.map((item) {
+        // Get lengths and quantities to save
+        String lengthToSave = '';
+        List<String> selectedLengths = [];
+        Map<String, dynamic> lengthQuantities = {}; // Changed to dynamic
+
+        // Handle length quantities
+        if (item['selectedLengths'] != null && item['selectedLengths'] is List) {
+          selectedLengths = (item['selectedLengths'] as List)
+              .map((e) => e.toString())
+              .toList();
+
+          // Get length quantities - FIXED: Convert numeric keys to string keys
+          if (item['lengthQuantities'] != null && item['lengthQuantities'] is Map) {
+            final Map<dynamic, dynamic> quantitiesMap = item['lengthQuantities'] as Map<dynamic, dynamic>;
+            lengthQuantities = quantitiesMap.map<String, dynamic>((key, value) {
+              // Convert key to string and ensure it doesn't contain invalid characters
+              String stringKey = key.toString();
+              // Replace any invalid characters or format appropriately
+              stringKey = stringKey.replaceAll('.', '_dot_'); // Replace dot with a safe string
+              return MapEntry(
+                stringKey,
+                _parseToDouble(value),
+              );
+            });
+          } else {
+            // Default quantity to 1 if not specified
+            for (var length in selectedLengths) {
+              String safeLength = length.toString().replaceAll('.', '_dot_');
+              lengthQuantities[safeLength] = 1.0;
+            }
+          }
+
+          lengthToSave = selectedLengths.join(', ');
+        } else if (item['length'] != null) {
+          lengthToSave = item['length'].toString();
+        }
+
+
+        String itemName = item['selectedMotai']?.toString() ?? item['itemName']?.toString() ?? '';
+
+
+        return {
+          'itemName': itemName, // Use the corrected item name
+          'rate': item['rate'] ?? 0.0,
+          'qty': item['qty'] ?? 0.0,
+          // 'weight': globalWeight, // Use global weight for all items
+          'weight': item['weight'] ?? globalWeight, // Use item's weight, not global
+          'length': lengthToSave,
+          'selectedLengths': selectedLengths,
+          'lengthQuantities': lengthQuantities, // This now has safe string keys
+          'description': item['description'] ?? '',
+          'total': item['total'],
+          'initialWeight': item['weight'] ?? globalWeight, // Store initial weight for updates
+        };
+      }).toList();
+
+      final filledData = {
+        'referenceNumber': referenceNumber,
+        'filledNumber': filledNumber,
+        'customerId': customerId,
+        'customerName': customerName,
+        'subtotal': subtotal,
+        'discount': discount,
+        'grandTotal': grandTotal,
+        'paymentType': paymentType,
+        'paymentMethod': paymentMethod ?? '',
+        'items': cleanedItems,
+        'globalWeight': globalWeight, // NEW: Save global weight at filled level
+        'globalRate': globalRate, // NEW: Save global rate
+        'useGlobalRateMode': useGlobalRateMode, // NEW: Save mode
+        'mazdoori': mazdoori,
+        'createdAt': createdAt,
+        'numberType': _isTimestampNumber(filledNumber) ? 'timestamp' : 'sequential',
+      };
+
+      await _db.child('filled').child(filledId).set(filledData);
+
+
+      // ✅ NEW: Update stock (deduct weight for each item)
+      await _updateItemStockForFilled(items, filledId, isNewFilled: true);
+      // Now update the ledger for this customer
+      await _updateCustomerLedger(
+        customerId,
+        creditAmount: grandTotal,
+        debitAmount: 0.0,
+        remainingBalance: grandTotal,
+        filledNumber: filledNumber,
+        referenceNumber: referenceNumber,
+        transactionDate: createdAt,
+      );
+    } catch (e) {
+      throw Exception('Failed to save filled: $e');
+    }
+  }
+
+  Future<void> _updateItemStockForFilled(
+      List<Map<String, dynamic>> items,
+      String filledId, {
+        bool isNewFilled = true,
+        List<Map<String, dynamic>>? oldItems,
+      }) async {
+    try {
+      for (var item in items) {
+        final itemName = item['itemName'] as String?;
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in database
+        final itemsSnapshot = await _db.child('items')
+            .orderByChild('itemName')
+            .equalTo(itemName)
+            .once();
+
+        if (itemsSnapshot.snapshot.exists) {
+          final itemsMap = itemsSnapshot.snapshot.value as Map<dynamic, dynamic>;
+          final itemKey = itemsMap.keys.first as String;
+          final itemData = Map<String, dynamic>.from(itemsMap[itemKey] as Map);
+
+          double currentQtyOnHand = _parseToDouble(itemData['qtyOnHand'] ?? 0.0);
+          double itemWeight = _parseToDouble(item['weight'] ?? 0.0);
+          double initialWeight = _parseToDouble(item['initialWeight'] ?? itemWeight);
+
+          double weightChange;
+
+          if (isNewFilled) {
+            // For new filled: deduct the weight
+            weightChange = -itemWeight;
+          } else if (oldItems != null) {
+            // For update: find the old item weight
+            final oldItem = oldItems.firstWhere(
+                  (old) => old['itemName'] == itemName,
+              orElse: () => {'weight': 0.0, 'initialWeight': 0.0},
+            );
+
+            double oldWeight = _parseToDouble(oldItem['weight'] ?? 0.0);
+            weightChange = oldWeight - itemWeight; // Positive if weight decreased, negative if increased
+          } else {
+            weightChange = 0.0;
+          }
+
+          double newQtyOnHand = currentQtyOnHand + weightChange;
+
+          // Ensure stock doesn't go negative (unless explicitly allowed)
+          if (newQtyOnHand < 0) {
+            print("⚠️ Warning: Stock would go negative for $itemName. Current: $currentQtyOnHand, Change: $weightChange");
+            // You can decide whether to allow negative stock or throw an error
+            // newQtyOnHand = 0.0; // Or throw an exception
+          }
+
+          // Update the item stock
+          await _db.child('items/$itemKey').update({
+            'qtyOnHand': newQtyOnHand,
+            'lastUpdated': DateTime.now().toIso8601String(),
+            'lastFilled': filledId,
+          });
+
+          print("✅ Updated stock for $itemName: $currentQtyOnHand → $newQtyOnHand (Change: $weightChange)");
+        } else {
+          print("❌ Item not found: $itemName");
+        }
+      }
+    } catch (e) {
+      print('❌ Error updating item stock: $e');
+      throw Exception('Failed to update item stock: $e');
+    }
+  }
+
+
+  Future<Map<String, dynamic>?> getFilledById(String filledId) async {
+    try {
+      final snapshot = await _db.child('filled').child(filledId).get();
+      if (snapshot.exists) {
+        final filledData = Map<String, dynamic>.from(snapshot.value as Map);
+
+        // Ensure global rate and mode are included
+        filledData['globalRate'] = filledData['globalRate'] ?? 0.0;
+        filledData['useGlobalRateMode'] = filledData['useGlobalRateMode'] ?? false;
+
+        return filledData;
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Failed to fetch filled: $e');
+    }
+  }
+
+  Future<void> updateFilled({
+    required String filledId,
+    required String filledNumber,
+    required String customerId,
+    required String customerName,
+    required double subtotal,
+    required double globalWeight, // NEW: Add global weight parameter
+    required double globalRate, // NEW: Add global rate parameter
+    required bool useGlobalRateMode, // NEW: Add mode parameter
+    required double discount,
+    required double grandTotal,
+    required double mazdoori,
+    required String paymentType,
+    String? paymentMethod,
+    required String referenceNumber,
+    required List<Map<String, dynamic>> items,
+    required String createdAt,
+  }) async {
+    try {
+      // Fetch the old filled data
+      final oldFilled = await getFilledById(filledId);
+      if (oldFilled == null) {
+        throw Exception('Filled not found.');
+      }
+      final List<Map<String, dynamic>> oldItems = List<Map<String, dynamic>>.from(oldFilled['items'] ?? []);
+      final isTimestamp = oldFilled['numberType'] == 'timestamp';
+
+      // Get the old grand total
+      final double oldGrandTotal = (oldFilled['grandTotal'] as num).toDouble();
+      final double difference = grandTotal - oldGrandTotal;
+
+      final cleanedItems = items.map((item) {
+        // Get lengths and quantities to save
+        String lengthToSave = '';
+        List<String> selectedLengths = [];
+        Map<String, dynamic> lengthQuantities = {}; // Changed to dynamic
+
+        // Handle length quantities
+        if (item['selectedLengths'] != null && item['selectedLengths'] is List) {
+          selectedLengths = (item['selectedLengths'] as List)
+              .map((e) => e.toString())
+              .toList();
+
+          // Get length quantities - FIXED: Convert numeric keys to string keys
+          if (item['lengthQuantities'] != null && item['lengthQuantities'] is Map) {
+            final Map<dynamic, dynamic> quantitiesMap = item['lengthQuantities'] as Map<dynamic, dynamic>;
+            lengthQuantities = quantitiesMap.map<String, dynamic>((key, value) {
+              // Convert key to string and ensure it doesn't contain invalid characters
+              String stringKey = key.toString();
+              // Replace any invalid characters or format appropriately
+              stringKey = stringKey.replaceAll('.', '_dot_'); // Replace dot with a safe string
+              return MapEntry(
+                stringKey,
+                _parseToDouble(value),
+              );
+            });
+          } else {
+            // Default quantity to 1 if not specified
+            for (var length in selectedLengths) {
+              String safeLength = length.toString().replaceAll('.', '_dot_');
+              lengthQuantities[safeLength] = 1.0;
+            }
+          }
+
+          lengthToSave = selectedLengths.join(', ');
+        } else if (item['length'] != null) {
+          lengthToSave = item['length'].toString();
+        }
+
+        return {
+          'itemName': item['itemName'],
+          'rate': item['rate'] ?? 0.0,
+          'qty': item['qty'] ?? 0.0,
+          'weight': item['weight'] ?? globalWeight,
+          'length': lengthToSave,
+          'selectedLengths': selectedLengths,
+          'lengthQuantities': lengthQuantities,
+          'description': item['description'] ?? '',
+          'total': item['total'],
+          'initialWeight': item['initialWeight'] ?? item['weight'] ?? globalWeight,
+        };
+      }).toList();
+
+      // Prepare the updated filled data
+      final filledData = {
+        'referenceNumber': referenceNumber,
+        'filledNumber': filledNumber,
+        'customerId': customerId,
+        'customerName': customerName,
+        'mazdoori': mazdoori,
+        'subtotal': subtotal,
+        'discount': discount,
+        'grandTotal': grandTotal,
+        'paymentType': paymentType,
+        'globalWeight': globalWeight, // NEW: Update global weight
+        'globalRate': globalRate, // NEW: Update global rate
+        'useGlobalRateMode': useGlobalRateMode, // NEW: Update mode
+        'paymentMethod': paymentMethod ?? '',
+        'items': cleanedItems,
+        'updatedAt': DateTime.now().toIso8601String(),
+        'createdAt': createdAt,
+        'numberType': isTimestamp ? 'timestamp' : 'sequential',
+      };
+
+      // Update the filled in the database
+      await _db.child('filled').child(filledId).update(filledData);
+      // ✅ Update stock for items (handles both additions and subtractions)
+      await _updateItemStockForFilled(
+        items,
+        filledId,
+        isNewFilled: false,
+        oldItems: oldItems,
+      );
+
+      // Update ledger entry
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final query = customerLedgerRef.orderByChild('filledNumber').equalTo(filledNumber);
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> entries = snapshot.value as Map<dynamic, dynamic>;
+        if (entries.isNotEmpty) {
+          String entryKey = entries.keys.first;
+          Map<String, dynamic> entry = Map<String, dynamic>.from(entries[entryKey]);
+
+          double currentCredit = (entry['creditAmount'] as num).toDouble();
+          double newCredit = currentCredit + difference;
+
+          double currentRemaining = (entry['remainingBalance'] as num).toDouble();
+          double newRemaining = currentRemaining + difference;
+
+          await customerLedgerRef.child(entryKey).update({
+            'creditAmount': newCredit,
+            'remainingBalance': newRemaining,
+          });
+        }
+      }
+
+      // Update the stock (qtyOnHand) for each item based on weight changes
+      for (var item in items) {
+        final itemName = item['itemName'];
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in the _items list
+        final dbItem = _items.firstWhere(
+              (i) => i.itemName == itemName,
+          orElse: () => Item(id: '', itemName: '', costPrice: 0.0, qtyOnHand: 0.0, itemType: ''),
+        );
+
+        if (dbItem.id.isNotEmpty) {
+          final String itemId = dbItem.id;
+          final double currentQty = dbItem.qtyOnHand;
+          final double newWeight = item['weight'] ?? 0.0;
+          final double initialWeight = item['initialWeight'] ?? 0.0;
+
+          // Calculate the difference between the initial weight and the new weight
+          double delta = initialWeight - newWeight;
+
+          // Update the qtyOnHand in the database
+          double updatedQty = currentQty + delta;
+
+          await _db.child('items/$itemId').update({'qtyOnHand': updatedQty});
+        }
+      }
+
+      // Refresh the filled list
+      await fetchFilled();
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to update filled: $e');
+    }
+  }
+
+
+  void _processFilledEntry(String key, dynamic value) {
+    if (value is! Map<dynamic, dynamic>) return;
+
+    final filledData = Map<String, dynamic>.from(value);
+
+    // Helper function to parse length quantities
+    Map<String, double> parseLengthQuantities(dynamic quantitiesData) {
+      final Map<String, double> result = {};
+      double parseDouble(dynamic value) {
+        if (value == null) return 0.0;
+        if (value is num) return value.toDouble();
+        if (value is String) {
+          return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
+        }
+        return 0.0;
+      }
+
+      if (quantitiesData is Map) {
+        final Map<dynamic, dynamic> quantitiesMap = quantitiesData;
+        quantitiesMap.forEach((key, value) {
+          if (key != null && value != null) {
+            // Convert key back to original format if needed
+            String length = key.toString();
+            // Reverse the safe string conversion
+            length = length.replaceAll('_dot_', '.');
+            final quantity = parseDouble(value);
+            result[length] = quantity;
+          }
+        });
+      }
+
+      return result;
+    }
+
+    // Helper function to safely parse dates
+    DateTime parseDateTime(dynamic dateValue) {
+      try {
+        if (dateValue is String) return DateTime.parse(dateValue);
+        if (dateValue is int) return DateTime.fromMillisecondsSinceEpoch(dateValue);
+        if (dateValue is DateTime) return dateValue;
+      } catch (e) {
+        print("Error parsing date: $e");
+      }
+      return DateTime.now();
+    }
+
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) {
+        return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
+      }
+      return 0.0;
+    }
+
+    // Safely process items list
+    List<Map<String, dynamic>> processItems(dynamic itemsData) {
+      if (itemsData is List) {
+        return itemsData.map<Map<String, dynamic>>((item) {
+          if (item is Map<dynamic, dynamic>) {
+            // Handle lengths - check both 'length' string and 'selectedLengths' array
+            String lengthString = item['length']?.toString() ?? '';
+            List<String> selectedLengths = [];
+            Map<String, double> lengthQuantities = {};
+
+            // Parse lengthQuantities if it exists
+            if (item['lengthQuantities'] != null) {
+              lengthQuantities = parseLengthQuantities(item['lengthQuantities']);
+            }
+
+            // Parse selectedLengths if it exists
+            if (item['selectedLengths'] != null && item['selectedLengths'] is List) {
+              selectedLengths = List<String>.from(item['selectedLengths'].map((l) => l.toString()));
+
+              // If quantities map is empty but we have lengths, set default quantity to 1
+              if (lengthQuantities.isEmpty && selectedLengths.isNotEmpty) {
+                for (var length in selectedLengths) {
+                  lengthQuantities[length] = 1.0;
+                }
+              }
+            } else if (lengthString.isNotEmpty) {
+              // Fallback: parse from comma-separated string
+              selectedLengths = lengthString.split(',').map((l) => l.trim()).toList();
+
+              // Set default quantity to 1 for each length
+              for (var length in selectedLengths) {
+                lengthQuantities[length] = 1.0;
+              }
+            }
+
+            return {
+              'itemName': item['itemName']?.toString() ?? '',
+              'rate': parseDouble(item['rate']),
+              'qty': parseDouble(item['qty']),
+              'weight': parseDouble(item['weight']),
+              'length': lengthString,
+              'selectedLengths': selectedLengths,
+              'lengthQuantities': lengthQuantities, // Add this
+              'description': item['description']?.toString() ?? '',
+              'total': parseDouble(item['total']),
+            };
+          }
+          return {};
+        }).toList();
+      }
+      return [];
+    }
+
+    _filled.add({
+      'id': key,
+      'filledNumber': filledData['filledNumber']?.toString() ?? 'N/A',
+      'customerId': filledData['customerId']?.toString() ?? '',
+      'customerName': filledData['customerName']?.toString() ?? 'N/A',
+      'subtotal': parseDouble(filledData['subtotal']),
+      'discount': parseDouble(filledData['discount']),
+      'grandTotal': parseDouble(filledData['grandTotal']),
+      'paymentType': filledData['paymentType']?.toString() ?? '',
+      'paymentMethod': filledData['paymentMethod']?.toString() ?? '',
+      'globalWeight': parseDouble(filledData['globalWeight'] ?? 0.0), // NEW: Add global weight to processed filledData
+      'globalRate': parseDouble(filledData['globalRate'] ?? 0.0), // NEW: Add global rate
+      'useGlobalRateMode': filledData['useGlobalRateMode'] ?? false, // NEW: Add mode
+      'cashPaidAmount': parseDouble(filledData['cashPaidAmount']),
+      'mazdoori': parseDouble(filledData['mazdoori'] ?? 0.0),
+      'onlinePaidAmount': parseDouble(filledData['onlinePaidAmount']),
+      'checkPaidAmount': parseDouble(filledData['checkPaidAmount'] ?? 0.0),
+      'bankPaidAmount': parseDouble(filledData['bankPaidAmount'] ?? 0.0),
+      'slipPaidAmount': parseDouble(filledData['slipPaidAmount'] ?? 0.0),
+      'debitAmount': parseDouble(filledData['debitAmount']),
+      'debitAt': filledData['debitAt']?.toString() ?? '',
+      'items': processItems(filledData['items']),
+      'createdAt': parseDateTime(filledData['createdAt']).toIso8601String(),
+      'remainingBalance': parseDouble(filledData['remainingBalance']),
+      'referenceNumber': filledData['referenceNumber']?.toString() ?? '',
+    });
+  }
+
+  Future<void> deleteFilled(String filledId) async {
+    try {
+      // Fetch the filled to identify related customer and filled number
+      final filled = _filled.firstWhere((inv) => inv['id'] == filledId);
+
+      if (filled == null) {
+        throw Exception("Filled not found.");
+      }
+
+      final customerId = filled['customerId'] as String;
+      final filledNumber = filled['filledNumber'] as String;
+      final grandTotal = _parseToDouble(filled['grandTotal']);
+      final List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(filled['items']);
+
+      // ✅ Reverse the stock deduction (add weight back to items)
+      await _reverseItemStockForFilled(items, filledId);
+
+      // Delete all payment entries from external nodes before deleting the filled
+      await _deleteAllFilledPayments(filledId, customerId, filledNumber);
+
+      // Delete the filled from the database
+      await _db.child('filled').child(filledId).remove();
+
+      // Delete associated ledger entries
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('filledNumber').equalTo(filledNumber).get();
+
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<dynamic, dynamic>;
+        for (var entryKey in data.keys) {
+          await customerLedgerRef.child(entryKey).remove();
+        }
+      }
+
+      // Refresh the filled list after deletion
+      await fetchFilled();
+
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to delete filled and related entries: $e');
+    }
+  }
+
+// Add this helper method
+  Future<void> _reverseItemStockForFilled(List<Map<String, dynamic>> items, String filledId) async {
+    try {
+      for (var item in items) {
+        final itemName = item['itemName'] as String?;
+        if (itemName == null || itemName.isEmpty) continue;
+
+        // Find the item in database
+        final itemsSnapshot = await _db.child('items')
+            .orderByChild('itemName')
+            .equalTo(itemName)
+            .once();
+
+        if (itemsSnapshot.snapshot.exists) {
+          final itemsMap = itemsSnapshot.snapshot.value as Map<dynamic, dynamic>;
+          final itemKey = itemsMap.keys.first as String;
+          final itemData = Map<String, dynamic>.from(itemsMap[itemKey] as Map);
+
+          double currentQtyOnHand = _parseToDouble(itemData['qtyOnHand'] ?? 0.0);
+          double itemWeight = _parseToDouble(item['weight'] ?? 0.0);
+
+          // Add the weight back (reverse the deduction)
+          double newQtyOnHand = currentQtyOnHand + itemWeight;
+
+          // Update the item stock
+          await _db.child('items/$itemKey').update({
+            'qtyOnHand': newQtyOnHand,
+            'lastUpdated': DateTime.now().toIso8601String(),
+            'lastReversalFilled': filledId,
+          });
+
+          print("✅ Reversed stock for $itemName: $currentQtyOnHand → $newQtyOnHand (Added: $itemWeight)");
+        } else {
+          print("❌ Item not found during reversal: $itemName");
+        }
+      }
+    } catch (e) {
+      print('❌ Error reversing item stock: $e');
+      throw Exception('Failed to reverse item stock: $e');
+    }
+  }
+
+  Future<void> _deleteAllFilledPayments(String filledId, String customerId, String filledNumber) async {
+    try {
+      final filledRef = _db.child('filled').child(filledId);
+
+      // Get all payment methods to check
+      final paymentMethods = ['cash', 'online', 'check', 'bank', 'slip', 'simplecashbook'];
+
+      for (String method in paymentMethods) {
+        final paymentsSnapshot = await filledRef.child('${method}Payments').get();
+
+        if (paymentsSnapshot.exists) {
+          final payments = paymentsSnapshot.value as Map<dynamic, dynamic>;
+
+          for (var paymentKey in payments.keys) {
+            final paymentData = Map<String, dynamic>.from(payments[paymentKey]);
+            final paymentAmount = _parseToDouble(paymentData['amount']);
+
+            // Delete from external nodes based on payment method
+            await _deleteFromExternalNode(
+              method: method,
+              paymentKey: paymentKey.toString(),
+              filledId: filledId,
+              customerId: customerId,
+              filledNumber: filledNumber,
+              paymentAmount: paymentAmount,
+              paymentData: paymentData,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error deleting filled payments from external nodes: $e');
+      throw Exception('Failed to delete filled payments from external nodes: $e');
+    }
+  }
+
+  Future<void> _deleteFromExternalNode({
+    required String method,
+    required String paymentKey,
+    required String filledId,
+    required String customerId,
+    required String filledNumber,
+    required double paymentAmount,
+    required Map<String, dynamic> paymentData,
+  })
+  async {
+    try {
+      switch (method.toLowerCase()) {
+        case 'cash':
+        // Delete from cashbook node
+          final cashbookSnapshot = await _db.child('cashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (cashbookSnapshot.exists) {
+            final entries = cashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cashbook').child(entryKey).remove();
+            }
+          }
+          break;
+
+        case 'online':
+        // Delete from onlinePayments node
+          await _db.child('onlinePayments').child(paymentKey).remove();
+          break;
+
+        case 'check':
+        // Delete from cheques node
+          await _db.child('cheques').child(paymentKey).remove();
+
+          // Also delete from bank's cheques if bank info exists
+          final chequeBankId = paymentData['chequeBankId'];
+          if (chequeBankId != null) {
+            final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
+            final bankChequeSnapshot = await bankChequesRef
+                .orderByChild('filledId')
+                .equalTo(filledId)
+                .get();
+
+            if (bankChequeSnapshot.exists) {
+              final entries = bankChequeSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount &&
+                    entry['filledNumber'] == filledNumber) {
+                  await bankChequesRef.child(entryKey).remove();
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'bank':
+        // Delete from bankTransactions node
+          await _db.child('bankTransactions').child(paymentKey).remove();
+
+          // Delete from bank's transactions and update balance
+          final bankId = paymentData['bankId'];
+          if (bankId != null) {
+            final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+            final bankTransactionSnapshot = await bankTransactionsRef
+                .orderByChild('filledId')
+                .equalTo(filledId)
+                .get();
+
+            if (bankTransactionSnapshot.exists) {
+              final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount) {
+                  await bankTransactionsRef.child(entryKey).remove();
+
+                  // Update bank balance
+                  final bankBalanceRef = _db.child('banks/$bankId/balance');
+                  final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+                  final updatedBalance = (currentBalance - paymentAmount).clamp(0.0, double.infinity);
+                  await bankBalanceRef.set(updatedBalance);
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'slip':
+        // Delete from slipPayments node
+          await _db.child('slipPayments').child(paymentKey).remove();
+          break;
+
+        case 'simplecashbook':
+        // // Delete from simplecashbook node
+        //   final simpleCashbookSnapshot = await _db.child('simplecashbook')
+        //       .orderByChild('paymentKey')
+        //       .equalTo(paymentKey)
+        //       .get();
+        //
+        //   if (simpleCashbookSnapshot.exists) {
+        //     final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
+        //     for (var entryKey in entries.keys) {
+        //       await _db.child('simplecashbook').child(entryKey).remove();
+        //     }
+        //   }
+        // Delete from simplecashbook node (external node only)
+          final simpleCashbookSnapshot = await _db.child('simplecashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (simpleCashbookSnapshot.exists) {
+            final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('simplecashbook').child(entryKey).remove();
+            }
+          }
+          break;
+      }
+    } catch (e) {
+      print('Error deleting from external node for method $method: $e');
+      // Continue with other deletions even if one fails
+    }
+  }
+
+  Future<void> deletePaymentEntry({
+    required BuildContext context,
+    required String filledId,
+    required String paymentKey,
+    required String paymentMethod,
+    required double paymentAmount,
+  })
+  async {
+    try {
+      final filledRef = _db.child('filled').child(filledId);
+      print("📌 Fetching payment data for method: $paymentMethod and key: $paymentKey");
+
+      // Step 1: Fetch payment data from the infilledvoice
+      final paymentSnapshot = await filledRef.child('${paymentMethod}Payments').child(paymentKey).get();
+
+      if (!paymentSnapshot.exists) {
+        print("❌ Error: Payment entry not found in ${paymentMethod}Payments");
+        throw Exception("Payment not found.");
+      }
+
+      final paymentData = Map<String, dynamic>.from(paymentSnapshot.value as Map);
+      print("✅ Payment data found: $paymentData");
+
+      // Step 2: Fetch filled data
+      final filledSnapshot = await filledRef.get();
+      if (!filledSnapshot.exists) {
+        throw Exception("Filled not found.");
+      }
+
+      final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
+      final customerId = filled['customerId']?.toString() ?? '';
+      final filledNumber = filled['filledNumber']?.toString() ?? '';
+      final referenceNumber = filled['referenceNumber']?.toString() ?? '';
+
+      // Step 3: Delete from ALL external nodes based on payment method
+      await _deleteFromAllExternalNodes(
+        method: paymentMethod,
+        paymentKey: paymentKey,
+        filledId: filledId,
+        customerId: customerId,
+        filledNumber: filledNumber,
+        paymentAmount: paymentAmount,
+        paymentData: paymentData,
+      );
+
+      // Step 4: Remove the payment entry from the filled
+      print("🗑️ Removing payment entry from: ${paymentMethod}Payments with key: $paymentKey");
+      await filledRef.child('${paymentMethod}Payments').child(paymentKey).remove();
+
+      // Step 5: Update filled amounts
+      double currentCashPaid = _parseToDouble(filled['cashPaidAmount']);
+      double currentOnlinePaid = _parseToDouble(filled['onlinePaidAmount']);
+      double currentCheckPaid = _parseToDouble(filled['checkPaidAmount']);
+      double currentSlipPaid = _parseToDouble(filled['slipPaidAmount'] ?? 0.0);
+      double currentBankPaid = _parseToDouble(filled['bankPaidAmount'] ?? 0.0);
+      double currentSimpleCashbookPaid = _parseToDouble(filled['simpleCashbookPaidAmount'] ?? 0.0);
+      double currentDebit = _parseToDouble(filled['debitAmount']);
+
+      print("💰 Current Payment Amounts -> Cash: $currentCashPaid, Online: $currentOnlinePaid, "
+          "Check: $currentCheckPaid, Bank: $currentBankPaid, Slip: $currentSlipPaid, "
+          "SimpleCashbook: $currentSimpleCashbookPaid, Debit: $currentDebit");
+
+      // Deduct the payment amount from the respective payment method
+      switch (paymentMethod.toLowerCase()) {
+        case 'cash':
+          currentCashPaid = (currentCashPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'online':
+          currentOnlinePaid = (currentOnlinePaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'check':
+          currentCheckPaid = (currentCheckPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'bank':
+          currentBankPaid = (currentBankPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'slip':
+          currentSlipPaid = (currentSlipPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        case 'simplecashbook':
+          currentSimpleCashbookPaid = (currentSimpleCashbookPaid - paymentAmount).clamp(0.0, double.infinity);
+          break;
+        default:
+          throw Exception("Invalid payment method.");
+      }
+
+      final updatedDebit = (currentDebit - paymentAmount).clamp(0.0, double.infinity);
+      print("🔄 Updating filled with new values...");
+
+      await filledRef.update({
+        'cashPaidAmount': currentCashPaid,
+        'onlinePaidAmount': currentOnlinePaid,
+        'checkPaidAmount': currentCheckPaid,
+        'bankPaidAmount': currentBankPaid,
+        'slipPaidAmount': currentSlipPaid,
+        'simpleCashbookPaidAmount': currentSimpleCashbookPaid,
+        'debitAmount': updatedDebit,
+      });
+
+      print("✅ Filled updated successfully.");
+
+      // Step 6: Update customer ledger - remove the payment entry
+      await _removePaymentFromLedger(customerId, filledNumber, paymentAmount);
+
+      // Step 7: Recalculate ledger balances after deletion
+      await _recalculateAllLedgerBalances(customerId);
+
+      print("🔄 Refreshing filled list...");
+      await fetchFilled();
+      print("✅ Payment deletion successful.");
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment deleted successfully from all locations.')),
+      );
+      Navigator.pop(context);
+
+    } catch (e) {
+      print("❌ Error deleting payment: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete payment: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _deleteFromAllExternalNodes({
+    required String method,
+    required String paymentKey,
+    required String filledId,
+    required String customerId,
+    required String filledNumber,
+    required double paymentAmount,
+    required Map<String, dynamic> paymentData,
+  })
+  async {
+    try {
+      switch (method.toLowerCase()) {
+        case 'cash':
+        // Delete from cashbook node
+          final cashbookSnapshot = await _db.child('cashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (cashbookSnapshot.exists) {
+            final entries = cashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cashbook').child(entryKey).remove();
+              print("✅ Deleted from cashbook: $entryKey");
+            }
+          }
+          break;
+
+        case 'online':
+        // Delete from onlinePayments node
+          final onlineSnapshot = await _db.child('onlinePayments')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (onlineSnapshot.exists) {
+            final entries = onlineSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('onlinePayments').child(entryKey).remove();
+              print("✅ Deleted from onlinePayments: $entryKey");
+            }
+          }
+          break;
+
+        case 'check':
+        // Delete from cheques node
+          final chequeSnapshot = await _db.child('cheques')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (chequeSnapshot.exists) {
+            final entries = chequeSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('cheques').child(entryKey).remove();
+              print("✅ Deleted from cheques: $entryKey");
+            }
+          }
+
+          // Also delete from bank's cheques if bank info exists
+          final chequeBankId = paymentData['chequeBankId'];
+          if (chequeBankId != null) {
+            final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
+            final bankChequeSnapshot = await bankChequesRef
+                .orderByChild('filledId')
+                .equalTo(filledId)
+                .get();
+
+            if (bankChequeSnapshot.exists) {
+              final entries = bankChequeSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount &&
+                    entry['filledNumber'] == filledNumber) {
+                  await bankChequesRef.child(entryKey).remove();
+                  print("✅ Deleted from bank cheques: $entryKey");
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'bank':
+        // Delete from bankTransactions node
+          final bankTransactionSnapshot = await _db.child('bankTransactions')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (bankTransactionSnapshot.exists) {
+            final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('bankTransactions').child(entryKey).remove();
+              print("✅ Deleted from bankTransactions: $entryKey");
+            }
+          }
+
+          // Delete from bank's transactions and update balance
+          final bankId = paymentData['bankId'];
+          if (bankId != null) {
+            final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+            final bankTransactionSnapshot = await bankTransactionsRef
+                .orderByChild('filledId')
+                .equalTo(filledId)
+                .get();
+
+            if (bankTransactionSnapshot.exists) {
+              final entries = bankTransactionSnapshot.value as Map<dynamic, dynamic>;
+              for (var entryKey in entries.keys) {
+                final entry = entries[entryKey] as Map<dynamic, dynamic>;
+                if (_parseToDouble(entry['amount']) == paymentAmount) {
+                  await bankTransactionsRef.child(entryKey).remove();
+                  print("✅ Deleted from bank transactions: $entryKey");
+
+                  // Update bank balance (deduct the payment amount)
+                  final bankBalanceRef = _db.child('banks/$bankId/balance');
+                  final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+                  final updatedBalance = (currentBalance - paymentAmount).clamp(0.0, double.infinity);
+                  await bankBalanceRef.set(updatedBalance);
+                  print("✅ Updated bank balance: $currentBalance -> $updatedBalance");
+                  break;
+                }
+              }
+            }
+          }
+          break;
+
+        case 'slip':
+        // Delete from slipPayments node
+          final slipSnapshot = await _db.child('slipPayments')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (slipSnapshot.exists) {
+            final entries = slipSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('slipPayments').child(entryKey).remove();
+              print("✅ Deleted from slipPayments: $entryKey");
+            }
+          }
+          break;
+
+        case 'simplecashbook':
+        // Delete from simplecashbook node
+          final simpleCashbookSnapshot = await _db.child('simplecashbook')
+              .orderByChild('paymentKey')
+              .equalTo(paymentKey)
+              .get();
+
+          if (simpleCashbookSnapshot.exists) {
+            final entries = simpleCashbookSnapshot.value as Map<dynamic, dynamic>;
+            for (var entryKey in entries.keys) {
+              await _db.child('simplecashbook').child(entryKey).remove();
+              print("✅ Deleted from simplecashbook: $entryKey");
+            }
+          }
+          break;
+
+        default:
+          print("⚠️ Unknown payment method: $method");
+      }
+    } catch (e) {
+      print('❌ Error deleting from external nodes for method $method: $e');
+      // Re-throw to handle in the main function
+      throw Exception('Failed to delete from external nodes: $e');
+    }
+  }
+
+  Future<void> _removePaymentFromLedger(String customerId, String filledNumber, double paymentAmount) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+
+      // Find the ledger entry for this payment
+      final paymentLedgerSnapshot = await customerLedgerRef
+          .orderByChild('filledNumber')
+          .equalTo(filledNumber)
+          .get();
+
+      if (paymentLedgerSnapshot.exists) {
+        final paymentLedgerData = paymentLedgerSnapshot.value as Map<dynamic, dynamic>;
+
+        for (var entryKey in paymentLedgerData.keys) {
+          final entry = Map<String, dynamic>.from(paymentLedgerData[entryKey]);
+
+          // Look for the debit entry that matches this payment amount
+          if (_parseToDouble(entry['debitAmount']) == paymentAmount) {
+            await customerLedgerRef.child(entryKey).remove();
+            print("✅ Removed payment from ledger: $entryKey");
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Error removing payment from ledger: $e');
+      throw Exception('Failed to remove payment from ledger: $e');
+    }
+  }
+
+  Future<void> _recalculateAllLedgerBalances(String customerId) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double runningBalance = 0.0;
+
+          // Recalculate all balances in chronological order
+          for (var entry in entries) {
+            final entryKey = entry.key as String;
+            final entryData = Map<String, dynamic>.from(entry.value as Map<dynamic, dynamic>);
+
+            final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+            final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+            runningBalance += entryCredit - entryDebit;
+
+            // Update the entry with the new running balance
+            await customerLedgerRef.child(entryKey).update({
+              'remainingBalance': runningBalance,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print('Error recalculating all ledger balances: $e');
+    }
+  }
+
+  Future<void> _updateCustomerLedger(
+      String customerId, {
+        required double creditAmount,
+        required double debitAmount,
+        required double remainingBalance,
+        required String filledNumber,
+        required String referenceNumber,
+        required String transactionDate, // Use this for date-based calculations
+        String? paymentMethod,
+        String? bankName,
+        String? description, // ← ADD THIS PARAMETER
+      })
+  async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+
+      // Fetch all ledger entries to calculate the correct balance
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      double newRemainingBalance = 0.0;
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          // Calculate balance up to the transaction date
+          double runningBalance = 0.0;
+          final currentTransactionDate = DateTime.parse(transactionDate);
+
+          for (var entry in entries) {
+            final entryData = entry.value as Map<dynamic, dynamic>;
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Only include entries before or equal to our transaction date
+            if (entryDate.isBefore(currentTransactionDate) ||
+                entryDate.isAtSameMomentAs(currentTransactionDate)) {
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+            }
+          }
+          // Add the current transaction to the running balance
+          newRemainingBalance = runningBalance + creditAmount - debitAmount;
+        }
+      } else {
+        // No existing entries, start fresh
+        newRemainingBalance = creditAmount - debitAmount;
+      }
+
+      // Ledger data to be saved
+      final ledgerData = {
+        'referenceNumber': referenceNumber,
+        'filledNumber': filledNumber,
+        'creditAmount': creditAmount,
+        'debitAmount': debitAmount,
+        'remainingBalance': newRemainingBalance,
+        'createdAt': DateTime.now().toIso8601String(), // When the record was created
+        'transactionDate': transactionDate, // The actual date of the transaction
+        if (paymentMethod != null) 'paymentMethod': paymentMethod,
+        if (bankName != null) 'bankName': bankName,
+        if (description != null && description.isNotEmpty) 'description': description, // ← ADD THIS
+
+      };
+
+      await customerLedgerRef.push().set(ledgerData);
+
+      // Update all subsequent entries to maintain correct balances
+      await _recalculateSubsequentBalances(customerId, transactionDate);
+
+    } catch (e) {
+      throw Exception('Failed to update customer ledger: $e');
+    }
+  }
+
+  Future<void> _recalculateSubsequentBalances(String customerId, String insertedDate) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateA.compareTo(dateB);
+            });
+
+          double runningBalance = 0.0;
+          final insertedDateTime = DateTime.parse(insertedDate);
+          bool foundInserted = false;
+
+          // Recalculate all balances in chronological order
+          for (var entry in entries) {
+            final entryKey = entry.key as String;
+            final entryData = Map<String, dynamic>.from(entry.value as Map<dynamic, dynamic>);
+            final entryDate = DateTime.parse(entryData['transactionDate'] as String);
+
+            // Check if we've reached the inserted transaction
+            if (entryDate.isAtSameMomentAs(insertedDateTime)) {
+              foundInserted = true;
+            }
+
+            if (foundInserted) {
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+
+              // Update the entry with the new running balance
+              await customerLedgerRef.child(entryKey).update({
+                'remainingBalance': runningBalance,
+              });
+            } else {
+              // For entries before the inserted one, just accumulate the balance
+              final entryCredit = (entryData['creditAmount'] as num?)?.toDouble() ?? 0.0;
+              final entryDebit = (entryData['debitAmount'] as num?)?.toDouble() ?? 0.0;
+
+              runningBalance += entryCredit - entryDebit;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error recalculating subsequent balances: $e');
+    }
+  }
+
+  List<Map<String, dynamic>> getFilledByPaymentMethod(String paymentMethod) {
+    return _filled.where((filled) {
+      final method = filled['paymentMethod'] ?? '';
+      return method.toLowerCase() == paymentMethod.toLowerCase();
+    }).toList();
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return 0.0;
+      }
+    }
+    return 0.0;
+  }
+
+  Future<void> payFilledWithSeparateMethod(
+      BuildContext context,
+      String filledId,
+      double paymentAmount,
+      String paymentMethod, {
+        String? description,
+        Uint8List? imageBytes,
+        required DateTime paymentDate,
+        required String createdAt,
+        String? bankId,
+        String? bankName,
+        String? chequeNumber,
+        DateTime? chequeDate,
+        String? chequeBankId,
+        String? chequeBankName,
+      }) async {
+    String? imageBase64;
+
+    try {
+      if (imageBytes != null) {
+        imageBase64 = _imageToBase64(imageBytes);
+      }
+
+      // FIX: Ensure all required fields are not null with proper fallbacks
+      if (filledId.isEmpty) {
+        throw Exception("Filled ID cannot be empty");
+      }
+
+      // Fetch the current filled
+      final filledSnapshot = await _db.child('filled').child(filledId).get();
+      if (!filledSnapshot.exists) {
+        throw Exception("Filled not found.");
+      }
+
+      final filled = Map<String, dynamic>.from(filledSnapshot.value as Map);
+      final customerId = filled['customerId']?.toString() ?? '';
+      final filledNumber = filled['filledNumber']?.toString() ?? '';
+      final referenceNumber = filled['referenceNumber']?.toString() ?? '';
+
+      // Generate timestamp-based ID
+      final String timestampId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      // Prepare payment data with null safety
+      final paymentData = {
+        'amount': paymentAmount,
+        'date': paymentDate.toIso8601String(),
+        'paymentMethod': paymentMethod,
+        'description': description ?? '',
+        if (imageBase64 != null) 'image': imageBase64,
+        if (paymentMethod == 'Bank' && bankId != null) 'bankId': bankId,
+        if (paymentMethod == 'Bank' && bankName != null) 'bankName': bankName,
+        if (paymentMethod == 'Check' && chequeNumber != null && chequeNumber.isNotEmpty) 'chequeNumber': chequeNumber,
+        if (paymentMethod == 'Check' && chequeDate != null) 'chequeDate': chequeDate.toIso8601String(),
+        if (paymentMethod == 'Check' && chequeBankId != null) 'chequeBankId': chequeBankId,
+        if (paymentMethod == 'Check' && chequeBankName != null) 'chequeBankName': chequeBankName,
+      };
+
+      // For SimpleCashbook method, only save to external node, not to filled payment node
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        // Determine the payment node based on payment method
+        String paymentNode;
+        switch (paymentMethod.toLowerCase()) {
+          case 'cash':
+            paymentNode = 'cashPayments';
+            break;
+          case 'online':
+            paymentNode = 'onlinePayments';
+            break;
+          case 'check':
+            paymentNode = 'checkPayments';
+            break;
+          case 'bank':
+            paymentNode = 'bankPayments';
+            break;
+          case 'slip':
+            paymentNode = 'slipPayments';
+            break;
+          default:
+            paymentNode = 'otherPayments';
+        }
+
+        // Save payment under respective method-based node (except for SimpleCashbook)
+        final paymentRef = _db
+            .child('filled')
+            .child(filledId)
+            .child(paymentNode)
+            .child(timestampId);
+        await paymentRef.set(paymentData);
+      }
+
+      // Create corresponding entry in the respective payment ledger
+      switch (paymentMethod.toLowerCase()) {
+        case 'cash':
+          await _db.child('cashbook').child(timestampId).set({
+            'id': timestampId,
+            'filledId': filledId,
+            'filledNumber': filledNumber,
+            'customerId': customerId,
+            'customerName': filled['customerName']?.toString() ?? '',
+            'amount': paymentAmount,
+            'description': description ?? 'Filled Payment',
+            'dateTime': paymentDate.toIso8601String(),
+            'paymentKey': timestampId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'type': 'cash_in',
+          });
+          break;
+
+        case 'online':
+          await _db.child('onlinePayments').child(timestampId).set({
+            'id': timestampId,
+            'filledId': filledId,
+            'filledNumber': filledNumber,
+            'customerId': customerId,
+            'customerName': filled['customerName']?.toString() ?? '',
+            'amount': paymentAmount,
+            'description': description ?? 'Filled Payment',
+            'dateTime': paymentDate.toIso8601String(),
+            'paymentKey': timestampId,
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+          break;
+
+        case 'check':
+          await _db.child('cheques').child(timestampId).set({
+            'id': timestampId,
+            'filledId': filledId,
+            'filledNumber': filledNumber,
+            'customerId': customerId,
+            'customerName': filled['customerName']?.toString() ?? '',
+            'amount': paymentAmount,
+            'description': description ?? 'Filled Payment',
+            'dateTime': paymentDate.toIso8601String(),
+            'paymentKey': timestampId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'chequeNumber': chequeNumber ?? '',
+            'chequeDate': chequeDate?.toIso8601String() ?? '',
+            'bankId': chequeBankId ?? '',
+            'bankName': chequeBankName ?? '',
+            'status': 'pending',
+          });
+          break;
+
+        case 'bank':
+          await _db.child('bankTransactions').child(timestampId).set({
+            'id': timestampId,
+            'filledId': filledId,
+            'filledNumber': filledNumber,
+            'customerId': customerId,
+            'customerName': filled['customerName']?.toString() ?? '',
+            'amount': paymentAmount,
+            'description': description ?? 'Filled Payment',
+            'dateTime': paymentDate.toIso8601String(),
+            'paymentKey': timestampId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'bankId': bankId ?? '',
+            'bankName': bankName ?? '',
+            'type': 'cash_in',
+          });
+          break;
+
+        case 'slip':
+          await _db.child('slipPayments').child(timestampId).set({
+            'id': timestampId,
+            'filledId': filledId,
+            'filledNumber': filledNumber,
+            'customerId': customerId,
+            'customerName': filled['customerName']?.toString() ?? '',
+            'amount': paymentAmount,
+            'description': description ?? 'Filled Payment',
+            'dateTime': paymentDate.toIso8601String(),
+            'paymentKey': timestampId,
+            'createdAt': DateTime.now().toIso8601String(),
+            if (imageBase64 != null) 'image': imageBase64,
+          });
+          break;
+
+        case 'simplecashbook':
+          await _db.child('simplecashbook').child(timestampId).set({
+            'id': timestampId,
+            'filledId': filledId,
+            'filledNumber': filledNumber,
+            'customerId': customerId,
+            'customerName': filled['customerName']?.toString() ?? '',
+            'amount': paymentAmount,
+            'description': description ?? 'Filled Payment',
+            'dateTime': paymentDate.toIso8601String(),
+            'paymentKey': timestampId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'type': 'cash_in',
+          });
+          break;
+      }
+
+      // For SimpleCashbook, skip updating filled amounts and ledger
+      if (paymentMethod.toLowerCase() != 'simplecashbook') {
+        // Update filled with new paid amount
+        final currentDebit = _parseToDouble(filled['debitAmount']);
+        final updatedDebit = currentDebit + paymentAmount;
+
+        await _db.child('filled').child(filledId).update({
+          'debitAmount': updatedDebit,
+          if (paymentMethod == 'Cash')
+            'cashPaidAmount': (_parseToDouble(filled['cashPaidAmount']) + paymentAmount),
+          if (paymentMethod == 'Online')
+            'onlinePaidAmount': (_parseToDouble(filled['onlinePaidAmount']) + paymentAmount),
+          if (paymentMethod == 'Check')
+            'checkPaidAmount': (_parseToDouble(filled['checkPaidAmount'] ?? 0.0) + paymentAmount),
+          if (paymentMethod == 'Bank')
+            'bankPaidAmount': (_parseToDouble(filled['bankPaidAmount'] ?? 0.0) + paymentAmount),
+          if (paymentMethod == 'Slip')
+            'slipPaidAmount': (_parseToDouble(filled['slipPaidAmount'] ?? 0.0) + paymentAmount),
+        });
+
+        // Update customer ledger
+        await _updateCustomerLedger(
+          customerId,
+          creditAmount: 0.0,
+          debitAmount: paymentAmount,
+          remainingBalance: _parseToDouble(filled['grandTotal']) - updatedDebit,
+          filledNumber: filledNumber,
+          referenceNumber: referenceNumber,
+          transactionDate: paymentDate.toIso8601String(),
+          paymentMethod: paymentMethod,
+          description: description,
+          bankName: paymentMethod == 'Bank'
+              ? bankName
+              : paymentMethod == 'Check'
+              ? chequeBankName
+              : null,
+        );
+      }
+
+      // For cheque payments, log cheque in bank
+      if (paymentMethod == 'Check' && chequeBankId != null && chequeNumber != null && chequeNumber.isNotEmpty) {
+        final bankChequesRef = _db.child('banks/$chequeBankId/cheques');
+        final chequeData = {
+          'filledId': filledId,
+          'filledNumber': filledNumber,
+          'customerId': customerId,
+          'customerName': filled['customerName']?.toString() ?? '',
+          'amount': paymentAmount,
+          'chequeNumber': chequeNumber,
+          'chequeDate': chequeDate?.toIso8601String() ?? '',
+          'status': 'pending',
+          'createdAt': createdAt,
+        };
+        await bankChequesRef.push().set(chequeData);
+      }
+
+      // For bank payments, log transaction and update balance
+      if (paymentMethod == 'Bank' && bankId != null) {
+        final bankTransactionsRef = _db.child('banks/$bankId/transactions');
+        await bankTransactionsRef.push().set({
+          'amount': paymentAmount,
+          'description': description ?? 'Filled Payment: ${filled['filledNumber']}',
+          'type': 'cash_in',
+          'timestamp': paymentDate.millisecondsSinceEpoch,
+          'filledId': filledId,
+          'bankName': bankName ?? '',
+        });
+
+        final bankBalanceRef = _db.child('banks/$bankId/balance');
+        final currentBalance = (await bankBalanceRef.get()).value as num? ?? 0.0;
+        await bankBalanceRef.set(currentBalance + paymentAmount);
+      }
+
+      // Refresh filled list
+      await fetchFilled();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Payment of Rs. $paymentAmount recorded successfully as $paymentMethod.',
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save payment: ${e.toString()}')),
+      );
+      throw Exception('Failed to save payment: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFilledPayments(String filledId) async {
+    try {
+      List<Map<String, dynamic>> payments = [];
+      final filledRef = _db.child('filled').child(filledId);
+
+      Future<void> fetchPayments(String method) async {
+        DataSnapshot snapshot = await filledRef.child('${method}Payments').get();
+        if (snapshot.exists) {
+          Map<dynamic, dynamic> methodPayments = snapshot.value as Map<dynamic, dynamic>;
+          methodPayments.forEach((key, value) {
+            final paymentData = Map<String, dynamic>.from(value);
+            // Convert 'amount' to double explicitly
+            paymentData['amount'] = (paymentData['amount'] as num).toDouble();
+            // Handle Base64 image if present
+            if (paymentData['image'] != null) {
+              paymentData['imageBytes'] = _base64ToImage(paymentData['image']);
+            }
+            payments.add({
+              'key': key, // Add the payment key to identify it later
+              'method': method,
+              ...paymentData,
+              'date': DateTime.parse(value['date']),
+              // Include bank name for bank and cheque payments
+              'bankName': method == 'Bank' ? value['bankName'] :
+              method == 'Check' ? value['chequeBankName'] : null,
+            });
+          });
+        }
+      }
+
+      // Fetch all payment types
+      await fetchPayments('cash');
+      await fetchPayments('online');
+      await fetchPayments('check');
+      await fetchPayments('bank');
+      await fetchPayments('slip');
+      // await fetchPayments('simplecashbook');
+
+      // Sort payments by date (newest first)
+      payments.sort((a, b) => b['date'].compareTo(a['date']));
+      return payments;
+    } catch (e) {
+      throw Exception('Failed to fetch payments: $e');
+    }
+  }
+
+  List<Map<String, dynamic>> getTodaysFilled() {
+    final today = DateTime.now();
+    // final startOfDay = DateTime(today.year, today.month, today.day - 1); // Include yesterday
+    final startOfDay = DateTime(today.year, today.month, today.day ); // Include yesterdays
+
+    final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+    return _filled.where((filled) {
+      final filledDate = DateTime.tryParse(filled['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(int.parse(filled['createdAt']));
+      return filledDate.isAfter(startOfDay) && filledDate.isBefore(endOfDay);
+    }).toList();
+  }
+
+  double getTotalAmount(List<Map<String, dynamic>> filled) {
+    return filled.fold(0.0, (sum, filled) => sum + (filled['grandTotal'] ?? 0.0));
+  }
+
+  double getTotalPaidAmount(List<Map<String, dynamic>> filled) {
+    return filled.fold(0.0, (sum, filled) => sum + (filled['debitAmount'] ?? 0.0));
+  }
+
+  Future<void> addCashBookEntry({
+    required String description,
+    required double amount,
+    required DateTime dateTime,
+    required String type,
+  })
+  async {
+    try {
+      final entry = CashbookEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        description: description,
+        amount: amount,
+        dateTime: dateTime,
+        type: type,
+      );
+
+      await FirebaseDatabase.instance
+          .ref()
+          .child('cashbook')
+          .child(entry.id!)
+          .set(entry.toJson());
+    } catch (e) {
+      print("Error adding cash book entry: $e");
+      rethrow;
+    }
+  }
+
+  bool _filledMatchesSearch(Map<dynamic, dynamic> filled, String searchQuery) {
+    if (searchQuery.isEmpty) return true;
+
+    final filledNumber = (filled['filledNumber'] ?? '').toString().toLowerCase();
+    final referenceNumber = (filled['referenceNumber'] ?? '').toString().toLowerCase();
+    final customerName = (filled['customerName'] ?? '').toString().toLowerCase();
+
+    return filledNumber.contains(searchQuery) ||
+        customerName.contains(searchQuery) ||
+        referenceNumber.contains(searchQuery);
+  }
+
+  void _processAndFilterFilledData(Map<dynamic, dynamic> values, String searchQuery) {
+    List<MapEntry<dynamic, dynamic>> sortedEntries = values.entries
+        .where((entry) => entry.value != null)
+        .toList()
+      ..sort((a, b) {
+        dynamic dateA = a.value['createdAt'];
+        dynamic dateB = b.value['createdAt'];
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return _parseDateTime(dateB).compareTo(_parseDateTime(dateA));
+      });
+
+    for (var entry in sortedEntries) {
+      final filled = entry.value;
+      final matchesSearch = _filledMatchesSearch(filled, searchQuery);
+      if (matchesSearch) {
+        _processFilledEntry(entry.key.toString(), filled);
+      }
+    }
+  }
+
+  Future<void> fetchFilledWithFilters({
+    String searchQuery = '',
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+  })
+  async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      Query query = _db.child('Filled').orderByChild('createdAt');
+
+      // Apply date filter if provided
+      if (startDate != null && endDate != null) {
+        query = query.startAt(startDate.toIso8601String()).endAt(endDate.toIso8601String());
+      }
+
+      final snapshot = await query.get();
+
+      if (snapshot.exists) {
+        _filled.clear();
+
+        if (snapshot.value is Map) {
+          final Map<dynamic, dynamic> values = snapshot.value as Map<dynamic, dynamic>;
+          _processAndFilterFilledData(values, searchQuery);
+        } else if (snapshot.value is List) {
+          final List<dynamic> values = snapshot.value as List<dynamic>;
+          final Map<dynamic, dynamic> valuesMap = {};
+          for (int i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              valuesMap[i.toString()] = values[i];
+            }
+          }
+          _processAndFilterFilledData(valuesMap, searchQuery);
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching filtered filled: ${e.toString()}');
+      throw Exception('Failed to fetch filtered filled: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<double> getCustomerRemainingBalance(String customerId) async {
+    try {
+      final customerLedgerRef = _db.child('filledledger').child(customerId);
+      final snapshot = await customerLedgerRef.orderByChild('transactionDate').get();
+
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic>? ledgerData = snapshot.value as Map<dynamic, dynamic>?;
+
+        if (ledgerData != null) {
+          // Convert to list and sort by transactionDate (newest first)
+          final entries = ledgerData.entries.toList()
+            ..sort((a, b) {
+              final dateA = DateTime.parse(a.value['transactionDate'] as String);
+              final dateB = DateTime.parse(b.value['transactionDate'] as String);
+              return dateB.compareTo(dateA); // Newest first
+            });
+
+          // Return the most recent balance (first entry after sorting)
+          if (entries.isNotEmpty) {
+            final latestEntry = entries.first.value as Map<dynamic, dynamic>;
+            return (latestEntry['remainingBalance'] as num?)?.toDouble() ?? 0.0;
+          }
+        }
+      }
+      return 0.0;
+    } catch (e) {
+      print("Error fetching remaining balance: $e");
+      return 0.0;
+    }
+  }
+}
+

@@ -9,6 +9,7 @@ import 'Provider/expenseprovider.dart';
 import 'Provider/filled provider.dart';
 import 'Provider/invoice provider.dart';
 import 'Provider/lanprovider.dart';
+import 'Provider/newFilledProvider.dart';
 import 'Provider/purchaseprovider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
@@ -56,7 +57,7 @@ class _RoznamchapageState extends State<Roznamchapage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _getCashbookRemaining();
       Provider.of<InvoiceProvider>(context, listen: false).fetchInvoices();
-      Provider.of<FilledProvider>(context, listen: false).fetchFilled();
+      Provider.of<NewFilledProvider>(context, listen: false).fetchFilled();
       Provider.of<ExpenseProvider>(context, listen: false).fetchExpenses();
       Provider.of<BankProvider>(context, listen: false).fetchBanks();
       Provider.of<PurchaseProvider>(context, listen: false).fetchTodaysPurchases();
@@ -70,7 +71,7 @@ class _RoznamchapageState extends State<Roznamchapage> {
     final totalAmountinvoice = invoiceProvider.getTotalAmount(todaysInvoices);
     final totalPaidAmountinvoice = invoiceProvider.getTotalPaidAmount(todaysInvoices);
 
-    final filledProvider = Provider.of<FilledProvider>(context);
+    final filledProvider = Provider.of<NewFilledProvider>(context);
     final todaysFilled = filledProvider.getTodaysFilled();
     final totalAmountfilled = filledProvider.getTotalAmount(todaysFilled);
     final totalPaidAmountfilled = filledProvider.getTotalPaidAmount(todaysFilled);

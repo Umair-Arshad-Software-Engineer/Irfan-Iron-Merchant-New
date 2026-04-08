@@ -32,9 +32,36 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
   DateTime? _selectedTransactionDateTime;
   List<MapEntry<dynamic, dynamic>> displayTransactions = [];
 
+  // Helper method to safely get timestamp
+  int _getTimestamp(dynamic timestampValue) {
+    try {
+      if (timestampValue == null) return 0;
+      if (timestampValue is int) return timestampValue;
+      if (timestampValue is double) return timestampValue.toInt();
+      if (timestampValue is String) return int.tryParse(timestampValue) ?? 0;
+      return 0;
+    } catch (e) {
+      print('Error parsing timestamp: $e');
+      return 0;
+    }
+  }
+
+  // Helper method to safely get amount
+  double _getAmount(dynamic amountValue) {
+    try {
+      if (amountValue == null) return 0.0;
+      if (amountValue is double) return amountValue;
+      if (amountValue is int) return amountValue.toDouble();
+      if (amountValue is String) return double.tryParse(amountValue) ?? 0.0;
+      return 0.0;
+    } catch (e) {
+      print('Error parsing amount: $e');
+      return 0.0;
+    }
+  }
 
   Future<pw.MemoryImage> _createTextImage(String text) async {
-    const double scaleFactor = 2.0; // Higher scale for better quality
+    const double scaleFactor = 2.0;
     final String displayText = text.isEmpty ? "N/A" : text;
 
     final textStyle = const TextStyle(
@@ -51,8 +78,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
 
     textPainter.layout();
 
-    // Calculate image dimensions with padding
-    final width = textPainter.width + (10 * scaleFactor); // Add padding
+    final width = textPainter.width + (10 * scaleFactor);
     final height = textPainter.height + (4 * scaleFactor);
 
     final recorder = ui.PictureRecorder();
@@ -61,14 +87,12 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
       Rect.fromPoints(Offset.zero, Offset(width, height)),
     );
 
-    // Draw background
     final paint = Paint()..color = Colors.white;
     canvas.drawRect(Rect.fromLTRB(0, 0, width, height), paint);
 
-    // Paint text centered
     textPainter.paint(
       canvas,
-      Offset(5 * scaleFactor, 2 * scaleFactor), // Adjust padding
+      Offset(5 * scaleFactor, 2 * scaleFactor),
     );
 
     final picture = recorder.endRecording();
@@ -91,19 +115,61 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     }
   }
 
-  void _processTransaction(double amount) {
-    final transaction = {
-      'amount': amount,
-      'description': _descriptionController.text,
-      'type': _isCashIn ? 'cash_in' : 'cash_out',
-      'timestamp': _selectedTransactionDateTime?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch,
-      // 'timestamp': DateTime.now().millisecondsSinceEpoch,
-    };
+  Future<void> _updateBankBalance() async {
+    try {
+      final snapshot = await _dbRef.child('banks/${widget.bankId}/transactions').get();
 
-    _dbRef.child('banks/${widget.bankId}/transactions').push().set(transaction).then((_) {
+      if (!snapshot.exists) {
+        await _dbRef.child('banks/${widget.bankId}/balance').set(0);
+        return;
+      }
+
+      final transactions = snapshot.value as Map<dynamic, dynamic>;
+      double totalCashIn = 0;
+      double totalCashOut = 0;
+
+      for (var entry in transactions.entries) {
+        double amount = _getAmount(entry.value['amount']);
+        String type = entry.value['type']?.toString() ?? '';
+
+        if (type == 'cash_in' || type == 'initial_deposit') {
+          totalCashIn += amount;
+        } else if (type == 'cash_out') {
+          totalCashOut += amount;
+        }
+      }
+
+      double balance = totalCashIn - totalCashOut;
+      await _dbRef.child('banks/${widget.bankId}/balance').set(balance);
+    } catch (e) {
+      print('Error updating bank balance: $e');
+    }
+  }
+
+  void _processTransaction(double amount) async {
+    try {
+      final transaction = {
+        'amount': amount,
+        'description': _descriptionController.text,
+        'type': _isCashIn ? 'cash_in' : 'cash_out',
+        'timestamp': (_selectedTransactionDateTime?.millisecondsSinceEpoch ??
+            DateTime.now().millisecondsSinceEpoch),
+      };
+
+      await _dbRef.child('banks/${widget.bankId}/transactions').push().set(transaction);
+      await _updateBankBalance();
+
       _amountController.clear();
       _descriptionController.clear();
-    });
+      setState(() {
+        _selectedTransactionDateTime = null;
+      });
+    } catch (e) {
+      print('Error processing transaction: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding transaction: ${e.toString()}')),
+      );
+    }
   }
 
   void _showWarningDialog(double amount) {
@@ -131,8 +197,8 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
   }
 
   void _editTransaction(String transactionKey, Map transactionData) {
-    _amountController.text = transactionData['amount'].toString();
-    _descriptionController.text = transactionData['description'];
+    _amountController.text = _getAmount(transactionData['amount']).toString();
+    _descriptionController.text = transactionData['description']?.toString() ?? '';
     bool isInitialDeposit = transactionData['type'] == 'initial_deposit';
 
     showDialog(
@@ -160,16 +226,20 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              if (_amountController.text.isNotEmpty && _descriptionController.text.isNotEmpty) {
+            onPressed: () async {
+              if (_amountController.text.isNotEmpty &&
+                  _descriptionController.text.isNotEmpty) {
                 final updatedTransaction = {
                   'amount': double.parse(_amountController.text),
                   'description': _descriptionController.text,
                   'type': transactionData['type'],
-                  'timestamp': transactionData['timestamp'],
+                  'timestamp': _getTimestamp(transactionData['timestamp']),
                 };
 
-                _dbRef.child('banks/${widget.bankId}/transactions/$transactionKey').set(updatedTransaction);
+                await _dbRef.child('banks/${widget.bankId}/transactions/$transactionKey')
+                    .set(updatedTransaction);
+
+                await _updateBankBalance();
                 Navigator.pop(context);
               }
             },
@@ -179,7 +249,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
       ),
     );
   }
-// Add these new methods
+
   Future<void> _selectDateRange(BuildContext context) async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -205,7 +275,6 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     });
   }
 
-  // Save PDF to device
   Future<String?> _savePdf(Uint8List pdfBytes) async {
     try {
       final directory = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
@@ -220,7 +289,6 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     }
   }
 
-  // Share PDF via other apps
   Future<void> _sharePdf(Uint8List pdfBytes) async {
     try {
       final tempDir = await getTemporaryDirectory();
@@ -238,12 +306,10 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
     }
   }
 
-  // Generate PDF
   Future<Uint8List> _generatePdf(Map<dynamic, dynamic> transactions, double totalCashIn, double totalCashOut) async {
     final pdf = pw.Document();
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
-    // Separate initial deposit and other transactions
     MapEntry<dynamic, dynamic>? initialDeposit;
     final otherTransactions = <MapEntry<dynamic, dynamic>>[];
 
@@ -254,40 +320,47 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
         otherTransactions.add(entry);
       }
     });
-// Load the image asset for the logo
+
     final ByteData bytes = await rootBundle.load('assets/images/logo.png');
     final buffer = bytes.buffer.asUint8List();
     final image = pw.MemoryImage(buffer);
 
-    // Load the footer logo if different
     final ByteData footerBytes = await rootBundle.load('assets/images/devlogo.png');
     final footerBuffer = footerBytes.buffer.asUint8List();
     final footerLogo = pw.MemoryImage(footerBuffer);
 
-
+    displayTransactions.clear();
     if (initialDeposit != null) {
       displayTransactions.add(initialDeposit!);
     }
     displayTransactions.addAll(otherTransactions);
 
-// Pre-generate images for descriptions
     List<pw.MemoryImage> descriptionImages = [];
     for (var entry in displayTransactions) {
       final description = entry.value['description']?.toString() ?? '';
-      final image = await _createTextImage(description);
-      descriptionImages.add(image);
+      final img = await _createTextImage(description);
+      descriptionImages.add(img);
     }
 
-    // Sort transactions by timestamp (newest first)
-    otherTransactions.sort((a, b) => b.value['timestamp'].compareTo(a.value['timestamp']));
+    // FIXED: Safe sorting with error handling
+    otherTransactions.sort((a, b) {
+      try {
+        final timestampA = _getTimestamp(a.value['timestamp']);
+        final timestampB = _getTimestamp(b.value['timestamp']);
+        return timestampB.compareTo(timestampA);
+      } catch (e) {
+        print('Error sorting transactions in PDF: $e');
+        return 0;
+      }
+    });
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.copyWith(
-          marginLeft: 10,
-          marginRight: 10,
-          marginBottom: 15,
-          marginTop: 15
+            marginLeft: 10,
+            marginRight: 10,
+            marginBottom: 15,
+            marginTop: 15
         ),
         build: (pw.Context context) {
           return [
@@ -305,7 +378,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Image(image, width: 70, height: 70,dpi: 1000), // Logo at the tops
+                      pw.Image(image, width: 70, height: 70,dpi: 1000),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
@@ -325,12 +398,11 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
               columnWidths: {
                 0: const pw.FlexColumnWidth(2),
                 1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(3), // Wider for images
+                2: const pw.FlexColumnWidth(3),
                 3: const pw.FlexColumnWidth(2),
               },
               border: pw.TableBorder.all(color: PdfColors.grey300),
               children: [
-                // Header Row
                 pw.TableRow(
                   decoration: pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
@@ -352,7 +424,6 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                     ),
                   ],
                 ),
-                // Data Rows
                 for (int i = 0; i < displayTransactions.length; i++)
                   pw.TableRow(
                     children: [
@@ -361,12 +432,18 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                         child: pw.Text(
                           displayTransactions[i].value['type'] == 'initial_deposit'
                               ? 'INITIAL DEPOSIT'
-                              : (displayTransactions[i].value['type'] == 'cash_in' ? 'Cash In' : 'Cash Out'),
+                              : displayTransactions[i].value['type'] == 'cash_in'
+                              ? (displayTransactions[i].value['transfer_type'] == 'bank_transfer_in'
+                              ? 'BANK TRANSFER IN'
+                              : 'Cash In')
+                              : (displayTransactions[i].value['transfer_type'] == 'bank_transfer_out'
+                              ? 'BANK TRANSFER OUT'
+                              : 'Cash Out'),
                         ),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text('${displayTransactions[i].value['amount']}'),
+                        child: pw.Text('${_getAmount(displayTransactions[i].value['amount'])}'),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(4),
@@ -375,9 +452,8 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(4),
                         child: pw.Text(dateFormat.format(
-                          DateTime.fromMillisecondsSinceEpoch(displayTransactions[i].value['timestamp']).toLocal(),
-                        )
-                        ),
+                          DateTime.fromMillisecondsSinceEpoch(_getTimestamp(displayTransactions[i].value['timestamp'])).toLocal(),
+                        )),
                       ),
                     ],
                   ),
@@ -388,8 +464,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.Text('Total Cash In:   $totalCashIn Rs',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold,fontSize: 16,
-                    )),
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold,fontSize: 16)),
                 pw.Text('Total Cash Out: $totalCashOut Rs',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold,fontSize: 16)),
                 pw.Divider(),
@@ -404,10 +479,10 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
           ];
         },
         footer: (pw.Context context) => pw.Container(
-          padding: const pw.EdgeInsets.only(top: 4), // Reduced top padding
+          padding: const pw.EdgeInsets.only(top: 4),
           child: pw.Column(
             children: [
-              pw.Divider(thickness: 1, color: PdfColors.grey), // Divider above footer
+              pw.Divider(thickness: 1, color: PdfColors.grey),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -416,7 +491,7 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       pw.Text('Dev Valley Software House',
-                          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)), // Slightly reduced font size
+                          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                       pw.Text('Contact: 0303-4889663',
                           style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     ],
@@ -426,14 +501,9 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
             ],
           ),
         ),
-
-
       ),
     );
     return pdf.save();
-    // await Printing.layoutPdf(
-    //   onLayout: (PdfPageFormat format) async => pdf.save(),
-    // );
   }
 
   void _deleteTransaction(String transactionKey) {
@@ -448,13 +518,13 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              _dbRef.child('banks/${widget.bankId}/transactions/$transactionKey').remove().then((_) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Transaction deleted successfully')),
-                );
-              });
+            onPressed: () async {
+              await _dbRef.child('banks/${widget.bankId}/transactions/$transactionKey').remove();
+              await _updateBankBalance();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Transaction deleted successfully')),
+              );
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
@@ -467,31 +537,36 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.bankName} Transactions',style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold),),
+        title: Text('${widget.bankName} Transactions',style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold)),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) async {
               final snapshot = await _dbRef.child('banks/${widget.bankId}/transactions').get();
               if (snapshot.exists) {
                 var transactions = snapshot.value as Map<dynamic, dynamic>;
-                // Apply date filter
+
                 if (_startDate != null || _endDate != null) {
                   transactions = Map.fromEntries(transactions.entries.where((entry) {
-                    final timestamp = entry.value['timestamp'] as int;
+                    final timestamp = _getTimestamp(entry.value['timestamp']);
+                    if (timestamp == 0) return false;
                     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
                     final isAfterStart = _startDate == null || date.isAfter(_startDate!);
                     final isBeforeEnd = _endDate == null || date.isBefore(_endDate!.add(Duration(days: 1)));
                     return isAfterStart && isBeforeEnd;
                   }));
                 }
+
                 double totalCashIn = 0;
                 double totalCashOut = 0;
 
                 for (var entry in transactions.entries) {
-                  if (entry.value['type'] == 'cash_in' || entry.value['type'] == 'initial_deposit') {
-                    totalCashIn += (entry.value['amount'] as num).toDouble();
-                  } else if (entry.value['type'] == 'cash_out') {
-                    totalCashOut += (entry.value['amount'] as num).toDouble();
+                  String type = entry.value['type']?.toString() ?? '';
+                  double amount = _getAmount(entry.value['amount']);
+
+                  if (type == 'cash_in' || type == 'initial_deposit') {
+                    totalCashIn += amount;
+                  } else if (type == 'cash_out') {
+                    totalCashOut += amount;
                   }
                 }
 
@@ -555,376 +630,411 @@ class _BankTransactionsPageState extends State<BankTransactionsPage> {
             return const Center(child: Text('No transactions found'));
           }
 
-          final transactions = (snapshot.data! as DatabaseEvent).snapshot.value as Map<dynamic, dynamic>; // Cast to Map<dynamic, dynamic>
-          final transactionList = transactions.entries.toList();
-          // Filter transactions based on date range
-          if (_startDate != null || _endDate != null) {
-            transactionList.retainWhere((entry) {
-              final timestamp = entry.value['timestamp'] as int;
-              final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-              final isAfterStart = _startDate == null || date.isAfter(_startDate!);
-              final isBeforeEnd = _endDate == null || date.isBefore(_endDate!.add(Duration(days: 1)));
-              return isAfterStart && isBeforeEnd;
+          try {
+            final transactions = (snapshot.data! as DatabaseEvent).snapshot.value as Map<dynamic, dynamic>;
+            final transactionList = transactions.entries.toList();
+
+            // Filter transactions based on date range
+            if (_startDate != null || _endDate != null) {
+              transactionList.retainWhere((entry) {
+                final timestamp = _getTimestamp(entry.value['timestamp']);
+                if (timestamp == 0) return false;
+
+                final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+                final isAfterStart = _startDate == null || date.isAfter(_startDate!);
+                final isBeforeEnd = _endDate == null || date.isBefore(_endDate!.add(Duration(days: 1)));
+                return isAfterStart && isBeforeEnd;
+              });
+            }
+
+            MapEntry<dynamic, dynamic>? initialDeposit;
+            transactionList.removeWhere((entry) {
+              if (entry.value['type'] == 'initial_deposit') {
+                initialDeposit ??= MapEntry(entry.key, entry.value);
+                return true;
+              }
+              return false;
             });
-          }
 
-          MapEntry<dynamic, dynamic>? initialDeposit;
-          transactionList.removeWhere((entry) {
-            if (entry.value['type'] == 'initial_deposit') {
-              initialDeposit ??= MapEntry(entry.key, entry.value);
-              return true;
+            // FIXED: Safe sorting with error handling
+            transactionList.sort((a, b) {
+              try {
+                final timestampA = _getTimestamp(a.value['timestamp']);
+                final timestampB = _getTimestamp(b.value['timestamp']);
+                return timestampB.compareTo(timestampA);
+              } catch (e) {
+                print('Error sorting transactions: $e');
+                return 0;
+              }
+            });
+
+            double totalCashIn = initialDeposit != null ? _getAmount(initialDeposit!.value['amount']) : 0;
+            double totalCashOut = 0;
+
+            for (var transaction in transactionList) {
+              double amount = _getAmount(transaction.value['amount']);
+              String type = transaction.value['type']?.toString() ?? '';
+
+              if (type == 'cash_in') {
+                totalCashIn += amount;
+              } else if (type == 'cash_out') {
+                totalCashOut += amount;
+              }
             }
-            return false;
-          });
 
-          transactionList.sort((a, b) => b.value['timestamp'].compareTo(a.value['timestamp']));
+            remainingBalance = totalCashIn - totalCashOut;
+            _dbRef.child('banks/${widget.bankId}/balance').set(remainingBalance);
 
-          double totalCashIn = initialDeposit != null ? (initialDeposit!.value['amount'] as num).toDouble() : 0;
-          double totalCashOut = 0;
-
-          for (var transaction in transactionList) {
-            double amount = (transaction.value['amount'] as num).toDouble();
-            if (transaction.value['type'] == 'cash_in') {
-              totalCashIn += amount;
-            } else if (transaction.value['type'] == 'cash_out') {
-              totalCashOut += amount;
-            }
-          }
-
-          remainingBalance = totalCashIn - totalCashOut;
-          _dbRef.child('banks/${widget.bankId}/balance').set(remainingBalance);
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                icon: Icon(Icons.date_range, size: 20),
-                                label: Text(
-                                  'Select Date Range',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  foregroundColor: Theme.of(context).primaryColor,
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    side: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 1.2,
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  icon: Icon(Icons.date_range, size: 20),
+                                  label: Text(
+                                    'Select Date Range',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                ),
-                                onPressed: () => _selectDateRange(context),
-                              ),
-                            ),
-                            if (_startDate != null || _endDate != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: IconButton(
-                                  icon: Icon(Icons.clear, color: Colors.red),
-                                  tooltip: 'Clear filter',
-                                  onPressed: _clearDateFilter,
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.red.shade50,
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Theme.of(context).primaryColor,
+                                    backgroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
+                                      side: BorderSide(
+                                        color: Theme.of(context).primaryColor,
+                                        width: 1.2,
+                                      ),
+                                    ),
+                                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                  ),
+                                  onPressed: () => _selectDateRange(context),
+                                ),
+                              ),
+                              if (_startDate != null || _endDate != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: IconButton(
+                                    icon: Icon(Icons.clear, color: Colors.red),
+                                    tooltip: 'Clear filter',
+                                    onPressed: _clearDateFilter,
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.red.shade50,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_startDate != null || _endDate != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0, left: 8.0),
-                        child: Row(
-                          children: [
-                            Icon(Icons.filter_alt, size: 16, color: Colors.grey.shade600),
-                            SizedBox(width: 8),
-                            RichText(
-                              text: TextSpan(
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade800,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                                children: [
-                                  TextSpan(text: 'Showing transactions from \n'),
-                                  TextSpan(
-                                    text: '${_startDate != null ? DateFormat('dd MMM yyyy').format(_startDate!) : 'beginning'}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(context).primaryColor,
-                                    ),
-                                  ),
-                                  TextSpan(text: ' to '),
-                                  TextSpan(
-                                    text: '${_endDate != null ? DateFormat('dd MMM yyyy').format(_endDate!) : 'now'}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(context).primaryColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  children: [
-                    if (initialDeposit != null)
-                      ListTile(
-                        title: Text('Initial Deposit', style: TextStyle(color: Colors.blue)),
-                        subtitle: Text('${initialDeposit!.value['amount']} Rs\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(initialDeposit!.value['timestamp']))}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteTransaction(initialDeposit!.key.toString()),
-                            ),
-                          ],
-                        ),
-                        // onTap: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
-                      ),
-                    for (var transaction in transactionList)
-                      ListTile(
-                        title: Text(
-                          transaction.value['type'] == 'cash_in' ? 'Cash In' : 'Cash Out',
-                          style: TextStyle(
-                            color: transaction.value['type'] == 'cash_in' ? Colors.green : Colors.red,
+                            ],
                           ),
-                        ),//s
-                        subtitle: Text('${transaction.value['amount']} Rs - ${transaction.value['description']} \n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(transaction.value['timestamp']))}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.edit, color: Colors.grey),
-                              onPressed: () => _editTransaction(transaction.key.toString(), transaction.value),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteTransaction(transaction.key.toString()),
-                            ),
-                          ],
-                        ),                        // onTap: () => _editTransaction(transaction.key.toString(), transaction.value),
+                        ),
                       ),
-                  ],
-                ),
-              ),
-              Text('Remaining Balance: $remainingBalance Rs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 2,
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _amountController,
-                            keyboardType: TextInputType.numberWithOptions(decimal: true),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.blueGrey.shade800,
-                            ),
-                            decoration: InputDecoration(
-                              labelText: 'Amount',
-                              floatingLabelStyle: TextStyle(
-                                color: Theme.of(context).primaryColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              prefixIcon: Container(
-                                padding: const EdgeInsets.only(left: 12, right: 6),
-                                child: Text(
-                                  'PKR',
+                      if (_startDate != null || _endDate != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0, left: 8.0),
+                          child: Row(
+                            children: [
+                              Icon(Icons.filter_alt, size: 16, color: Colors.grey.shade600),
+                              SizedBox(width: 8),
+                              RichText(
+                                text: TextSpan(
                                   style: TextStyle(
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade600,
+                                    color: Colors.grey.shade800,
+                                    fontStyle: FontStyle.italic,
                                   ),
+                                  children: [
+                                    TextSpan(text: 'Showing transactions from \n'),
+                                    TextSpan(
+                                      text: '${_startDate != null ? DateFormat('dd MMM yyyy').format(_startDate!) : 'beginning'}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).primaryColor,
+                                      ),
+                                    ),
+                                    TextSpan(text: ' to '),
+                                    TextSpan(
+                                      text: '${_endDate != null ? DateFormat('dd MMM yyyy').format(_endDate!) : 'now'}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).primaryColor,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.grey.shade300),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: Theme.of(context).primaryColor,
-                                  width: 1.5,
-                                ),
-                              ),
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14),
-                              hintText: '0.00',
-                              hintStyle: TextStyle(
-                                  color: Colors.grey.shade400,
-                                  fontWeight: FontWeight.w500),
-                              helperText: 'Enter numeric value',
-                              helperStyle: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade500),
-                            ),
+                            ],
                           ),
                         ),
-                        SizedBox(width: 4),
-                        IconButton(
-                          onPressed: () async {
-                            final DateTime? pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2100),
-                            );
-                            if (pickedDate != null) {
-                              final TimeOfDay? pickedTime = await showTimePicker(
-                                context: context,
-                                initialTime: TimeOfDay.now(),
-                              );
-                              if (pickedTime != null) {
-                                setState(() {
-                                  _selectedTransactionDateTime = DateTime(
-                                    pickedDate.year,
-                                    pickedDate.month,
-                                    pickedDate.day,
-                                    pickedTime.hour,
-                                    pickedTime.minute,
-                                  );
-                                });
-                              }
-                            }
-                          },
-                          icon: Icon(Icons.access_time, color: Colors.blue),
-                          tooltip: _selectedTransactionDateTime == null
-                              ? 'Select Date & Time'
-                              : 'Selected: ${DateFormat('dd/MM/yyyy HH:mm').format(_selectedTransactionDateTime!)}',
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      if (initialDeposit != null)
+                        ListTile(
+                          title: Text('Initial Deposit', style: TextStyle(color: Colors.blue)),
+                          subtitle: Text('${_getAmount(initialDeposit!.value['amount'])} Rs\n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(_getTimestamp(initialDeposit!.value['timestamp'])))}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit, color: Colors.blue),
+                                onPressed: () => _editTransaction(initialDeposit!.key.toString(), initialDeposit!.value),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _deleteTransaction(initialDeposit!.key.toString()),
+                              ),
+                            ],
+                          ),
                         ),
-                        Expanded(
-                          child: TextField(
-                            controller: _descriptionController,
-                            decoration: InputDecoration(
-                              labelText: 'Description',
-                              floatingLabelStyle: TextStyle(
-                                color: Theme.of(context).primaryColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              prefixIcon: Icon(Icons.description_outlined,
-                                  size: 20,
-                                  color: Colors.grey.shade600),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.grey.shade300),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: Theme.of(context).primaryColor,
-                                  width: 1.5,
-                                ),
-                              ),
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14),
-                              hintText: 'Transaction details...',
-                              hintStyle: TextStyle(
-                                  color: Colors.grey.shade400,
-                                  fontWeight: FontWeight.w500),
-                              helperText: 'Max 50 characters',
-                              helperStyle: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade500),
-                            ),
+                      for (var transaction in transactionList)
+                        ListTile(
+                          title: Text(
+                            transaction.value['type'] == 'cash_in'
+                                ? (transaction.value['transfer_type'] == 'bank_transfer_in'
+                                ? 'Bank Transfer In'
+                                : 'Cash In')
+                                : (transaction.value['transfer_type'] == 'bank_transfer_out'
+                                ? 'Bank Transfer Out'
+                                : 'Cash Out'),
                             style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.blueGrey.shade800,
+                              color: transaction.value['type'] == 'cash_in' ? Colors.green : Colors.red,
                             ),
-                            maxLength: 50,
                           ),
+                          subtitle: Text('${_getAmount(transaction.value['amount'])} Rs - ${transaction.value['description'] ?? ''} \n${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(_getTimestamp(transaction.value['timestamp'])))}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit, color: Colors.grey),
+                                onPressed: () => _editTransaction(transaction.key.toString(), transaction.value),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _deleteTransaction(transaction.key.toString()),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Text('Remaining Balance: $remainingBalance Rs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 2,
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
                         ),
                       ],
                     ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _amountController,
+                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.blueGrey.shade800,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Amount',
+                                floatingLabelStyle: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                prefixIcon: Container(
+                                  padding: const EdgeInsets.only(left: 12, right: 6),
+                                  child: Text(
+                                    'PKR',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(context).primaryColor,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14),
+                                hintText: '0.00',
+                                hintStyle: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontWeight: FontWeight.w500),
+                                helperText: 'Enter numeric value',
+                                helperStyle: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade500),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          IconButton(
+                            onPressed: () async {
+                              final DateTime? pickedDate = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now(),
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime(2100),
+                              );
+                              if (pickedDate != null) {
+                                final TimeOfDay? pickedTime = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.now(),
+                                );
+                                if (pickedTime != null) {
+                                  setState(() {
+                                    _selectedTransactionDateTime = DateTime(
+                                      pickedDate.year,
+                                      pickedDate.month,
+                                      pickedDate.day,
+                                      pickedTime.hour,
+                                      pickedTime.minute,
+                                    );
+                                  });
+                                }
+                              }
+                            },
+                            icon: Icon(Icons.access_time, color: Colors.blue),
+                            tooltip: _selectedTransactionDateTime == null
+                                ? 'Select Date & Time'
+                                : 'Selected: ${DateFormat('dd/MM/yyyy HH:mm').format(_selectedTransactionDateTime!)}',
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: _descriptionController,
+                              decoration: InputDecoration(
+                                labelText: 'Description',
+                                floatingLabelStyle: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                prefixIcon: Icon(Icons.description_outlined,
+                                    size: 20,
+                                    color: Colors.grey.shade600),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(context).primaryColor,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14),
+                                hintText: 'Transaction details...',
+                                hintStyle: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontWeight: FontWeight.w500),
+                                helperText: 'Max 50 characters',
+                                helperStyle: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade500),
+                              ),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.blueGrey.shade800,
+                              ),
+                              maxLength: 50,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              Row(
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() => _isCashIn = true);
+                          _addTransaction();
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                        child: const Text('Cash In'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() => _isCashIn = false);
+                          _addTransaction();
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        child: const Text('Cash Out'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          } catch (e) {
+            print('Error building transaction list: $e');
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() => _isCashIn = true);
-                        _addTransaction();
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                      child: const Text('Cash In'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() => _isCashIn = false);
-                        _addTransaction();
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      child: const Text('Cash Out'),
-                    ),
-                  ),
+                  Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text('Error loading transactions', style: TextStyle(fontSize: 18)),
+                  SizedBox(height: 8),
+                  Text(e.toString(), style: TextStyle(color: Colors.grey)),
                 ],
               ),
-            ],
-          );
+            );
+          }
         },
       ),
     );
   }
 }
-
