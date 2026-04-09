@@ -245,16 +245,64 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     }
   }
 
-// Simplified text rendering without images for PDF
-  pw.Widget _createTextWidget(String text, {double fontSize = 10, bool isBold = false, PdfColor? color}) {
-    return pw.Text(
-      text,
-      style: pw.TextStyle(
-        fontSize: fontSize,
-        fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        color: color,
+  // Create text image for Urdu rendering in PDF
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    // Use default text for empty input
+    final String displayText = text.isEmpty ? "N/A" : text;
+
+    // Scale factor to increase resolution
+    const double scaleFactor = 1.5;
+
+    // Create a custom painter with the Urdu text
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
       ),
     );
+
+    // Define text style with scaling
+    final textStyle = const TextStyle(
+      fontSize: 12 * scaleFactor,
+      fontFamily: 'JameelNoori', // Ensure this font is registered
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    // Create the text span and text painter
+    final textSpan = TextSpan(text: displayText, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    // Layout the text painter
+    textPainter.layout();
+
+    // Validate dimensions
+    final double width = textPainter.width * scaleFactor;
+    final double height = textPainter.height * scaleFactor;
+
+    if (width <= 0 || height <= 0) {
+      throw Exception("Invalid text dimensions: width=$width, height=$height");
+    }
+
+    // Paint the text onto the canvas
+    textPainter.paint(canvas, const Offset(0, 0));
+
+    // Create an image from the canvas
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width.toInt(), height.toInt());
+
+    // Convert the image to PNG
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    // Return the image as a MemoryImage
+    return pw.MemoryImage(buffer);
   }
 
   Future<void> _generatePDF() async {
@@ -286,6 +334,18 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
       runningBalances.add(runningBalance);
     }
 
+    // Pre-generate text images for header fields
+    final employeeNameImage = await _createTextImage(
+      '${_getText('employeeName')}: ${_currentEmployee.name}',
+    );
+
+    // Pre-generate description images for each transaction
+    final List<pw.MemoryImage> descriptionImages = [];
+    for (var transaction in _filteredTransactions) {
+      final img = await _createTextImage(transaction.description);
+      descriptionImages.add(img);
+    }
+
     // Paginate the data to avoid TooManyPagesException
     const int rowsPerPage = 25;
     int totalPages = (_filteredTransactions.length / rowsPerPage).ceil();
@@ -298,6 +358,7 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
 
       List<ExpenseTransaction> pageTransactions = _filteredTransactions.sublist(startIndex, endIndex);
       List<double> pageBalances = runningBalances.sublist(startIndex, endIndex);
+      List<pw.MemoryImage> pageDescriptionImages = descriptionImages.sublist(startIndex, endIndex);
 
       pdf.addPage(
         pw.MultiPage(
@@ -320,34 +381,32 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                     ),
                     pw.SizedBox(height: 10),
 
-                    // Employee Name
-                    _createTextWidget(
-                      '${_getText('employeeName')}: ${_currentEmployee.name}',
-                      fontSize: 11,
-                    ),
+                    // Employee Name (text image)
+                    pw.Image(employeeNameImage, height: 20),
                     pw.SizedBox(height: 4),
 
                     // Date range period
                     if (_startDate != null || _endDate != null)
-                      _createTextWidget(
+                      pw.Text(
                         '${_getText('reportPeriod')}: '
                             '${_startDate != null ? dateFormat.format(_startDate!) : _getText('all')} '
                             '${_getText('to')} '
                             '${_endDate != null ? dateFormat.format(_endDate!) : _getText('all')}',
-                        fontSize: 10,
+                        style: pw.TextStyle(fontSize: 11, fontStyle: pw.FontStyle.italic),
                       ),
-                    _createTextWidget(
+                    pw.Text(
                       '${_getText('generatedOn')}: ${dateTimeFormat.format(DateTime.now())}',
-                      fontSize: 10,
+                      style: pw.TextStyle(fontSize: 11, fontStyle: pw.FontStyle.italic),
                     ),
+                    pw.SizedBox(height: 16),
 
                     // Page info
                     if (totalPages > 1)
-                      _createTextWidget(
+                      pw.Text(
                         'Page ${pageIndex + 1} of $totalPages',
-                        fontSize: 10,
+                        style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic),
                       ),
-                    pw.SizedBox(height: 16),
+                    pw.SizedBox(height: 8),
 
                     // Summary box
                     pw.Container(
@@ -361,44 +420,53 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                         children: [
                           pw.Column(
                             children: [
-                              _createTextWidget(_getText('totalTransactions'), fontSize: 10),
-                              _createTextWidget(
+                              pw.Text(_getText('totalTransactions'),
+                                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+                              pw.Text(
                                 _filteredTransactions.length.toString(),
-                                fontSize: 14,
-                                isBold: true,
+                                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                               ),
                             ],
                           ),
                           pw.Column(
                             children: [
-                              _createTextWidget(_getText('totalCredit'), fontSize: 10),
-                              _createTextWidget(
+                              pw.Text(_getText('totalCredit'),
+                                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.purple)),
+                              pw.Text(
                                 'PKR ${totalCredit.toStringAsFixed(2)}',
-                                fontSize: 14,
-                                isBold: true,
-                                color: PdfColors.purple,
+                                style: pw.TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.purple,
+                                ),
                               ),
                             ],
                           ),
                           pw.Column(
                             children: [
-                              _createTextWidget(_getText('totalDebit'), fontSize: 10),
-                              _createTextWidget(
+                              pw.Text(_getText('totalDebit'),
+                                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.deepOrange)),
+                              pw.Text(
                                 'PKR ${totalDebit.toStringAsFixed(2)}',
-                                fontSize: 14,
-                                isBold: true,
-                                color: PdfColors.deepOrange,
+                                style: pw.TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.deepOrange,
+                                ),
                               ),
                             ],
                           ),
                           pw.Column(
                             children: [
-                              _createTextWidget(_getText('closingBalance'), fontSize: 10),
-                              _createTextWidget(
+                              pw.Text(_getText('closingBalance'),
+                                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+                              pw.Text(
                                 'PKR ${closingBalance.toStringAsFixed(2)}',
-                                fontSize: 14,
-                                isBold: true,
-                                color: closingBalance > 0 ? PdfColors.purple : PdfColors.green,
+                                style: pw.TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: closingBalance > 0 ? PdfColors.purple : PdfColors.green,
+                                ),
                               ),
                             ],
                           ),
@@ -423,24 +491,28 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                           children: [
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(6),
-                              child: _createTextWidget(_getText('dateTime'), fontSize: 10, isBold: true),
+                              child: pw.Text(_getText('dateTime'),
+                                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(6),
-                              child: _createTextWidget(_getText('description'), fontSize: 10, isBold: true),
+                              child: pw.Text(_getText('description'),
+                                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(6),
                               child: pw.Align(
                                 alignment: pw.Alignment.centerRight,
-                                child: _createTextWidget(_getText('amount'), fontSize: 10, isBold: true),
+                                child: pw.Text(_getText('amount'),
+                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                               ),
                             ),
                             pw.Padding(
                               padding: const pw.EdgeInsets.all(6),
                               child: pw.Align(
                                 alignment: pw.Alignment.centerRight,
-                                child: _createTextWidget(_getText('balance'), fontSize: 10, isBold: true),
+                                child: pw.Text(_getText('balance'),
+                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                               ),
                             ),
                           ],
@@ -453,29 +525,28 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                               // Date cell
                               pw.Padding(
                                 padding: const pw.EdgeInsets.all(6),
-                                child: _createTextWidget(
+                                child: pw.Text(
                                   dateFormat.format(pageTransactions[i].dateTime),
-                                  fontSize: 9,
+                                  style: const pw.TextStyle(fontSize: 9),
                                 ),
                               ),
 
-                              // Description cell
+                              // Description cell — uses text image
                               pw.Padding(
                                 padding: const pw.EdgeInsets.all(6),
                                 child: pw.Column(
                                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                                   children: [
-                                    _createTextWidget(
-                                      pageTransactions[i].description,
-                                      fontSize: 9,
-                                    ),
+                                    pw.Image(pageDescriptionImages[i], height: 16),
                                     pw.SizedBox(height: 2),
-                                    _createTextWidget(
+                                    pw.Text(
                                       '(${_getTransactionTypeText(pageTransactions[i].type)})',
-                                      fontSize: 8,
-                                      color: pageTransactions[i].type == 'credit'
-                                          ? PdfColors.purple
-                                          : PdfColors.deepOrange,
+                                      style: pw.TextStyle(
+                                        fontSize: 8,
+                                        color: pageTransactions[i].type == 'credit'
+                                            ? PdfColors.purple
+                                            : PdfColors.deepOrange,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -486,12 +557,14 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                                 padding: const pw.EdgeInsets.all(6),
                                 child: pw.Align(
                                   alignment: pw.Alignment.centerRight,
-                                  child: _createTextWidget(
+                                  child: pw.Text(
                                     'PKR ${pageTransactions[i].amount.toStringAsFixed(2)}',
-                                    fontSize: 9,
-                                    color: pageTransactions[i].type == 'credit'
-                                        ? PdfColors.purple
-                                        : PdfColors.deepOrange,
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      color: pageTransactions[i].type == 'credit'
+                                          ? PdfColors.purple
+                                          : PdfColors.deepOrange,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -501,15 +574,17 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                                 padding: const pw.EdgeInsets.all(6),
                                 child: pw.Align(
                                   alignment: pw.Alignment.centerRight,
-                                  child: _createTextWidget(
+                                  child: pw.Text(
                                     'PKR ${pageBalances[i].toStringAsFixed(2)}',
-                                    fontSize: 9,
-                                    isBold: true,
-                                    color: pageBalances[i] > 0
-                                        ? PdfColors.purple
-                                        : pageBalances[i] < 0
-                                        ? PdfColors.green
-                                        : PdfColors.black,
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: pageBalances[i] > 0
+                                          ? PdfColors.purple
+                                          : pageBalances[i] < 0
+                                          ? PdfColors.green
+                                          : PdfColors.black,
+                                    ),
                                   ),
                                 ),
                               ),

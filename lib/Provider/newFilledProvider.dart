@@ -2044,7 +2044,7 @@ class NewFilledProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      Query query = _db.child('Filled').orderByChild('createdAt');
+      Query query = _db.child('filled').orderByChild('createdAt');
 
       // Apply date filter if provided
       if (startDate != null && endDate != null) {

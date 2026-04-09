@@ -33,9 +33,9 @@ void main() async{
         ChangeNotifierProvider(create: (_) => FilledCustomerReportProvider()),
         ChangeNotifierProvider(create: (_) => InvoiceProvider()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => CustomerProvider()), // Add CustomerProvider
-        ChangeNotifierProvider(create: (_) => ExpenseProvider()), // Add ExpenseProvider
-        ChangeNotifierProvider(create: (_) => BankProvider()), // Add this line
+        ChangeNotifierProvider(create: (_) => CustomerProvider()),
+        ChangeNotifierProvider(create: (_) => ExpenseProvider()),
+        ChangeNotifierProvider(create: (_) => BankProvider()),
         ChangeNotifierProvider(create: (_) => PurchaseProvider()),
         ChangeNotifierProvider(create: (_) => CheckPaymentProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
@@ -54,7 +54,7 @@ class MyApp extends StatelessWidget {
       builder: (context, languageProvider, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          home:  Dashboard(),
+          home:  LoginPage(),
           theme: ThemeData(
             fontFamily: languageProvider.isEnglish ? 'Roboto' : 'JameelNoori',
           ),

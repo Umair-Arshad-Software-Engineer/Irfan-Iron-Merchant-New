@@ -110,12 +110,8 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
       final totalCredit = (_report['credit']  ?? 0.0) as double;
       final finalBalance = (_report['balance'] ?? 0.0) as double;
 
-      // Pre-build the vendor name widget outside the synchronous build callback
-      final vendorNameWidget = await _createPdfText(
-        'Vendor: ${widget.vendorName}',
-        fontSize: 10,
-        fontWeight: pw.FontWeight.bold,
-      );
+      // Pre-build the vendor name as an image for proper Urdu rendering
+      final vendorNameImage = await _createTextImage(widget.vendorName);
 
       // Pre-build the full table so build callback stays synchronous
       final tableWidget = await _buildPDFTable(
@@ -143,7 +139,10 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [vendorNameWidget],
+                  children: [
+                    // Vendor name as image (supports Urdu)
+                    pw.Image(vendorNameImage, height: 20),
+                  ],
                 ),
               ),
               pw.Expanded(
@@ -202,10 +201,6 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
   }
 
   // ── Load Urdu TTF font once and cache it ─────────────────────────────────────
-  // Make sure 'assets/fonts/JameelNoori.ttf' is declared in pubspec.yaml:
-  //   flutter:
-  //     assets:
-  //       - assets/fonts/JameelNoori.ttf
   pw.Font? _urduFont;
 
   Future<pw.Font?> _loadUrduFont() async {
@@ -241,6 +236,66 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
     );
   }
 
+  // ── Create text image for Urdu/mixed text (used for vendor name and item names) ──
+  Future<pw.MemoryImage> _createTextImage(String text) async {
+    // Use default text for empty input
+    final String displayText = text.isEmpty ? "N/A" : text;
+
+    // Scale factor to increase resolution
+    const double scaleFactor = 1.5;
+
+    // Create a custom painter with the Urdu text
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromPoints(
+        const Offset(0, 0),
+        const Offset(500 * scaleFactor, 50 * scaleFactor),
+      ),
+    );
+
+    // Define text style with scaling
+    final textStyle = const TextStyle(
+      fontSize: 12 * scaleFactor,
+      fontFamily: 'JameelNoori', // Ensure this font is registered
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+
+    // Create the text span and text painter
+    final textSpan = TextSpan(text: displayText, style: textStyle);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textAlign: TextAlign.left,
+      textDirection: ui.TextDirection.ltr, // Use LTR for mixed text
+    );
+
+    // Layout the text painter
+    textPainter.layout();
+
+    // Validate dimensions
+    final double width = textPainter.width * scaleFactor;
+    final double height = textPainter.height * scaleFactor;
+
+    if (width <= 0 || height <= 0) {
+      throw Exception("Invalid text dimensions: width=$width, height=$height");
+    }
+
+    // Paint the text onto the canvas
+    textPainter.paint(canvas, const Offset(0, 0));
+
+    // Create an image from the canvas
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width.toInt(), height.toInt());
+
+    // Convert the image to PNG
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final buffer = byteData!.buffer.asUint8List();
+
+    // Return the image as a MemoryImage
+    return pw.MemoryImage(buffer);
+  }
+
   // ── PDF table ───────────────────────────────────────────────────────────────
   Future<pw.Widget> _buildPDFTable(
       List<Map<String, dynamic>> rows,
@@ -267,7 +322,7 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
 
     final urduFont = await _loadUrduFont();
 
-    // Helper for plain text cells (unchanged)
+    // Helper for plain text cells
     Future<pw.Widget> pc(
         String text,
         double w, {
@@ -294,7 +349,7 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
       );
     }
 
-    // ── NEW: image-based cell for Urdu/mixed text (Ref and Item Name) ──────────
+    // Image-based cell for Urdu/mixed text (Ref and Item Name)
     Future<pw.Widget> picCell(String text, double w) async {
       final img = await _createTextImage(text);
       return pw.Container(
@@ -332,8 +387,7 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
       decoration: const pw.BoxDecoration(color: PdfColors.amber50),
       child: pw.Row(children: [
         await pc(obDate,  wDate),
-        // await picCell(obLabel, wRef),          // ← image cell
-        await pc(obLabel, wRef, fw: pw.FontWeight.bold),
+        await picCell(obLabel, wRef),          // ← image cell for label
         await pc('', wItem),   await pc('', wType),   await pc('', wQty),
         await pc('', wWeight), await pc('', wRate),   await pc('', wMethod),
         await pc('', wBank),   await pc('', wDebit),
@@ -368,7 +422,7 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
           child: pw.Row(children: [
             await pc('', wDate),
             await pc('', wRef),
-            await picCell(itemName, wItem),    // ← image cell
+            await picCell(itemName, wItem),    // ← image cell for item name
             await pc('Item', wType, color: PdfColors.purple700),
             await pc(qty > 0 ? qty.toStringAsFixed(0) : '-', wQty,
                 ta: pw.TextAlign.right),
@@ -403,9 +457,9 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
           ),
           child: pw.Row(children: [
             await pc(DateFormat('dd MMM yy').format(date), wDate),
-            await pc(isPurchase ? refNo : 'Payment', wRef,
-                color: isPurchase ? PdfColors.black : PdfColors.orange800,
-                fw: pw.FontWeight.bold),
+            await picCell(isPurchase ? refNo : 'Payment', wRef, // ← image cell for ref
+              // Note: picCell doesn't support color directly, using pc for the type instead
+            ),
             await pc('', wItem),
             await pc(isPurchase ? 'Purchase' : 'Payment', wType,
                 color: isPurchase ? PdfColors.green800 : PdfColors.orange800,
@@ -464,65 +518,6 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
 
     return pw.Column(children: pdfRows);
   }
-  Future<pw.MemoryImage> _createTextImage(String text) async {
-    // Use default text for empty input
-    final String displayText = text.isEmpty ? "N/A" : text;
-
-    // Scale factor to increase resolution
-    const double scaleFactor = 1.5;
-
-    // Create a custom painter with the Urdu text
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      Rect.fromPoints(
-        const Offset(0, 0),
-        const Offset(500 * scaleFactor, 50 * scaleFactor),
-      ),
-    );
-
-    // Define text style with scaling
-    final textStyle = const TextStyle(
-      fontSize: 12 * scaleFactor,
-      fontFamily: 'JameelNoori', // Ensure this font is registered
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-    );
-
-    // Create the text span and text painter
-    final textSpan = TextSpan(text: displayText, style: textStyle);
-    final textPainter = TextPainter(
-      text: textSpan,
-      textAlign: TextAlign.left, // Adjust as needed for alignment
-      textDirection: ui.TextDirection.rtl, // Use RTL for Urdu text
-    );
-
-    // Layout the text painter
-    textPainter.layout();
-
-    // Validate dimensions
-    final double width = textPainter.width * scaleFactor;
-    final double height = textPainter.height * scaleFactor;
-
-    if (width <= 0 || height <= 0) {
-      throw Exception("Invalid text dimensions: width=$width, height=$height");
-    }
-
-    // Paint the text onto the canvas
-    textPainter.paint(canvas, const Offset(0, 0));
-
-    // Create an image from the canvas
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(width.toInt(), height.toInt());
-
-    // Convert the image to PNG
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-    final buffer = byteData!.buffer.asUint8List();
-
-    // Return the image as a MemoryImage
-    return pw.MemoryImage(buffer);
-  }
-
 
   // ── helpers ────────────────────────────────────────────────────────────────
   String? _getBankName(Map<String, dynamic> tx) {
@@ -767,7 +762,6 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // ignore: unused_local_variable
     final lp = Provider.of<LanguageProvider>(context, listen: false);
 
     return Scaffold(
@@ -1112,8 +1106,6 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
       useFlex,
       [
         _CV(DateFormat('dd MMM yyyy').format(date)),
-        // _CV(refNo, weight: FontWeight.w600),
-        // AFTER
         _CV(isPurchase ? refNo : 'Payment',
             color: isPurchase ? null : Colors.orange[700],
             weight: FontWeight.w600),
@@ -1222,3 +1214,4 @@ class _VendorItemWiseLedgerPageState extends State<VendorItemWiseLedgerPage> {
     );
   }
 }
+
